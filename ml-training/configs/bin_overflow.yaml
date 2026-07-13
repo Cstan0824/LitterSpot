@@ -1,0 +1,8 @@
+path: C:/Cstan/Projects/LitterSpot/ml-training/data/processed
+train: train/images
+val: valid/images
+test: test/images
+names:
+  0: normal trash bin
+  1: full trash bin
+  2: overflowing trash bin

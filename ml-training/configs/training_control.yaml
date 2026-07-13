@@ -1,0 +1,19 @@
+run: {name: yoloe26s_controlled_v1, epochs: 100, patience: 20, imgsz: 768, batch: 2, workers: 0, max_hours: 12}
+selection:
+  min_epoch: 5
+  min_improvement: 0.002
+  plateau_patience: 20
+  weights: {overflow_f2: 0.55, overflow_map50: 0.20, overall_map50: 0.15, overall_map50_95: 0.10}
+  acceptance: {overflow_precision: 0.85, overflow_recall: 0.80, overall_map50: 0.65}
+resources:
+  sample_seconds: 10
+  gpu_temperature_c: 85
+  gpu_temperature_sustained_seconds: 30
+  gpu_memory_percent: 95
+  gpu_memory_sustained_seconds: 60
+  system_ram_percent: 92
+  system_ram_sustained_seconds: 60
+  system_cpu_percent: 98
+  system_cpu_sustained_seconds: 300
+  minimum_disk_free_gb: 10
+  stalled_progress_minutes: 20

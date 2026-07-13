@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LitterSpot detection response",
+  "type": "object",
+  "required": ["modelVersion", "image", "detections", "processingTimeMs"],
+  "properties": {
+    "modelVersion": { "type": "string" },
+    "cameraId": { "type": ["string", "null"] },
+    "image": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }
+    },
+    "detections": { "type": "array" },
+    "processingTimeMs": { "type": "number", "minimum": 0 }
+  }
+}

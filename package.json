@@ -1,0 +1,15 @@
+{
+  "name": "litterspot",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev:frontend": "npm --workspace=frontend run dev",
+    "dev:backend": "npm --workspace=backend run dev",
+    "test:backend": "npm --workspace=backend run test",
+    "start": "node scripts/start-local.mjs",
+    "stop": "node scripts/stop-local.mjs",
+    "start:local": "node scripts/start-local.mjs",
+    "stop:local": "node scripts/stop-local.mjs"
+  }
+}
