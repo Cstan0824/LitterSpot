@@ -218,6 +218,16 @@ __marimo__/
 .streamlit/secrets.toml
 .env
 .venv/
+
+# Floor rubbish raw and generated datasets
+dataset/floor_rubbish/raw_dataset/
+dataset/floor_rubbish/prepared_dataset/images/
+dataset/floor_rubbish/prepared_dataset/labels/
+dataset/floor_rubbish/prepared_dataset/intermediate/
+dataset/floor_rubbish/prepared_dataset/external_test/
+dataset/floor_rubbish/prepared_dataset/previews/
+dataset/floor_rubbish/prepared_dataset/dataset_manifest.csv
+ml-training/floor_rubbish/runs/
 __pycache__/
 *.py[cod]
 

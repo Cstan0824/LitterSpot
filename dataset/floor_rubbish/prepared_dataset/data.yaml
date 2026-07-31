@@ -1,0 +1,8 @@
+path: dataset/floor_rubbish/prepared_dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: floor_litter
+  1: floor_spill
