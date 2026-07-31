@@ -1,8 +1,9 @@
 # LitterSpot
 
-Bin overflow detection for CCTV images. The repository is currently scaffolded
-for an image-upload workflow: React calls the public Node API, which validates
-the upload and forwards it to the private FastAPI inference service.
+Bin overflow classification for fixed CCTV views. React calls the public Node
+API, which validates a cropped bin region and forwards it to the private
+FastAPI inference service. A lightweight MobileNetV3 classifier is the default;
+the earlier full-frame YOLOE detector remains an optional legacy fallback.
 
 ## Dataset: where to get it
 
@@ -22,8 +23,16 @@ python ml-training/scripts/inspect_dataset.py ml-training/data/raw/garbage-can-o
 The `9` is provisional: first check the exported `data.yaml` and replace it
 with its actual number of classes. Confirm the meaning of the original labels
 visually before applying the mapping in the implementation plan. The public
-dataset is only the baseline; collect separate, permissioned frames from your
-actual theme-park cameras for the final model.
+dataset is only the baseline. The one-class bin localizer now combines it with
+the annotated [GBS dataset](https://zenodo.org/records/14711706); run
+`ml-training/scripts/prepare_bin_localizer_dataset.py` to rebuild the composite
+data. A reproducible downloader and count-based diagnostic for the CC BY 4.0
+University of Malaya three-bin dataset are documented in
+`docs/bin-localizer.md`. That Malaysian set covers one fixed, top-down disposal
+site. The production localizer uses its first 100 images only for weak
+replay-based adaptation and reserves the final 100 for a count diagnostic, so
+collect separate permissioned frames from the actual deployment cameras before
+treating the model as locally validated.
 
 ## Start development locally
 
@@ -70,11 +79,11 @@ The launcher checks ports 8000, 3000, and 5173 first. If it reports that a port
 is already in use, close the previous development terminal and run `npm start`
 again.
 
-The dashboard runs even without a checkpoint. For the detection playground, a
-team member must provide a model file outside Git, then start with:
+The dashboard runs even without a checkpoint. For the state playground, a team
+member must provide the classifier file outside Git, then start with:
 
 ```powershell
-$env:MODEL_PATH = "C:\path\to\bin-overflow.pt"
+$env:STATE_CLASSIFIER_PATH = "C:\path\to\bin-state-classifier.pt"
 npm start
 ```
 
@@ -95,13 +104,37 @@ If both Bun and npm have been used in the same working folder, remove only the
 generated `node_modules` folders and reinstall with `npm install` before
 troubleshooting dependency issues. Do not remove source files or model files.
 
-## Detection playground
+## Bin-state playground
 
 The playground tests the same production request path used by the application:
 React calls Node, Node validates and forwards the upload, and only the private
-Python service loads the trained checkpoint. The service automatically selects
-the validated Tune20 checkpoint when it exists. To pin a specific
-checkpoint, set `MODEL_PATH` explicitly.
+Python service loads the trained checkpoint. The input must contain one known
+bin region: either crop a fixed camera ROI before sending it or upload a tightly
+framed bin image. To pin a classifier, set `STATE_CLASSIFIER_PATH` explicitly.
+
+The default checkpoint uses separate bin-presence, fullness, and overflow heads
+and returns `normal`, `full`, `overflow`, or `unknown`. Its held-out gates pass:
+The active decision policy is intentionally recall-first: overflow signals at
+or above `0.31` can override the normal presence threshold when bin presence is
+also at least `0.31`. Held-out overflow precision/recall is 63.0%/91.3% on GCO
+and 71.9%/96.0% on GBS. This produces more false alerts by design. Three-frame
+confirmation counts only distinct, time-separated, visually different frames.
+The service expands every supplied ROI by the checkpoint's training context
+(15% for the active checkpoint), so the live crop now matches training.
+
+For full CCTV frames, register a normalized ROI and optional per-bin thresholds
+in `config/bin-profiles.json`. Profile keys use `cameraId:binId`:
+
+```json
+{
+  "profiles": {
+    "camera-1:bin-1": {
+      "regionNormalized": {"x1": 0.12, "y1": 0.18, "x2": 0.46, "y2": 0.92},
+      "thresholds": {"presence": 0.60, "fullness": 0.36, "overflow": 0.40, "overflowPresenceFloor": 0.35}
+    }
+  }
+}
+```
 
 Install the Python API runtime once:
 
@@ -113,36 +146,35 @@ For debugging, you can also start the services separately, but the normal
 workflow is the single `npm start` command above:
 
 ```powershell
-# Windows PowerShell: pin a local checkpoint before npm start
-$env:MODEL_PATH = (Resolve-Path "runs\bin_overflow\yoloe26s_fused_tune20_v1\weights\best.pt").Path
+# Windows PowerShell: pin the tested classifier before npm start
+$env:STATE_CLASSIFIER_PATH = (Resolve-Path "runs\state_classifier\multitask_gco_gbs_v2\production.pt").Path
 npm start
 
-# macOS: pin a local checkpoint before npm start
-export MODEL_PATH="$PWD/runs/bin_overflow/yoloe26s_fused_tune20_v1/weights/best.pt"
+# macOS: pin the tested classifier before npm start
+export STATE_CLASSIFIER_PATH="$PWD/runs/state_classifier/multitask_gco_gbs_v2/production.pt"
 npm start
 ```
 
 Open the Vite URL shown in Terminal 3. The default dashboard proves the React
-to Node to FastAPI connection through live service status. Select **Open
-detection playground** (or use `#/playground`) to upload a JPEG/PNG/WebP CCTV
-frame and select **Detect bins**. The boxes and confidence values are returned
-through Node; React never calls Python directly. Check Python readiness at
+to Node to FastAPI connection through live service status. Select **Open state
+playground** (or use `#/playground`) to upload a JPEG/PNG/WebP crop and select
+**Classify bin state**. State probabilities are returned through Node; React
+never calls Python directly. Check Python readiness at
 `http://127.0.0.1:8000/health` and Node readiness at
 `http://127.0.0.1:3000/api/health`.
 
 When training produces a newer `best.pt`, restart only the Python terminal so
-the worker loads the new checkpoint. Do not point the playground at `last.pt`
-while training is active; use the controlled `best.pt` because it is selected
-only after a completed validation epoch.
+the worker loads the new checkpoint. Use a held-out evaluation report before
+changing the active classifier.
 
-Until a trained checkpoint is placed at the configured `MODEL_PATH`, the AI
+Until a trained checkpoint is placed at `STATE_CLASSIFIER_PATH`, the AI
 service correctly reports itself as degraded and refuses inference requests.
 
 ## Alert policy and deployment gate
 
 An overflow is marked **confirmed** only after it matches across three
-consecutive requests from the same `cameraId`. The playground exposes both
-settings; use a stable camera ID for a sequential feed. Change the default with
+consecutive requests from the same `cameraId` and `binId`. The playground
+exposes both settings; keep them stable for a sequential feed. Change the default with
 `ALERT_CONFIRMATION_FRAMES` (1--20). Single-image uploads are not confirmed
 alerts by themselves.
 

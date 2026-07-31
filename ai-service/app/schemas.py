@@ -32,3 +32,53 @@ class DetectionOptions(BaseModel):
     max_detections: int = Field(default=100, ge=1, le=300)
     camera_id: str | None = Field(default=None, min_length=1, max_length=100)
     confirmation_frames: int = Field(default=3, ge=1, le=20)
+
+class StateSignals(BaseModel):
+    binPresence: float = Field(ge=0, le=1)
+    fullness: float = Field(ge=0, le=1)
+    overflow: float = Field(ge=0, le=1)
+
+class StateClassificationResponse(BaseModel):
+    modelVersion: str
+    decisionPolicy: str
+    state: str
+    stableState: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    signals: StateSignals
+    confirmed: bool = False
+    confirmationFrames: int = Field(ge=0)
+    distinctFrameAccepted: bool = True
+    transitionPending: bool = False
+    unknownReasons: list[str] = Field(default_factory=list)
+    cameraId: str | None = None
+    binId: str | None = None
+    image: ImageInfo
+    region: BoundingBox
+    profileUsed: bool = False
+    localizerUsed: bool = False
+    processingTimeMs: float
+
+
+class LocalizedBinAnalysis(BaseModel):
+    binIndex: int = Field(ge=1)
+    localizerConfidence: float = Field(ge=0, le=1)
+    bbox: BoundingBox
+    classificationRegion: BoundingBox
+    state: str
+    stableState: str | None = None
+    stateConfidence: float = Field(ge=0, le=1)
+    signals: StateSignals
+    confirmed: bool = False
+    confirmationFrames: int = Field(ge=0)
+    unknownReasons: list[str] = Field(default_factory=list)
+    processingTimeMs: float = Field(ge=0)
+
+
+class ImageBinAnalysisResponse(BaseModel):
+    localizerVersion: str
+    stateModelVersion: str
+    decisionPolicy: str
+    image: ImageInfo
+    detections: list[LocalizedBinAnalysis]
+    reason: str | None = None
+    processingTimeMs: float = Field(ge=0)

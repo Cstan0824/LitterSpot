@@ -1,67 +1,204 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-type Detection = { className: string; confidence: number; confirmed: boolean; confirmationFrames: number; bbox: { x1: number; y1: number; x2: number; y2: number } };
-type Result = { modelVersion: string; processingTimeMs: number; image: { width: number; height: number }; detections: Detection[] };
-type Settings = { confidence: number; iou: number; imgsz: number; maxDetections: number; cameraId: string; confirmationFrames: number };
+type BinState = "normal" | "full" | "overflow" | "unknown";
+type BoundingBox = { x1: number; y1: number; x2: number; y2: number };
+type BinAnalysis = {
+  binIndex: number;
+  localizerConfidence: number;
+  bbox: BoundingBox;
+  classificationRegion: BoundingBox;
+  state: BinState;
+  stableState?: BinState | null;
+  stateConfidence: number;
+  signals: { binPresence: number; fullness: number; overflow: number };
+  confirmed: boolean;
+  confirmationFrames: number;
+  unknownReasons: string[];
+  processingTimeMs: number;
+};
+type ImageAnalysis = {
+  localizerVersion: string;
+  stateModelVersion: string;
+  decisionPolicy: string;
+  image: { width: number; height: number };
+  detections: BinAnalysis[];
+  reason?: string | null;
+  processingTimeMs: number;
+};
+type BatchResponse = {
+  items: Array<{ index: number; fileName: string; result: ImageAnalysis }>;
+};
+type SelectedImage = { file: File; preview: string };
+type Settings = { localizerConfidence: number; maxBins: number };
 
-const defaults: Settings = { confidence: 0.25, iou: 0.70, imgsz: 768, maxDetections: 100, cameraId: "", confirmationFrames: 3 };
+const defaults: Settings = { localizerConfidence: 0.80, maxBins: 10 };
+const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export function DetectionTestPage() {
-  const [file, setFile] = useState<File>();
-  const [preview, setPreview] = useState<string>();
-  const [result, setResult] = useState<Result>();
+  const [images, setImages] = useState<SelectedImage[]>([]);
+  const [results, setResults] = useState<BatchResponse>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<Settings>(defaults);
-  const [showSettings, setShowSettings] = useState(true);
-  const [showUnconfirmed, setShowUnconfirmed] = useState(true);
 
-  const visibleDetections = useMemo(() => result?.detections.filter((d) => showUnconfirmed || d.confirmed) ?? [], [result, showUnconfirmed]);
+  function replaceImages(files: File[]) {
+    setResults(undefined);
+    setError(undefined);
+    if (files.length > 10) {
+      setError("Select no more than 10 images.");
+      return;
+    }
+    const invalid = files.find((file) => !allowedTypes.has(file.type));
+    if (invalid) {
+      setError(`${invalid.name}: use JPEG, PNG, or WebP.`);
+      return;
+    }
+    images.forEach(({ preview }) => URL.revokeObjectURL(preview));
+    setImages(files.map((file) => ({ file, preview: URL.createObjectURL(file) })));
+  }
 
-  function chooseFile(next?: File) {
-    setFile(next); setResult(undefined); setError(undefined);
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(next ? URL.createObjectURL(next) : undefined);
+  function removeImage(index: number) {
+    URL.revokeObjectURL(images[index].preview);
+    setImages((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setResults(undefined);
+  }
+
+  function clearImages() {
+    images.forEach(({ preview }) => URL.revokeObjectURL(preview));
+    setImages([]);
+    setResults(undefined);
+    setError(undefined);
   }
 
   async function submit() {
-    if (!file) return;
-    setLoading(true); setError(undefined); setResult(undefined);
+    if (images.length === 0) return;
+    setLoading(true);
+    setError(undefined);
+    setResults(undefined);
     try {
-      const data = new FormData(); data.append("image", file);
-      data.append("confidence", String(settings.confidence)); data.append("iou", String(settings.iou));
-      data.append("imgsz", String(settings.imgsz)); data.append("maxDetections", String(settings.maxDetections));
-      if (settings.cameraId.trim()) data.append("cameraId", settings.cameraId.trim());
-      data.append("confirmationFrames", String(settings.confirmationFrames));
-      const response = await fetch("/api/detections/image", { method: "POST", body: data });
-      const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Detection failed"); setResult(body);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Detection failed"); }
-    finally { setLoading(false); }
+      const data = new FormData();
+      images.forEach(({ file }) => data.append("images", file));
+      data.append("localizerConfidence", String(settings.localizerConfidence));
+      data.append("maxBins", String(settings.maxBins));
+      data.append("confirmationFrames", "1");
+      const response = await fetch("/api/detections/bin-state/batch", { method: "POST", body: data });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Batch analysis failed");
+      setResults(body);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Batch analysis failed");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function update<K extends keyof Settings>(key: K, value: Settings[K]) { setSettings((current) => ({ ...current, [key]: value })); }
+  function update<K extends keyof Settings>(key: K, value: Settings[K]) {
+    setSettings((current) => ({ ...current, [key]: value }));
+  }
 
   return <main className="app-shell">
-    <header className="hero"><div><p className="eyebrow">LITTERSPOT / PLAYGROUND</p><h1>Bin overflow intelligence</h1><p className="lede">Tune the detector, inspect its evidence, and understand how confidence changes what reaches the application.</p></div><div className="hero-actions"><button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>← Dashboard</button><span className="live-pill"><i /> MODEL ONLINE</span></div></header>
+    <header className="hero">
+      <div>
+        <p className="eyebrow">LITTERSPOT / BATCH BIN ANALYSIS</p>
+        <h1>Find and classify every bin.</h1>
+        <p className="lede">Import up to 10 full-frame images. The Malaysia-first localizer finds each bin, then the state model evaluates normal, full, overflow, or unknown.</p>
+      </div>
+      <div className="hero-actions">
+        <button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>← Dashboard</button>
+        <span className="live-pill"><i /> PIPELINE ONLINE</span>
+      </div>
+    </header>
+
     <div className="workspace">
-      <section className="card upload-card"><div className="card-heading"><div><span className="step">01</span><h2>Choose a frame</h2></div><span className="muted">JPEG · PNG · WebP / 10 MB</span></div>
-        <label className="dropzone">{preview ? <img src={preview} alt="Selected CCTV frame" /> : <><span className="upload-icon">↑</span><strong>Drop a CCTV frame here</strong><span>or click to browse your local files</span></>}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => chooseFile(e.target.files?.[0])} /></label>
-        <div className="action-row"><button className="primary" disabled={!file || loading} onClick={submit}>{loading ? <><span className="spinner" /> Running inference…</> : "Detect bins"}</button>{file && <button className="quiet" onClick={() => chooseFile()}>Clear frame</button>}</div>
+      <section className="card upload-card">
+        <div className="card-heading">
+          <div><span className="step">01</span><h2>Import images</h2></div>
+          <span className="muted">{images.length} / 10 selected</span>
+        </div>
+        <label className="dropzone batch-dropzone">
+          <span className="upload-icon">＋</span>
+          <strong>Select multiple images</strong>
+          <span>JPEG · PNG · WebP, up to 10 MB each</span>
+          <input
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => replaceImages(Array.from(event.target.files ?? []))}
+          />
+        </label>
+        {images.length > 0 && <div className="batch-preview-grid">
+          {images.map(({ file, preview }, index) => <article className="batch-preview" key={`${file.name}-${file.lastModified}`}>
+            <img src={preview} alt={file.name} />
+            <div><span title={file.name}>{file.name}</span><button className="icon-button" aria-label={`Remove ${file.name}`} onClick={() => removeImage(index)}>×</button></div>
+          </article>)}
+        </div>}
+        <div className="action-row">
+          <button className="primary" disabled={images.length === 0 || loading} onClick={submit}>
+            {loading ? <><span className="spinner" /> Analyzing {images.length} image{images.length === 1 ? "" : "s"}…</> : `Analyze ${images.length || ""} image${images.length === 1 ? "" : "s"}`}
+          </button>
+          {images.length > 0 && <button className="quiet" onClick={clearImages}>Clear all</button>}
+        </div>
         {error && <p role="alert" className="error">{error}</p>}
       </section>
 
-      <aside className="card settings-card"><div className="card-heading"><div><span className="step">02</span><h2>Inference controls</h2></div><button className="icon-button" onClick={() => setShowSettings((value) => !value)}>{showSettings ? "−" : "+"}</button></div>{showSettings && <>
-        <label className="control"><span>Confidence threshold <b>{settings.confidence.toFixed(2)}</b></span><input type="range" min="0.05" max="0.95" step="0.05" value={settings.confidence} onChange={(e) => update("confidence", Number(e.target.value))} /><small>Raise to reduce weak detections; lower to reveal possible misses.</small></label>
-        <label className="control"><span>IoU threshold <b>{settings.iou.toFixed(2)}</b></span><input type="range" min="0.10" max="0.95" step="0.05" value={settings.iou} onChange={(e) => update("iou", Number(e.target.value))} /><small>Controls how overlapping boxes are suppressed.</small></label>
-        <label className="control"><span>Inference image size <b>{settings.imgsz}px</b></span><select value={settings.imgsz} onChange={(e) => update("imgsz", Number(e.target.value))}><option value="640">640 — faster</option><option value="768">768 — balanced</option><option value="960">960 — small-bin detail</option><option value="1280">1280 — slowest</option></select></label>
-        <label className="control"><span>Maximum detections <b>{settings.maxDetections}</b></span><input type="number" min="1" max="300" value={settings.maxDetections} onChange={(e) => update("maxDetections", Math.max(1, Math.min(300, Number(e.target.value))))} /></label>
-        <label className="control"><span>Camera identifier</span><input value={settings.cameraId} maxLength={100} placeholder="Required for confirmation" onChange={(e) => update("cameraId", e.target.value)} /><small>Use the same ID for consecutive frames from one camera.</small></label>
-        <label className="control"><span>Overflow confirmation frames <b>{settings.confirmationFrames}</b></span><input type="number" min="1" max="20" value={settings.confirmationFrames} onChange={(e) => update("confirmationFrames", Math.max(1, Math.min(20, Number(e.target.value))))} /><small>An overflow alert is confirmed only after matching this many consecutive frames.</small></label>
-        <button className="reset" onClick={() => setSettings(defaults)}>Reset safe defaults</button>
-      </>}</aside>
+      <aside className="card settings-card">
+        <div className="card-heading"><div><span className="step">02</span><h2>Detection settings</h2></div></div>
+        <p className="card-copy">The batch path supports multiple bins per image. Lower confidence improves recall but can admit garbage bags or furniture as false positives.</p>
+        <label className="control">
+          <span>Localizer confidence <b>{settings.localizerConfidence.toFixed(2)}</b></span>
+          <input type="range" min="0.05" max="0.95" step="0.01" value={settings.localizerConfidence} onChange={(event) => update("localizerConfidence", Number(event.target.value))} />
+          <small>0.80 detects the unobstructed black-bin test while excluding its adjacent bag candidate.</small>
+        </label>
+        <label className="control">
+          <span>Maximum bins per image <b>{settings.maxBins}</b></span>
+          <input type="number" min="1" max="20" value={settings.maxBins} onChange={(event) => update("maxBins", Math.max(1, Math.min(20, Number(event.target.value))))} />
+        </label>
+        <button className="reset" onClick={() => setSettings(defaults)}>Reset defaults</button>
+      </aside>
     </div>
 
-    {result && <section className="card results-card"><div className="card-heading"><div><span className="step">03</span><h2>Detection evidence</h2></div><label className="toggle"><input type="checkbox" checked={showUnconfirmed} onChange={(e) => setShowUnconfirmed(e.target.checked)} /> Show unconfirmed</label></div><div className="result-layout"><div className="annotated"><img src={preview} alt="Detection result" />{visibleDetections.map((d, index) => <span key={index} className={`box ${d.className.includes("overflowing") ? "overflow" : d.className.includes("full") ? "full" : "normal"}`} style={{ left: `${d.bbox.x1 / result.image.width * 100}%`, top: `${d.bbox.y1 / result.image.height * 100}%`, width: `${(d.bbox.x2-d.bbox.x1) / result.image.width * 100}%`, height: `${(d.bbox.y2-d.bbox.y1) / result.image.height * 100}%` }}><b>{d.className}</b><em>{Math.round(d.confidence * 100)}%{d.className.includes("overflowing") && ` / ${d.confirmationFrames} frames${d.confirmed ? " confirmed" : ""}`}</em></span>)}</div><div className="result-side"><div className="metric"><small>DETECTIONS</small><strong>{visibleDetections.length}</strong></div><div className="metric"><small>MODEL</small><strong>{result.modelVersion}</strong></div><div className="metric"><small>LATENCY</small><strong>{Math.round(result.processingTimeMs)}<small> ms</small></strong></div><div className="legend"><span className="normal-dot" /> Normal <span className="full-dot" /> Full <span className="overflow-dot" /> Overflowing</div></div></div></section>}
-    <footer><span>Private path: React → Node → FastAPI → YOLOE</span><span>Safety guard: GPU 85°C · RAM 92% · disk 10 GB</span></footer>
+    {results && <section className="batch-results">
+      <div className="section-heading"><span className="step">03</span><h2>Batch results</h2><span className="muted">{results.items.reduce((count, item) => count + item.result.detections.length, 0)} bins across {results.items.length} images</span></div>
+      {results.items.map((item) => {
+        const selected = images[item.index];
+        return <article className="card batch-result-card" key={`${item.index}-${item.fileName}`}>
+          <div className="card-heading">
+            <div><span className="result-index">{String(item.index + 1).padStart(2, "0")}</span><h2 title={item.fileName}>{item.fileName}</h2></div>
+            <span className="muted">{item.result.detections.length} bin{item.result.detections.length === 1 ? "" : "s"} · {Math.round(item.result.processingTimeMs)} ms</span>
+          </div>
+          <div className="batch-result-layout">
+            <div className="annotated">
+              {selected && <img src={selected.preview} alt={`Analyzed ${item.fileName}`} />}
+              {item.result.detections.map((detection) => <span
+                className={`box ${detection.state}`}
+                key={detection.binIndex}
+                style={{
+                  left: `${detection.bbox.x1 / item.result.image.width * 100}%`,
+                  top: `${detection.bbox.y1 / item.result.image.height * 100}%`,
+                  width: `${(detection.bbox.x2 - detection.bbox.x1) / item.result.image.width * 100}%`,
+                  height: `${(detection.bbox.y2 - detection.bbox.y1) / item.result.image.height * 100}%`,
+                }}
+              ><b>#{detection.binIndex} {detection.state}</b><em>{Math.round(detection.localizerConfidence * 100)}%</em></span>)}
+              {item.result.detections.length === 0 && <div className="no-detection">No bin localized at {settings.localizerConfidence.toFixed(2)}</div>}
+            </div>
+            <div className="detection-list">
+              {item.result.detections.map((detection) => <div className={`detection-summary ${detection.state}`} key={detection.binIndex}>
+                <div><strong>Bin {detection.binIndex}</strong><span className={`state-badge ${detection.state}`}>{detection.state}</span></div>
+                <dl>
+                  <div><dt>Localization</dt><dd>{Math.round(detection.localizerConfidence * 100)}%</dd></div>
+                  <div><dt>Presence</dt><dd>{Math.round(detection.signals.binPresence * 100)}%</dd></div>
+                  <div><dt>Fullness</dt><dd>{Math.round(detection.signals.fullness * 100)}%</dd></div>
+                  <div><dt>Overflow</dt><dd>{Math.round(detection.signals.overflow * 100)}%</dd></div>
+                </dl>
+                {detection.unknownReasons.length > 0 && <small>{detection.unknownReasons.join(", ")}</small>}
+              </div>)}
+              {item.result.detections.length === 0 && <div className="empty-result"><strong>Bin not localized</strong><span>Try a lower confidence or add this image to the local training set.</span></div>}
+            </div>
+          </div>
+        </article>;
+      })}
+    </section>}
+
+    <footer><span>React → Node batch gateway → FastAPI → YOLO + MobileNetV3</span><span>Maximum 10 images · multiple bins supported</span></footer>
   </main>;
 }

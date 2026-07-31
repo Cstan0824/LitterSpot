@@ -10,12 +10,12 @@ const stateDir = join(root, ".local");
 const pidFile = join(stateDir, "local-services.json");
 const python = process.platform === "win32" ? join(root, ".venv", "Scripts", "python.exe") : join(root, ".venv", "bin", "python");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const model = process.env.MODEL_PATH || join(root, "runs", "bin_overflow", "yoloe26s_fused_tune20_v1", "weights", "best.pt");
+const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_gco_gbs_v2", "production.pt");
 const token = "local-playground-token";
 const children = [];
 
 if (!existsSync(python)) throw new Error(`Python environment missing: ${python}`);
-if (!existsSync(model)) console.warn("No local model checkpoint found; FastAPI will start degraded until MODEL_PATH is provided.");
+if (!existsSync(classifier)) console.warn("No bin-state classifier found; FastAPI will start degraded until STATE_CLASSIFIER_PATH is provided.");
 mkdirSync(stateDir, { recursive: true });
 
 function portInUse(port) {
@@ -57,7 +57,7 @@ let shuttingDown = false;
 process.once("SIGINT", async () => { shuttingDown = true; await cleanup(); process.exit(0); });
 process.once("SIGTERM", async () => { shuttingDown = true; await cleanup(); process.exit(0); });
 
-const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { MODEL_PATH: model, MODEL_VERSION: "yoloe26s-fused-tune20-v1", DEVICE: "0", INTERNAL_API_TOKEN: token });
+const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2", ENABLE_LEGACY_DETECTOR: "false", DEVICE: "0", INTERNAL_API_TOKEN: token });
 const backend = start(npm, ["--workspace=backend", "run", "dev"], { AI_SERVICE_URL: "http://127.0.0.1:8000", AI_SERVICE_TOKEN: token });
 const frontend = start(npm, ["--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1"]);
 writeFileSync(pidFile, JSON.stringify({ fastapi: fastapi.pid, node: backend.pid, react: frontend.pid }, null, 2));

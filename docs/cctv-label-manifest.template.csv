@@ -1,0 +1,4 @@
+image,split,state,bin_style,view_angle,lighting,scene_type,bin_id,notes
+camera_01_0001.jpg,train,normal,wheeled_bin,front,day,covered_walkway,bin_01,
+camera_01_0002.jpg,train,full,wheeled_bin,front,day,covered_walkway,bin_01,waste reaches rim but remains inside
+camera_01_0003.jpg,train,overflow,wheeled_bin,front,night,covered_walkway,bin_01,waste visibly outside bin boundary

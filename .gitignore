@@ -226,6 +226,11 @@ ml-training/data/processed/
 ml-training/data/cctv-unlabelled/
 ml-training/data/cctv-labelled/
 ml-training/data/cctv-test/
+ml-training/data/bin-localizer/
+ml-training/data/malaysia-bin-node/
+ml-training/data/malaysia-bin-node-pseudo/
+ml-training/data/bin-loc-replay/
+ml-training/data/bin-localizer-malaysia-replay/
 runs/
 models/production/*.pt
 models/production/*.onnx
@@ -254,6 +259,9 @@ models/production/*.onnx
 *.pdparams
 *.params
 mobileclip*.ts
+# Locally downloaded demo footage; retain the source manifest and small QA images.
+samples/cctv-demo/**/*.mp4
+samples/cctv-demo/_alternates/
 ml-training/logs/*/
 ml-training/control/STOP
 
