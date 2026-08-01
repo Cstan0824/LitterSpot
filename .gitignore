@@ -277,9 +277,11 @@ ml-training/control/STOP
 
 frontend/node_modules/
 frontend/dist/
+*.tsbuildinfo
 backend/node_modules/
 backend/dist/
 node_modules/
 .local/
+data/*.sqlite3
 bun.lock
 bun.lockb

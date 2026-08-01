@@ -5,6 +5,7 @@ export const detectionResponseSchema = z.object({
   decisionPolicy: z.string(),
   cameraId: z.string().nullable().optional(),
   image: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
+  focusRegion: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).default([]),
   detections: z.array(z.object({
     binId: z.string().nullable().optional(),
     className: z.enum(["normal trash bin", "full trash bin", "overflowing trash bin"]),
@@ -109,3 +110,33 @@ export const batchAnalysisOptionsSchema = z.object({
 
 export type ImageBinAnalysisResponse = z.infer<typeof imageBinAnalysisResponseSchema>;
 export type BatchAnalysisOptions = z.infer<typeof batchAnalysisOptionsSchema>;
+
+const pipelineBinSchema = imageBinAnalysisResponseSchema.shape.detections.element;
+export const pipelineAnalysisResponseSchema = z.object({
+  analysisId: z.number().int().positive().nullable().optional(),
+  imageName: z.string(),
+  cameraId: z.string().nullable().optional(),
+  image: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
+  focusRegion: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).default([]),
+  peopleCount: z.number().int().nonnegative(),
+  people: z.array(z.object({ confidence: z.number().min(0).max(1), bbox: boundingBoxSchema })),
+  bins: z.array(pipelineBinSchema),
+  floorHazards: z.array(z.object({
+    className: z.enum(["floor_litter", "floor_spill"]),
+    confidence: z.number().min(0).max(1),
+    bbox: boundingBoxSchema,
+    polygon: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
+  })),
+  flags: z.array(z.object({ severity: z.enum(["critical", "warning"]), kind: z.string(), message: z.string() })),
+  processingTimeMs: z.number().nonnegative(),
+});
+
+export type PipelineAnalysisResponse = z.infer<typeof pipelineAnalysisResponseSchema>;
+export const pipelineOptionsSchema = z.object({
+  cameraId: z.string().trim().min(1).max(100).optional(),
+  floorConfidence: z.coerce.number().min(0.01).max(0.99).default(0.25),
+  localizerConfidence: z.coerce.number().min(0.01).max(0.99).default(0.80),
+  confirmationFrames: z.coerce.number().int().min(1).max(20).default(1),
+  focusRegion: z.string().optional(),
+});
+export type PipelineOptions = z.infer<typeof pipelineOptionsSchema>;

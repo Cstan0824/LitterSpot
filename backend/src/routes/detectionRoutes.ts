@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { analyzeImageBins, classifyBinState, detectImage } from "../services/aiServiceClient.js";
 import { batchAnalysisOptionsSchema, detectionOptionsSchema, stateClassificationOptionsSchema } from "../schemas/detection.js";
+import { pipelineRoutes } from "./pipelineRoutes.js";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -17,6 +18,7 @@ detectionRoutes.use((req, res, next) => {
   if (window.count > 60) return res.status(429).json({ error: "Inference rate limit exceeded. Try again shortly." });
   next();
 });
+detectionRoutes.use("/pipeline", pipelineRoutes);
 
 detectionRoutes.post("/image", upload.single("image"), async (req, res, next) => {
   try {

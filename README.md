@@ -5,6 +5,28 @@ API, which validates a cropped bin region and forwards it to the private
 FastAPI inference service. A lightweight MobileNetV3 classifier is the default;
 the earlier full-frame YOLOE detector remains an optional legacy fallback.
 
+## Unified pipeline code map
+
+The MVP follows one public flow: React -> Node API -> private FastAPI service ->
+SQLite. Extend each concern at its owning seam:
+
+- `ai-service/app/pipeline.py`: model orchestration, focus-region transforms,
+  coordinate mapping, flags, and persistence of one analyzed frame.
+- `ai-service/app/placement_analysis.py`: configurable overflow/popularity
+  ranking and recommendation hysteresis, with no database dependency.
+- `ai-service/app/analysis_store.py`: SQLite schema, history, and scheduled
+  policy evaluation. A custom database path or placement policy can be injected.
+- `backend/src/routes/pipelineRoutes.ts`: stable public pipeline HTTP routes.
+- `backend/src/services/pipelineClient.ts`: the only Node adapter to pipeline
+  endpoints in the Python service.
+- `frontend/src/features/pipeline/`: reusable ROI, annotated-result, placement,
+  history, and shared contract components. `PipelinePage.tsx` only coordinates
+  page state and requests.
+
+The current public URLs remain under `/api/detections/pipeline/*`. The focus
+polygon is applied only to floor-hazard inference; people and bin models always
+receive the same full frame that the dashboard presents.
+
 ## Dataset: where to get it
 
 Start with the public **Garbage Can Overflow** dataset on Roboflow Universe:
@@ -169,6 +191,124 @@ changing the active classifier.
 
 Until a trained checkpoint is placed at `STATE_CLASSIFIER_PATH`, the AI
 service correctly reports itself as degraded and refuses inference requests.
+
+## Operations-console MVP
+
+The Figma-inspired operations console is the default screen at `#/`. It has a
+six-camera dashboard, active-alert workflow, resolved-only history, and bin
+placement reports. It is deliberately an image-snapshot MVP: a camera becomes
+"live" after a frame is analyzed, and the dashboard refreshes its latest saved
+snapshot every 30 seconds. It is not an RTSP or video-streaming system yet.
+
+The full request path is:
+
+```text
+Browser upload -> Node API -> FastAPI model pipeline -> SQLite + evidence image
+                     ^                                      |
+                     +---------- dashboard / alerts --------+
+```
+
+Every analyzed upload is saved as evidence under `data/evidence/` and is shown
+back on the dashboard through the Node API. This keeps the presented image
+identical to the image supplied to inference. Those images and the temporal
+SQLite database are ignored by Git.
+
+### Required detection models
+
+These trained files are intentionally **not** committed. Obtain them through
+your team's approved shared storage and put them in the following default
+locations, or set the matching environment variable before starting services.
+
+| Capability | Default local path | Override |
+| --- | --- | --- |
+| Bin state (normal/full/overflow) | `runs/state_classifier/multitask_gco_gbs_v2/production.pt` | `STATE_CLASSIFIER_PATH` |
+| Bin localizer | `models/production/bin_localizer_yolo11n.pt` | `BIN_LOCALIZER_PATH` |
+| Floor litter/spill segmentation | `runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/yolo26s_seg_v1/weights/best.pt` | `FLOOR_HAZARD_PATH` |
+| People detector | `yolo26s.pt` | Ultralytics downloads it on first use if network access is available |
+
+For a friend receiving the project, send the three `.pt` artifacts separately
+from Git. Never add them back to the repository.
+
+### Set up the complete detection pipeline
+
+From the repository root on Windows PowerShell:
+
+```powershell
+# 1. Install JavaScript packages
+npm install
+
+# 2. Create the Python environment and install inference dependencies
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r ai-service\requirements.txt
+
+# 3. Point to model artifacts if they are outside the default locations
+$env:STATE_CLASSIFIER_PATH = "C:\models\production.pt"
+$env:BIN_LOCALIZER_PATH = "C:\models\bin_localizer_yolo11n.pt"
+$env:FLOOR_HAZARD_PATH = "C:\models\floor_hazards_best.pt"
+
+# 4. Start FastAPI, Node, and React together
+npm start
+```
+
+For macOS/Linux, activate `.venv` with `source .venv/bin/activate`, use
+`python3` in place of `py -3`, and export the same environment variables.
+
+Open the Vite URL shown by `npm start`. The Node health endpoint is
+`http://127.0.0.1:3000/api/health`; confirm that the state classifier, bin
+localizer, and floor analyzer are ready before running an analysis.
+
+If the dashboard shows a 404 or 502 for `/api/operations/*` after upgrading,
+an older local service is still running. Run `npm stop`, close any previous
+development terminals, then run `npm start` again. The local stack uses ports
+8000 (FastAPI), 3000 (Node), and 5173 (Vite).
+
+### Run a camera-frame detection
+
+1. Open **Analyze frame** in the top-right menu, or go to `#/pipeline`.
+2. Upload a JPEG, PNG, or WebP camera frame (maximum 10 MB).
+3. Set the camera ID, for example `camera-1` through `camera-6`.
+4. Optionally click **Plot floor area** and draw a polygon. Only the
+   floor-litter/spill model receives this polygon; person and bin models always
+   receive the full original frame.
+5. Select **Run unified analysis**.
+
+The pipeline runs, in order:
+
+1. Bin localizer on the full frame.
+2. Bin-state classifier for every localized bin.
+3. COCO people detector on the full frame.
+4. Floor litter/spill segmentation on the full frame or plotted floor polygon.
+5. Alert creation for confirmed bin overflow, floor litter, or floor spill.
+6. Evidence, result JSON, alert state, and placement observations saved in
+   `data/litterspot_mvp.sqlite3`.
+
+The dashboard then displays the original evidence image with bin, floor-hazard,
+and people overlays. The alert center lets an MVP operator mark alerts as
+active, resolved, or dismissed; history shows resolved alerts only.
+
+### Seeded camera mock images
+
+For a usable first-run dashboard, the service copies the checked-in files under
+`samples/cctv-demo/` into the ignored `data/evidence/` folder and attaches one
+to each of `camera-1` through `camera-6`. When all three pipeline models are
+ready, each seed image is then analysed once through the same pipeline used by
+`/analyze/frame`; its people, bin, and floor-hazard overlays are therefore real
+model output for that exact image. These cards remain visibly labelled **DEMO**
+and do not create operator alerts. A real frame replaces the demo result for
+that camera as soon as it is analyzed.
+
+If a demo card is blank after startup, check `/health`: `modelReady`,
+`binLocalizerReady`, and `floorAnalyzerReady` must all be `true`, then restart
+the service. The demo analysis only runs after the model checkpoints load.
+
+Demo seeding is enabled by default for this temporal MVP. Disable it when
+running with real cameras:
+
+```powershell
+$env:SEED_DEMO_CAMERAS = "false"
+npm start
+```
 
 ## Alert policy and deployment gate
 

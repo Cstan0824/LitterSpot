@@ -1,17 +1,22 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import { DetectionTestPage } from "./pages/DetectionTestPage";
-import { DashboardPage } from "./pages/DashboardPage";
+import { PipelinePage } from "./pages/PipelinePage";
+import { OperationsConsole } from "./features/operations/OperationsConsole";
+
+const operationsPages = new Set(["dashboard", "alerts", "history", "placement"]);
 
 function App() {
-  const [page, setPage] = useState(() => location.hash === "#/playground" ? "playground" : "dashboard");
+  const getPage = () => location.hash.replace(/^#\//, "").split("?")[0] || "dashboard";
+  const [page, setPage] = useState(getPage);
   useEffect(() => {
-    const syncPage = () => setPage(location.hash === "#/playground" ? "playground" : "dashboard");
+    const syncPage = () => setPage(getPage());
     addEventListener("hashchange", syncPage);
     return () => removeEventListener("hashchange", syncPage);
   }, []);
-  return page === "playground" ? <DetectionTestPage /> : <DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} />;
+  if (page === "pipeline" || page === "playground") return <PipelinePage />;
+  const operationsPage = operationsPages.has(page) ? page as "dashboard" | "alerts" | "history" | "placement" : "dashboard";
+  return <OperationsConsole page={operationsPage} onNavigate={(next) => { location.hash = `/${next}`; }} />;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

@@ -4,6 +4,7 @@ import multer from "multer";
 import { ZodError } from "zod";
 import { checkAiHealth } from "./services/aiServiceClient.js";
 import { detectionRoutes } from "./routes/detectionRoutes.js";
+import { operationsRoutes } from "./routes/operationsRoutes.js";
 
 export const app = express();
 app.use(cors());
@@ -13,6 +14,7 @@ app.get("/api/health", async (_req, res) => {
   catch { res.status(503).json({ status: "degraded", aiService: { status: "unavailable" } }); }
 });
 app.use("/api/detections", detectionRoutes);
+app.use("/api/operations", operationsRoutes);
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (error instanceof multer.MulterError) {
     const message = error.code === "LIMIT_FILE_SIZE"
