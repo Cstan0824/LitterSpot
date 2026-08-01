@@ -1,4 +1,51 @@
 {
-  "activeModel": null,
-  "models": []
+  "activeModel": "multitask-mobilenet-gco-gbs-v2",
+  "models": [
+    {
+      "version": "multitask-mobilenet-gco-gbs-v2",
+      "path": "runs/state_classifier/multitask_gco_gbs_v2/production.pt",
+      "mode": "presence-fullness-overflow-multi-head",
+      "thresholds": {"presence": 0.563, "fullness": 0.34, "overflow": 0.31},
+      "overflowPolicy": "recall_first_with_presence_floor",
+      "overflowPresenceFloor": 0.31,
+      "status": "recall-first",
+      "classes": ["normal", "full", "overflow", "unknown"]
+    },
+    {
+      "version": "bin-localizer-yolo11n-gco-gbs-um-v2",
+      "path": "models/production/bin_localizer_yolo11n.pt",
+      "mode": "one-class-bin-localizer",
+      "confidence": 0.85,
+      "classes": ["trash bin"],
+      "trainingData": [
+        "Garbage Can Overflow",
+        "GBS",
+        "University of Malaya first-100 weak-label fine-tune"
+      ],
+      "genericTest": {
+        "images": 3035,
+        "precision": 0.6299,
+        "recall": 0.5551,
+        "mAP50": 0.5756,
+        "mAP50_95": 0.3642,
+        "passedGenericGate": false
+      },
+      "malaysiaHoldoutDiagnostic": {
+        "images": 100,
+        "expectedBinsPerImage": 3,
+        "exactlyThreeRate": 0.76,
+        "atLeastThreeRate": 0.96,
+        "countCoverageProxy": 0.9867,
+        "meanDetections": 3.27
+      },
+      "status": "production-malaysia-first-weak-adaptation"
+    },
+    {
+      "version": "yoloe26s-gco-gbs-domain-balanced-v1-2-epoch6",
+      "path": "runs/bin_overflow/yoloe26s_gco_gbs_domain_balanced_v1-2/weights/epoch6.pt",
+      "mode": "legacy-full-frame-detection",
+      "enabledByDefault": false,
+      "classes": ["normal trash bin", "full trash bin", "overflowing trash bin"]
+    }
+  ]
 }

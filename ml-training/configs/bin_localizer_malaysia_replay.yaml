@@ -1,0 +1,8 @@
+# Full GCO+GBS training set plus repeated Malaysian weak labels.
+# Validation and test stay generic to detect catastrophic forgetting.
+path: C:/Cstan/Projects/LitterSpot/ml-training/data/bin-loc-replay
+train: train/images
+val: valid/images
+test: test/images
+names:
+  0: trash bin

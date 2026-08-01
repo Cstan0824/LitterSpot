@@ -1,0 +1,7 @@
+# Weakly supervised local adaptation set. Labels are bootstrapped only from
+# the first 100 University of Malaya images; the last 100 remain untouched.
+path: C:/Cstan/Projects/LitterSpot/ml-training/data/malaysia-bin-node-pseudo
+train: train/images
+val: valid/images
+names:
+  0: trash bin
