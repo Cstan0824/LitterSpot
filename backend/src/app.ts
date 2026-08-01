@@ -4,6 +4,8 @@ import multer from "multer";
 import { ZodError } from "zod";
 import { checkAiHealth } from "./services/aiServiceClient.js";
 import { detectionRoutes } from "./routes/detectionRoutes.js";
+import { operationsRoutes } from "./routes/operationsRoutes.js";
+import { alertRoutes } from "./routes/alertRoutes.js";
 
 export const app = express();
 app.use(cors());
