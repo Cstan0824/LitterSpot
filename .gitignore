@@ -269,6 +269,22 @@ models/production/*.onnx
 *.pdparams
 *.params
 !models/production/bin_localizer_yolo11n.pt
+!yolo26s.pt
+
+# Keep trained production models in Git while ignoring all other run artifacts.
+!runs/
+runs/**
+!runs/state_classifier/
+!runs/state_classifier/multitask_gco_gbs_v2/
+!runs/state_classifier/multitask_gco_gbs_v2/production.pt
+!runs/segment/
+!runs/segment/ml-training/
+!runs/segment/ml-training/floor_rubbish/
+!runs/segment/ml-training/floor_rubbish/runs/
+!runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/
+!runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/yolo26s_seg_v1/
+!runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/yolo26s_seg_v1/weights/
+!runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/yolo26s_seg_v1/weights/best.pt
 mobileclip*.ts
 # Locally downloaded demo footage; retain the source manifest and small QA images.
 samples/cctv-demo/**/*.mp4
