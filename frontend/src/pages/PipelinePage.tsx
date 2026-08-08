@@ -3,11 +3,13 @@ import { AnalysisResult } from "../features/pipeline/AnalysisResult";
 import { FocusRegionEditor } from "../features/pipeline/FocusRegionEditor";
 import { HistoryPanel } from "../features/pipeline/HistoryPanel";
 import { PlacementPanel } from "../features/pipeline/PlacementPanel";
+import { VideoAnalysisPanel } from "../features/pipeline/VideoAnalysisPanel";
 import type { PipelineHistory, PipelineResult, PlacementRecommendation, Point } from "../features/pipeline/types";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export function PipelinePage() {
+  const [mode, setMode] = useState<"image" | "video">("image");
   const [file, setFile] = useState<File>();
   const [cameraId, setCameraId] = useState("camera-1");
   const [result, setResult] = useState<PipelineResult>();
@@ -90,7 +92,12 @@ export function PipelinePage() {
   }
 
   return <main className="app-shell pipeline-page">
-    <header className="hero"><div><p className="eyebrow">LITTERSPOT / UNIFIED ANALYSIS</p><h1>One frame.<br /><em>Every risk.</em></h1><p className="lede">Draw a focus area for floor hazards; bin and people detection continue using the full frame.</p></div><button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>Dashboard</button></header>
+    <header className="hero"><div><p className="eyebrow">LITTERSPOT / UNIFIED ANALYSIS</p><h1>Every frame.<br /><em>Every change.</em></h1><p className="lede">Analyze a single image or monitor an uploaded video with live, one-second detection updates.</p></div><button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>Dashboard</button></header>
+    <div className="playground-tabs" role="tablist" aria-label="Analysis input type">
+      <button role="tab" aria-selected={mode === "image"} className={mode === "image" ? "active" : ""} onClick={() => setMode("image")}>Image</button>
+      <button role="tab" aria-selected={mode === "video"} className={mode === "video" ? "active" : ""} onClick={() => setMode("video")}>Video</button>
+    </div>
+    {mode === "video" ? <VideoAnalysisPanel cameraId={cameraId} onCameraIdChange={setCameraId} onPersisted={() => { void loadHistory(); void loadPlacement(cameraId); }} /> : <>
     <section className="workspace">
       <article className="card">
         <div className="card-heading"><div><span className="step">01</span><h2>Analyze camera frame</h2></div></div>
@@ -103,6 +110,7 @@ export function PipelinePage() {
       <aside className="card pipeline-summary"><p className="eyebrow">Flag policy</p><h2>Human-reviewed alerts</h2><div className="policy-row"><b className="critical">Critical</b><span>Confirmed overflow or floor spill</span></div><div className="policy-row"><b className="warning">Warning</b><span>Floor litter</span></div><div className="policy-row"><b className="clear">Context</b><span>People count</span></div></aside>
     </section>
     {result && preview && <AnalysisResult result={result} imageUrl={preview} />}
+    </>}
     {placement && <PlacementPanel placement={placement} windowDays={windowDays} onWindowDaysChange={setWindowDays} onSave={() => void saveWindow()} onRefresh={() => void loadPlacement()} />}
     <HistoryPanel history={history} onRefresh={() => void loadHistory()} />
   </main>;

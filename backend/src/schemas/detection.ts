@@ -82,6 +82,7 @@ export const imageBinAnalysisResponseSchema = z.object({
   image: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
   detections: z.array(z.object({
     binIndex: z.number().int().positive(),
+    trackingId: z.string().nullable().optional(),
     localizerConfidence: z.number().min(0).max(1),
     bbox: boundingBoxSchema,
     classificationRegion: boundingBoxSchema,
@@ -94,6 +95,7 @@ export const imageBinAnalysisResponseSchema = z.object({
       overflow: z.number().min(0).max(1),
     }),
     confirmed: z.boolean(),
+    stale: z.boolean().default(false),
     confirmationFrames: z.number().int().nonnegative(),
     unknownReasons: z.array(z.string()),
     processingTimeMs: z.number().nonnegative(),
@@ -129,6 +131,9 @@ export const pipelineAnalysisResponseSchema = z.object({
   })),
   flags: z.array(z.object({ severity: z.enum(["critical", "warning"]), kind: z.string(), message: z.string() })),
   processingTimeMs: z.number().nonnegative(),
+  sourceType: z.string().nullable().optional(),
+  videoSessionId: z.string().nullable().optional(),
+  videoTimestampSeconds: z.number().nonnegative().nullable().optional(),
 });
 
 export type PipelineAnalysisResponse = z.infer<typeof pipelineAnalysisResponseSchema>;
@@ -140,3 +145,30 @@ export const pipelineOptionsSchema = z.object({
   focusRegion: z.string().optional(),
 });
 export type PipelineOptions = z.infer<typeof pipelineOptionsSchema>;
+
+export const videoFrameOptionsSchema = z.object({
+  sessionId: z.string().trim().min(1).max(100),
+  cameraId: z.string().trim().min(1).max(100),
+  videoTimestampSeconds: z.coerce.number().nonnegative(),
+  floorConfidence: z.coerce.number().min(0.01).max(0.99).default(0.25),
+  localizerConfidence: z.coerce.number().min(0.01).max(0.99).default(0.80),
+  focusRegion: z.string().optional(),
+});
+export type VideoFrameOptions = z.infer<typeof videoFrameOptionsSchema>;
+
+export const videoFrameAnalysisResponseSchema = z.object({
+  result: pipelineAnalysisResponseSchema,
+  changes: z.array(z.object({
+    kind: z.enum(["bin_state", "bin_appeared", "bin_disappeared", "floor_hazard_appeared", "floor_hazard_disappeared", "people_count"]),
+    entityId: z.string(),
+    previous: z.string().nullable().optional(),
+    current: z.string().nullable().optional(),
+    videoTimestampSeconds: z.number().nonnegative(),
+  })),
+  persisted: z.boolean(),
+  baseline: z.boolean(),
+  confirmationProgress: z.number().int().min(0).max(2),
+  flagConfirmationProgress: z.number().int().min(0).max(4),
+  videoTimestampSeconds: z.number().nonnegative(),
+});
+export type VideoFrameAnalysisResponse = z.infer<typeof videoFrameAnalysisResponseSchema>;

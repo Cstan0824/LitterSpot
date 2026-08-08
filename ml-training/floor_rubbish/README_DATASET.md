@@ -134,3 +134,19 @@ floor area.
 
 Use one ROI for each fixed camera view. Create another ROI if the camera position
 or image framing changes. The ROI is post-processing, not model training.
+
+## Production Safety Policy
+
+The TACO conversion labels rubbish object identity; it does not prove that an
+object is on the floor. In particular, an upright bottle can legitimately be a
+model `floor_litter` prediction under the current labels. Production therefore:
+
+- suppresses litter boxes overlapping detected foreground objects;
+- exposes object-filtered litter candidates without requiring a focus region;
+- optionally limits litter inference to an operator-plotted floor region;
+- treats the current filter as a guardrail, not a semantic model fix.
+
+A future floor-litter checkpoint must use reviewed floor-contact labels and
+full-room negative frames. Validate by complete camera/video split and report
+false-positive frames on offices containing people, bins, bottles, furniture,
+and computers before replacing the production checkpoint.

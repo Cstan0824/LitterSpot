@@ -100,7 +100,14 @@ class AnalysisStore:
             if self.seed_demo:
                 self._seed_demo_cameras(connection)
 
-    def save(self, result: dict[str, Any], evidence_bytes: bytes | None = None, evidence_name: str | None = None) -> int:
+    def save(
+        self,
+        result: dict[str, Any],
+        evidence_bytes: bytes | None = None,
+        evidence_name: str | None = None,
+        *,
+        resolve_missing_alerts: bool = False,
+    ) -> int:
         flags = result["flags"]
         severity = "critical" if any(flag["severity"] == "critical" for flag in flags) else "warning" if flags else "clear"
         evidence_path = self._save_evidence(evidence_bytes, evidence_name) if evidence_bytes else None
@@ -117,6 +124,8 @@ class AnalysisStore:
             # raise operational alerts for an imaginary camera event.
             if camera_id and not result.get("isDemo", False):
                 self._create_or_refresh_alerts(connection, run_id, result)
+                if resolve_missing_alerts:
+                    self._resolve_missing_alerts(connection, camera_id, result)
             return run_id
 
     def recent(self, limit: int = 12) -> list[dict[str, Any]]:
@@ -294,6 +303,28 @@ class AnalysisStore:
                     "INSERT INTO alert_status_events (alert_id, new_status, operator_name, note) VALUES (?, 'active', 'system', 'Created from confirmed pipeline flag')",
                     (cursor.lastrowid,),
                 )
+
+    @staticmethod
+    def _resolve_missing_alerts(connection: sqlite3.Connection, camera_id: str, result: dict[str, Any]) -> None:
+        active_kinds = {flag["kind"] for flag in result.get("flags", [])}
+        resolvable_kinds = {"bin_overflow", "floor_litter", "floor_spill", "people_present"}
+        missing = resolvable_kinds - active_kinds
+        if not missing:
+            return
+        placeholders = ",".join("?" for _ in missing)
+        rows = connection.execute(
+            f"SELECT id FROM alerts WHERE camera_id=? AND status='active' AND kind IN ({placeholders})",
+            [camera_id, *sorted(missing)],
+        ).fetchall()
+        for row in rows:
+            connection.execute(
+                "UPDATE alerts SET status='resolved', updated_at=CURRENT_TIMESTAMP, resolved_at=CURRENT_TIMESTAMP WHERE id=?",
+                (row["id"],),
+            )
+            connection.execute(
+                "INSERT INTO alert_status_events (alert_id, previous_status, new_status, operator_name, note) VALUES (?, 'active', 'resolved', 'system', 'Resolved by confirmed video change')",
+                (row["id"],),
+            )
 
     @staticmethod
     def _analysis_row(row: sqlite3.Row) -> dict[str, Any]:

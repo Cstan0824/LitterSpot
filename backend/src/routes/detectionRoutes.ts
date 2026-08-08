@@ -15,7 +15,7 @@ detectionRoutes.use((req, res, next) => {
   const window = !current || now - current.startedAt >= 60_000 ? { startedAt: now, count: 0 } : current;
   window.count += 1;
   requestWindows.set(key, window);
-  if (window.count > 60) return res.status(429).json({ error: "Inference rate limit exceeded. Try again shortly." });
+  if (window.count > 120) return res.status(429).json({ error: "Inference rate limit exceeded. Try again shortly." });
   next();
 });
 detectionRoutes.use("/pipeline", pipelineRoutes);
