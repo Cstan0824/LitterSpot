@@ -13,7 +13,8 @@ from .multi_state_classifier import MultiStateClassifier
 from .analysis_store import AnalysisStore
 from .floor_hazard import FloorHazardAnalyzer
 from .pipeline import AnalysisPipeline, InvalidFocusRegionError, PipelineNotReadyError
-from .schemas import AlertStatusUpdate, BoundingBox, DetectionOptions, ImageBinAnalysisResponse, ImageInfo, LocalizedBinAnalysis, PipelineAnalysisResponse, PipelineOptions, PlacementSettingsUpdate, Point
+from .schemas import AlertStatusUpdate, BoundingBox, DetectionOptions, ImageBinAnalysisResponse, ImageInfo, LocalizedBinAnalysis, PipelineAnalysisResponse, PipelineOptions, PlacementSettingsUpdate, Point, VideoFrameAnalysisResponse
+from .video_tracking import VideoSessionTracker
 
 detector = BinDetector()
 state_classifier = MultiStateClassifier()
@@ -21,6 +22,7 @@ bin_localizer = BinLocalizer()
 floor_analyzer = FloorHazardAnalyzer()
 analysis_store = AnalysisStore(seed_demo=SEED_DEMO_CAMERAS)
 pipeline = AnalysisPipeline(state_classifier, bin_localizer, floor_analyzer, analysis_store)
+video_tracker = VideoSessionTracker(analysis_store)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -223,6 +225,54 @@ async def analyze_frame(
             focusRegion=focus_points,
         )
         return pipeline.analyze(image, file.filename or "upload", options, contents)
+    except InvalidFocusRegionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except PipelineNotReadyError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/analyze/video-frame", response_model=VideoFrameAnalysisResponse)
+async def analyze_video_frame(
+    file: UploadFile = File(...),
+    session_id: str = Form(..., min_length=1, max_length=100),
+    camera_id: str = Form(..., min_length=1, max_length=100),
+    video_timestamp_seconds: float = Form(..., ge=0),
+    floor_confidence: float = Form(0.25),
+    localizer_confidence: float = Form(BIN_LOCALIZER_CONFIDENCE),
+    focus_region: str | None = Form(None),
+    x_internal_token: str | None = Header(default=None),
+):
+    """Analyze a sampled video frame and persist only confirmed semantic changes."""
+    require_token(x_internal_token)
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=415, detail="Use JPEG, PNG, or WebP")
+    contents = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(contents) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Image is larger than 10 MB")
+    try:
+        image = Image.open(BytesIO(contents)).convert("RGB")
+    except UnidentifiedImageError as error:
+        raise HTTPException(status_code=400, detail="Invalid image") from error
+    focus_points: list[Point] = []
+    if focus_region:
+        try:
+            focus_points = [Point(**point) for point in json.loads(focus_region)]
+        except (ValueError, TypeError) as error:
+            raise HTTPException(status_code=422, detail="focus_region must be a JSON array of normalized points") from error
+    try:
+        options = PipelineOptions(
+            cameraId=camera_id,
+            floorConfidence=floor_confidence,
+            localizerConfidence=localizer_confidence,
+            confirmationFrames=2,
+            focusRegion=focus_points,
+        )
+        result = pipeline.analyze(image, file.filename or "video-frame.jpg", options, persist=False)
+        return video_tracker.observe(
+            session_id, camera_id, video_timestamp_seconds, result, contents, file.filename or "video-frame.jpg",
+        )
     except InvalidFocusRegionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except PipelineNotReadyError as error:

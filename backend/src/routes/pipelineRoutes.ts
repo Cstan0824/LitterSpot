@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { pipelineOptionsSchema } from "../schemas/detection.js";
+import { pipelineOptionsSchema, videoFrameOptionsSchema } from "../schemas/detection.js";
 import { pipelineClient } from "../services/pipelineClient.js";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -16,11 +16,16 @@ pipelineRoutes.post("/frame", upload.single("image"), async (req, res, next) => 
   } catch (error) { next(error); }
 });
 
-pipelineRoutes.get("/recent", async (req, res, next) => {
+pipelineRoutes.post("/video-frame", upload.single("image"), async (req, res, next) => {
   try {
-    const limit = Math.max(1, Math.min(Number(req.query.limit) || 12, 50));
-    return res.json(await pipelineClient.recent(limit));
-  }
+    if (!req.file) return res.status(400).json({ error: "A sampled video frame is required." });
+    if (!allowedImageTypes.has(req.file.mimetype)) return res.status(415).json({ error: "Use JPEG, PNG, or WebP." });
+    return res.json(await pipelineClient.analyzeVideoFrame(req.file, videoFrameOptionsSchema.parse(req.body)));
+  } catch (error) { next(error); }
+});
+
+pipelineRoutes.get("/recent", async (_req, res, next) => {
+  try { return res.json(await pipelineClient.recent()); }
   catch (error) { next(error); }
 });
 

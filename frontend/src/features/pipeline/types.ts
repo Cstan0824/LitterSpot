@@ -8,10 +8,30 @@ export type PipelineResult = {
   focusRegion: Point[];
   peopleCount: number;
   people: Array<{ confidence: number; bbox: Box }>;
-  bins: Array<{ binIndex: number; state: string; bbox: Box }>;
+  bins: Array<{ binIndex: number; trackingId?: string | null; state: string; confirmed: boolean; stale?: boolean; bbox: Box }>;
   floorHazards: Array<{ className: "floor_litter" | "floor_spill"; confidence: number; bbox: Box; polygon: Point[] }>;
   flags: Flag[];
   processingTimeMs: number;
+  sourceType?: string | null;
+  videoTimestampSeconds?: number | null;
+};
+
+export type VideoChange = {
+  kind: "bin_state" | "bin_appeared" | "bin_disappeared" | "floor_hazard_appeared" | "floor_hazard_disappeared" | "people_count";
+  entityId: string;
+  previous?: string | null;
+  current?: string | null;
+  videoTimestampSeconds: number;
+};
+
+export type VideoFrameResponse = {
+  result: PipelineResult;
+  changes: VideoChange[];
+  persisted: boolean;
+  baseline: boolean;
+  confirmationProgress: number;
+  flagConfirmationProgress: number;
+  videoTimestampSeconds: number;
 };
 
 export type PipelineHistory = PipelineResult & { id: number; createdAt: string };

@@ -65,6 +65,7 @@ class StateClassificationResponse(BaseModel):
 
 class LocalizedBinAnalysis(BaseModel):
     binIndex: int = Field(ge=1)
+    trackingId: str | None = None
     localizerConfidence: float = Field(ge=0, le=1)
     bbox: BoundingBox
     classificationRegion: BoundingBox
@@ -73,6 +74,7 @@ class LocalizedBinAnalysis(BaseModel):
     stateConfidence: float = Field(ge=0, le=1)
     signals: StateSignals
     confirmed: bool = False
+    stale: bool = False
     confirmationFrames: int = Field(ge=0)
     unknownReasons: list[str] = Field(default_factory=list)
     processingTimeMs: float = Field(ge=0)
@@ -119,12 +121,33 @@ class PipelineAnalysisResponse(BaseModel):
     floorHazards: list[FloorHazard]
     flags: list[PipelineFlag]
     processingTimeMs: float = Field(ge=0)
+    sourceType: str | None = None
+    videoSessionId: str | None = None
+    videoTimestampSeconds: float | None = None
+
+
+class VideoChange(BaseModel):
+    kind: str
+    entityId: str
+    previous: str | None = None
+    current: str | None = None
+    videoTimestampSeconds: float = Field(ge=0)
+
+
+class VideoFrameAnalysisResponse(BaseModel):
+    result: PipelineAnalysisResponse
+    changes: list[VideoChange] = Field(default_factory=list)
+    persisted: bool = False
+    baseline: bool = False
+    confirmationProgress: int = Field(default=0, ge=0, le=2)
+    flagConfirmationProgress: int = Field(default=0, ge=0, le=4)
+    videoTimestampSeconds: float = Field(ge=0)
 
 
 class PipelineOptions(BaseModel):
     cameraId: str | None = None
     floorConfidence: float = Field(default=0.25, ge=0.01, le=0.99)
-    localizerConfidence: float = Field(default=0.85, ge=0.01, le=0.99)
+    localizerConfidence: float = Field(default=0.80, ge=0.01, le=0.99)
     confirmationFrames: int = Field(default=1, ge=1, le=20)
     focusRegion: list[Point] = Field(default_factory=list)
 

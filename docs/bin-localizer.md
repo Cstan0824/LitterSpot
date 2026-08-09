@@ -74,6 +74,37 @@ a Malaysian camera test. Promote the model only when it also localizes the
 intended bin reliably on each deployment camera; a missed or wrong bin must
 produce `unknown`, never `normal`.
 
+The production pipeline additionally rejects localizer boxes covered by a
+COCO `person`, `bottle`, `tv`, or `cell phone` detection. The guarded runtime
+uses confidence 0.80; the Malaysia holdout numbers above were measured at
+0.85. These are safety guardrails, not substitutes for a passing checkpoint.
+A replacement localizer must satisfy all of these target
+video gates at the one-frame-per-second sampling rate before promotion:
+
+- zero bin detections and zero overflow alerts on no-bin people videos;
+- at least 90% confirmed-track recall on each annotated bin video;
+- zero bottle-as-bin detections;
+- no more than 5% false-bin frames;
+- the generic precision, recall, and mAP50 gates in `evaluate_bin_localizer.py`.
+
+Split target footage by complete video/camera. Adjacent frames from one video
+must never be divided across training and validation/test.
+
+For state-classifier OOD rejection, place reviewed non-bin crops under
+`ml-training/data/state-hard-negatives/{train,valid,test}/<source-video>/`.
+Include people, bottles, computers, chairs, doors, bags, phones, and every
+rejected production localizer crop. Each source video or camera belongs to one
+split only. The multi-task trainer uses these samples for the presence head and
+masks fullness/overflow loss:
+
+```powershell
+.\.venv\Scripts\python.exe ml-training\scripts\train_multitask_bin_state.py `
+  --hard-negative-dir ml-training\data\state-hard-negatives
+```
+
+Promotion fails unless the independent OOD test split has a presence false
+positive rate of 5% or less.
+
 For new CCTV data, maintain `ml-training/data/cctv-labelled/manifest.csv` with
 these columns:
 

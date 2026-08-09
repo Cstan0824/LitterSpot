@@ -3,8 +3,11 @@ import FormData from "form-data";
 import { env } from "../config/env.js";
 import {
   pipelineAnalysisResponseSchema,
+  videoFrameAnalysisResponseSchema,
   type PipelineAnalysisResponse,
   type PipelineOptions,
+  type VideoFrameAnalysisResponse,
+  type VideoFrameOptions,
 } from "../schemas/detection.js";
 
 const serviceHeaders = () => env.aiServiceToken ? { "x-internal-token": env.aiServiceToken } : {};
@@ -26,8 +29,25 @@ export const pipelineClient = {
     return pipelineAnalysisResponseSchema.parse(response.data);
   },
 
-  async recent(limit = 12) {
-    const response = await axios.get(`${env.aiServiceUrl}/analysis/recent`, { headers: serviceHeaders(), params: { limit }, timeout: 5_000 });
+  async analyzeVideoFrame(file: Express.Multer.File, options: VideoFrameOptions): Promise<VideoFrameAnalysisResponse> {
+    const body = new FormData();
+    body.append("file", file.buffer, { filename: file.originalname, contentType: file.mimetype });
+    body.append("session_id", options.sessionId);
+    body.append("camera_id", options.cameraId);
+    body.append("video_timestamp_seconds", String(options.videoTimestampSeconds));
+    body.append("floor_confidence", String(options.floorConfidence));
+    body.append("localizer_confidence", String(options.localizerConfidence));
+    if (options.focusRegion) body.append("focus_region", options.focusRegion);
+    const response = await axios.post(`${env.aiServiceUrl}/analyze/video-frame`, body, {
+      headers: { ...body.getHeaders(), ...serviceHeaders() },
+      maxBodyLength: 10 * 1024 * 1024,
+      timeout: 60_000,
+    });
+    return videoFrameAnalysisResponseSchema.parse(response.data);
+  },
+
+  async recent() {
+    const response = await axios.get(`${env.aiServiceUrl}/analysis/recent`, { headers: serviceHeaders(), timeout: 5_000 });
     return response.data;
   },
 

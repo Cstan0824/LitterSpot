@@ -83,6 +83,28 @@ class PlacementAnalysisTests(unittest.TestCase):
             self.assertEqual(updated["status"], "resolved")
             self.assertEqual(len(store.alerts(status="resolved")), 1)
 
+    def test_confirmed_video_clear_resolves_matching_active_alert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AnalysisStore(path=Path(directory) / "analysis.sqlite3")
+            store.initialize()
+            flagged = {
+                "imageName": "video-00-01.jpg", "cameraId": "camera-1", "peopleCount": 0,
+                "flags": [{"severity": "critical", "kind": "floor_spill", "message": "Floor Spill"}],
+                "floorHazards": [{"className": "floor_spill", "confidence": 0.9}], "bins": [],
+            }
+            clear = {
+                "imageName": "video-00-03.jpg", "cameraId": "camera-1", "peopleCount": 0,
+                "flags": [], "floorHazards": [], "bins": [],
+            }
+            store.save(flagged)
+
+            store.save(clear, resolve_missing_alerts=True)
+
+            self.assertEqual(store.alerts(status="active"), [])
+            resolved = store.alerts(status="resolved")
+            self.assertEqual(len(resolved), 1)
+            self.assertEqual(resolved[0]["kind"], "floor_spill")
+
     def test_demo_seed_populates_every_camera_with_evidence_only(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AnalysisStore(path=Path(directory) / "analysis.sqlite3", seed_demo=True)

@@ -15,7 +15,7 @@
       "version": "bin-localizer-yolo11n-gco-gbs-um-v2",
       "path": "models/production/bin_localizer_yolo11n.pt",
       "mode": "one-class-bin-localizer",
-      "confidence": 0.85,
+      "confidence": 0.80,
       "classes": ["trash bin"],
       "trainingData": [
         "Garbage Can Overflow",
@@ -31,6 +31,7 @@
         "passedGenericGate": false
       },
       "malaysiaHoldoutDiagnostic": {
+        "evaluationConfidence": 0.85,
         "images": 100,
         "expectedBinsPerImage": 3,
         "exactlyThreeRate": 0.76,
@@ -38,7 +39,13 @@
         "countCoverageProxy": 0.9867,
         "meanDetections": 3.27
       },
-      "status": "production-malaysia-first-weak-adaptation"
+      "runtimeGuards": [
+        "common-object-overlap-veto",
+        "two-sample-video-confirmation",
+        "one-sample-confirmed-track-carry"
+      ],
+      "replacementPromotionBlocked": true,
+      "status": "production-guarded-replacement-required"
     },
     {
       "version": "yoloe26s-gco-gbs-domain-balanced-v1-2-epoch6",

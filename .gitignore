@@ -236,6 +236,7 @@ ml-training/data/processed/
 ml-training/data/cctv-unlabelled/
 ml-training/data/cctv-labelled/
 ml-training/data/cctv-test/
+ml-training/data/state-hard-negatives/
 ml-training/data/bin-localizer/
 ml-training/data/malaysia-bin-node/
 ml-training/data/malaysia-bin-node-pseudo/

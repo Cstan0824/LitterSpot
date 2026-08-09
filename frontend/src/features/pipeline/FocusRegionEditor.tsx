@@ -33,7 +33,7 @@ export function FocusRegionEditor({ preview, points, drawing, onPointsChange, on
     <div className="roi-actions">
       <button className="quiet" onClick={() => onDrawingChange(!drawing)}>{drawing ? "Finish focus area" : "Plot floor area"}</button>
       <button className="quiet" disabled={!points.length} onClick={() => { onPointsChange([]); onDrawingChange(false); }}>Clear area</button>
-      <span>{points.length >= 3 ? `${points.length} points · floor model only` : drawing ? "Click around the floor area" : "No focus area: full frame"}</span>
+      <span>{points.length >= 3 ? `${points.length} points · litter limited to this area` : drawing ? "Click around the floor area" : "Optional: limit litter detection to a floor area"}</span>
     </div>
   </>;
 }

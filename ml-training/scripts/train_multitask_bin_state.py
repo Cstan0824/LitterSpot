@@ -17,6 +17,9 @@ from torchvision.models import mobilenet_v3_small
 from train_bin_state_classifier import ROOT, crop_bin, index_split, seed_everything, transforms
 
 
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
 class MultiTaskMobileNet(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -83,6 +86,19 @@ def load_gco(root: Path, split: str) -> list[dict[str, object]]:
             "state": ("normal", "full", "overflow")[category],
         })
     return samples
+
+
+def load_ood_negatives(root: Path, split: str) -> list[dict[str, object]]:
+    """Load full-frame/crop OOD negatives split by source video or camera."""
+    directory = root / split
+    if not directory.is_dir():
+        return []
+    return [{
+        "image": path, "image_id": str(path), "group": "ood_negative",
+        "box": (.5, .5, 1.0, 1.0), "presence": 0.0,
+        "fullness": 0.0, "fullness_mask": 0.0,
+        "overflow": 0.0, "overflow_mask": 0.0, "state": "unknown",
+    } for path in sorted(directory.rglob("*")) if path.suffix.lower() in IMAGE_SUFFIXES]
 
 
 def temporal_gbs_splits(samples: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
@@ -167,8 +183,9 @@ def state_metrics(rows, thresholds):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_v2")
-    parser.add_argument("--base", type=Path, default=ROOT / "runs/state_classifier/mobilenet_v3_small_gco_gbs_mixed_v1/best.pt")
+    parser.add_argument("--output", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_ood_v3")
+    parser.add_argument("--base", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_v2/production.pt")
+    parser.add_argument("--hard-negative-dir", type=Path, default=ROOT / "ml-training/data/state-hard-negatives")
     parser.add_argument("--epochs", type=int, default=3); parser.add_argument("--samples-per-epoch", type=int, default=36000)
     parser.add_argument("--batch", type=int, default=128); parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--lr", type=float, default=5e-5); parser.add_argument("--context", type=float, default=.15)
@@ -177,12 +194,17 @@ def main() -> None:
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     gco = {split: load_gco(ROOT / "ml-training/data/processed", split) for split in ("train", "valid", "test")}
     gbs = temporal_gbs_splits(load_gbs(ROOT / "ml-training/data/raw/GBS"))
-    train_samples = gco["train"] + gbs["train"]
+    ood = {split: load_ood_negatives(args.hard_negative_dir, split) for split in ("train", "valid", "test")}
+    train_samples = gco["train"] + gbs["train"] + ood["train"]
     group_counts = Counter(str(sample["group"]) for sample in train_samples)
     weights = [1 / group_counts[str(sample["group"])] for sample in train_samples]
     train_transform, eval_transform = transforms(224)
     train_loader = DataLoader(TaskDataset(train_samples, train_transform, args.context), batch_size=args.batch, sampler=WeightedRandomSampler(weights, args.samples_per_epoch, replacement=True, generator=torch.Generator().manual_seed(42)), num_workers=args.workers, pin_memory=device.type == "cuda")
-    split_samples = {"gco_valid": gco["valid"], "gco_test": gco["test"], "gbs_valid": gbs["valid"], "gbs_test": gbs["test"]}
+    split_samples = {
+        "gco_valid": gco["valid"], "gco_test": gco["test"],
+        "gbs_valid": gbs["valid"], "gbs_test": gbs["test"],
+        "ood_valid": ood["valid"], "ood_test": ood["test"],
+    }
     loaders = {name: DataLoader(TaskDataset(samples, eval_transform, args.context), batch_size=args.batch, num_workers=args.workers, pin_memory=device.type == "cuda") for name, samples in split_samples.items()}
     model = MultiTaskMobileNet()
     base = torch.load(args.base.resolve(), map_location="cpu", weights_only=True)["model"]
@@ -203,8 +225,8 @@ def main() -> None:
                 overflow_loss = (criterion(outputs["overflow"], labels["overflow"]) * labels["overflow_mask"]).sum() / labels["overflow_mask"].sum().clamp_min(1)
                 loss = presence_loss + fullness_loss + overflow_loss
             scaler.scale(loss).backward(); scaler.step(optimizer); scaler.update(); loss_total += float(loss) * len(images)
-        validation_rows = {name: predict(model, loaders[name], split_samples[name], device) for name in ("gco_valid", "gbs_valid")}
-        combined = validation_rows["gco_valid"] + validation_rows["gbs_valid"]
+        validation_rows = {name: predict(model, loaders[name], split_samples[name], device) for name in ("gco_valid", "gbs_valid", "ood_valid")}
+        combined = validation_rows["gco_valid"] + validation_rows["gbs_valid"] + validation_rows["ood_valid"]
         thresholds = {task: calibrate(combined if task != "fullness" else validation_rows["gco_valid"], task)[0] for task in ("presence", "fullness", "overflow")}
         task_scores = {task: calibrate(combined if task != "fullness" else validation_rows["gco_valid"], task)[1]["f1"] for task in ("presence", "fullness", "overflow")}
         score = min(task_scores.values()); history.append({"epoch": epoch, "loss": loss_total / args.samples_per_epoch, "thresholds": thresholds, "task_f1": task_scores})
@@ -220,13 +242,16 @@ def main() -> None:
         rows = all_rows[f"{domain}_test"]
         test_tasks[domain] = {task: binary_metrics(*task_rows(rows if task != "fullness" else all_rows["gco_test"], task), thresholds[task]) for task in ("presence", "fullness", "overflow")}
         test_tasks[domain]["states"] = state_metrics(rows, thresholds)
+    ood_targets, ood_probabilities = task_rows(all_rows["ood_test"], "presence")
+    ood_metrics = binary_metrics(ood_targets, ood_probabilities, thresholds["presence"]) if ood_targets else None
     acceptance = {
         "presence_f1_at_least_0_80": min(test_tasks[d]["presence"]["f1"] for d in ("gco", "gbs")) >= .80,
         "fullness_f1_at_least_0_80": test_tasks["gco"]["fullness"]["f1"] >= .80,
         "overflow_f1_at_least_0_80": min(test_tasks[d]["overflow"]["f1"] for d in ("gco", "gbs")) >= .80,
         "gco_state_accuracy_at_least_0_80": test_tasks["gco"]["states"]["accuracy"] >= .80,
+        "ood_presence_false_positive_rate_at_most_0_05": bool(ood_metrics and ood_metrics["confusion_matrix"][0][1] / max(1, sum(ood_metrics["confusion_matrix"][0])) <= .05),
     }; acceptance["passed"] = all(acceptance.values())
-    report = {"timestamp": datetime.now(timezone.utc).isoformat(), "experiment": "multi-head compatible-label state model", "group_counts": dict(group_counts), "selected_epoch": checkpoint["epoch"], "thresholds": thresholds, "history": history, "test": test_tasks, "acceptance": acceptance, "elapsed_seconds": perf_counter() - started}
+    report = {"timestamp": datetime.now(timezone.utc).isoformat(), "experiment": "multi-head state model with OOD hard negatives", "group_counts": dict(group_counts), "selected_epoch": checkpoint["epoch"], "thresholds": thresholds, "history": history, "test": test_tasks | {"ood": ood_metrics}, "acceptance": acceptance, "elapsed_seconds": perf_counter() - started}
     (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps({"test": test_tasks, "acceptance": acceptance}, indent=2), flush=True)
 

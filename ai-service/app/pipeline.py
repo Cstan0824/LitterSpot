@@ -33,6 +33,9 @@ class InvalidFocusRegionError(ValueError):
 class AnalysisPipeline:
     """Hides model coordination, ROI transforms, flagging, and persistence."""
 
+    BIN_BLOCKER_CLASSES = {"person", "bottle", "tv", "cell phone"}
+    BIN_BLOCKER_COVERAGE = 0.40
+
     def __init__(
         self,
         state_classifier: MultiStateClassifier,
@@ -57,18 +60,25 @@ class AnalysisPipeline:
         evidence_bytes: bytes | None = None,
         *,
         is_demo: bool = False,
+        persist: bool = True,
     ) -> PipelineAnalysisResponse:
         if not self.ready:
             raise PipelineNotReadyError("One or more pipeline models are not ready")
 
-        floor_image, offset_x, offset_y = self._floor_input(image, options.focusRegion)
         started = perf_counter()
+        scene = self.floor_analyzer.analyze(image, detect_floor=False)
+        floor_image, offset_x, offset_y = self._floor_input(image, options.focusRegion)
         candidates, _ = self.bin_localizer.locate_all(image, options.localizerConfidence, 20)
+        candidates = [
+            candidate for candidate in candidates
+            if not self._blocked_bin(candidate.bbox, scene.objects)
+        ]
         bins = [self._classify_bin(image, candidate, index, options) for index, candidate in enumerate(candidates, start=1)]
 
-        people = self.floor_analyzer.analyze(image, detect_floor=False).people
         floor_result = self.floor_analyzer.analyze(floor_image, options.floorConfidence, detect_people=False)
         hazards = [self._translate_hazard(hazard, offset_x, offset_y) for hazard in floor_result.hazards]
+        hazards = FloorHazardAnalyzer.filter_hazards(hazards, scene.objects)
+        hazards = self._floor_hazards_for_context(hazards, options.focusRegion)
         flags = self._flags_for(bins, hazards)
 
         result = PipelineAnalysisResponse(
@@ -77,15 +87,29 @@ class AnalysisPipeline:
             cameraId=options.cameraId,
             image=ImageInfo(width=image.width, height=image.height),
             focusRegion=options.focusRegion,
-            peopleCount=len(people),
-            people=people,
+            peopleCount=len(scene.people),
+            people=scene.people,
             bins=bins,
             floorHazards=hazards,
             flags=flags,
             processingTimeMs=(perf_counter() - started) * 1000,
         )
-        result.analysisId = self.store.save(result.model_dump(), evidence_bytes, image_name)
+        if persist:
+            result.analysisId = self.store.save(result.model_dump(), evidence_bytes, image_name)
         return result
+
+    @classmethod
+    def _blocked_bin(cls, bbox: BoundingBox, objects) -> bool:
+        return any(
+            item.className in cls.BIN_BLOCKER_CLASSES
+            and FloorHazardAnalyzer.coverage(bbox, item.bbox) >= cls.BIN_BLOCKER_COVERAGE
+            for item in objects
+        )
+
+    @staticmethod
+    def _floor_hazards_for_context(hazards: list[FloorHazard], focus_region: list[Point]) -> list[FloorHazard]:
+        """Keep filtered candidates visible; an optional focus region narrows inference upstream."""
+        return hazards
 
     def seed_demo_frames(self) -> int:
         """Analyse the persisted demo evidence through the normal production path."""
