@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
 
+import torch
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_PATHS = [
     PROJECT_ROOT / "runs/bin_overflow/yoloe26s_gco_gbs_domain_balanced_v1-2/weights/epoch6.pt",
@@ -24,7 +26,11 @@ BIN_LOCALIZER_CONFIDENCE = float(os.getenv("BIN_LOCALIZER_CONFIDENCE", ".85"))
 BIN_PROFILE_PATH = Path(os.getenv("BIN_PROFILE_PATH", PROJECT_ROOT / "config/bin-profiles.json"))
 ENABLE_LEGACY_DETECTOR = os.getenv("ENABLE_LEGACY_DETECTOR", "false").lower() in {"1", "true", "yes"}
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN")
-DEVICE = os.getenv("DEVICE", "cpu")
+_requested_device = os.getenv("DEVICE", "cpu")
+# A numeric Ultralytics device selects a CUDA GPU. Local development may still
+# request GPU 0 through the launcher on a CPU-only machine, so resolve that to
+# CPU once for every inference component instead of only in the state model.
+DEVICE = "cpu" if (_requested_device.isdigit() and not torch.cuda.is_available()) else _requested_device
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALERT_CONFIRMATION_FRAMES = int(os.getenv("ALERT_CONFIRMATION_FRAMES", "3"))
 ALERT_TRACK_IOU = float(os.getenv("ALERT_TRACK_IOU", "0.50"))

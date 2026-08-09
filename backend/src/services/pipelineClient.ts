@@ -26,8 +26,8 @@ export const pipelineClient = {
     return pipelineAnalysisResponseSchema.parse(response.data);
   },
 
-  async recent() {
-    const response = await axios.get(`${env.aiServiceUrl}/analysis/recent`, { headers: serviceHeaders(), timeout: 5_000 });
+  async recent(limit = 12) {
+    const response = await axios.get(`${env.aiServiceUrl}/analysis/recent`, { headers: serviceHeaders(), params: { limit }, timeout: 5_000 });
     return response.data;
   },
 

@@ -16,8 +16,11 @@ pipelineRoutes.post("/frame", upload.single("image"), async (req, res, next) => 
   } catch (error) { next(error); }
 });
 
-pipelineRoutes.get("/recent", async (_req, res, next) => {
-  try { return res.json(await pipelineClient.recent()); }
+pipelineRoutes.get("/recent", async (req, res, next) => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query.limit) || 12, 50));
+    return res.json(await pipelineClient.recent(limit));
+  }
   catch (error) { next(error); }
 });
 

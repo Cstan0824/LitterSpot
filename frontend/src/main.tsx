@@ -3,17 +3,32 @@ import { createRoot } from "react-dom/client";
 // TypeScript may complain about missing type declarations for CSS imports.
 // @ts-ignore
 import "./styles.css";
+import { OperationsConsole } from "./features/operations/OperationsConsole";
 import { DetectionTestPage } from "./pages/DetectionTestPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { PipelinePage } from "./pages/PipelinePage";
+
+type OperationsPage = "dashboard" | "alerts" | "history" | "placement";
+type Route = OperationsPage | "pipeline" | "playground" | "status";
+
+function routeFromHash(): Route {
+  const route = location.hash.replace(/^#\/?/, "");
+  if (["alerts", "history", "placement", "pipeline", "playground", "status"].includes(route)) return route as Route;
+  return "dashboard";
+}
 
 function App() {
-  const [page, setPage] = useState(() => location.hash === "#/playground" ? "playground" : "dashboard");
+  const [route, setRoute] = useState<Route>(routeFromHash);
   useEffect(() => {
-    const syncPage = () => setPage(location.hash === "#/playground" ? "playground" : "dashboard");
-    addEventListener("hashchange", syncPage);
-    return () => removeEventListener("hashchange", syncPage);
+    const syncRoute = () => setRoute(routeFromHash());
+    addEventListener("hashchange", syncRoute);
+    return () => removeEventListener("hashchange", syncRoute);
   }, []);
-  return page === "playground" ? <DetectionTestPage /> : <DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} />;
+
+  if (route === "playground") return <DetectionTestPage />;
+  if (route === "pipeline") return <PipelinePage />;
+  if (route === "status") return <DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} />;
+  return <OperationsConsole page={route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} />;
 }
 
 

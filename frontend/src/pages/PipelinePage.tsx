@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnalysisResult } from "../features/pipeline/AnalysisResult";
 import { FocusRegionEditor } from "../features/pipeline/FocusRegionEditor";
 import { HistoryPanel } from "../features/pipeline/HistoryPanel";
@@ -6,6 +6,7 @@ import { PlacementPanel } from "../features/pipeline/PlacementPanel";
 import type { PipelineHistory, PipelineResult, PlacementRecommendation, Point } from "../features/pipeline/types";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
 
 export function PipelinePage() {
   const [file, setFile] = useState<File>();
@@ -19,6 +20,12 @@ export function PipelinePage() {
   const [preview, setPreview] = useState<string>();
   const [focusPoints, setFocusPoints] = useState<Point[]>([]);
   const [drawing, setDrawing] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string>();
+  const [streaming, setStreaming] = useState(false);
+  const [sampleInterval, setSampleInterval] = useState(2);
+  const [framesAnalyzed, setFramesAnalyzed] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const stopStreaming = useRef(false);
 
   async function loadHistory() {
     try {
@@ -50,8 +57,12 @@ export function PipelinePage() {
 
   useEffect(() => { void loadHistory(); void loadPlacement("camera-1"); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
+  useEffect(() => () => { stopStreaming.current = true; }, []);
 
   function selectFile(next?: File) {
+    stopVideoAnalysis();
+    setVideoUrl(undefined);
     setResult(undefined);
     setError(undefined);
     setFocusPoints([]);
@@ -60,6 +71,32 @@ export function PipelinePage() {
     if (!allowedTypes.has(next.type)) { setError("Use a JPEG, PNG, or WebP image."); return; }
     setFile(next);
     setPreview(URL.createObjectURL(next));
+  }
+
+  function selectVideo(next?: File) {
+    stopVideoAnalysis();
+    setResult(undefined);
+    setError(undefined);
+    setFramesAnalyzed(0);
+    setFocusPoints([]);
+    setDrawing(false);
+    if (!next) return;
+    if (!allowedVideoTypes.has(next.type)) { setError("Use an MP4, WebM, or Ogg video."); return; }
+    setFile(undefined);
+    setPreview(undefined);
+    setVideoUrl(URL.createObjectURL(next));
+  }
+
+  async function analyzeFrame(frame: File) {
+    const body = new FormData();
+    body.append("image", frame);
+    body.append("cameraId", cameraId);
+    body.append("confirmationFrames", "3");
+    if (focusPoints.length >= 3) body.append("focusRegion", JSON.stringify(focusPoints));
+    const response = await fetch("/api/detections/pipeline/frame", { method: "POST", body });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error ?? "Analysis failed.");
+    setResult(payload);
   }
 
   async function analyze() {
@@ -71,15 +108,7 @@ export function PipelinePage() {
     setLoading(true);
     setError(undefined);
     try {
-      const body = new FormData();
-      body.append("image", file);
-      body.append("cameraId", cameraId);
-      body.append("confirmationFrames", "3");
-      if (focusPoints.length >= 3) body.append("focusRegion", JSON.stringify(focusPoints));
-      const response = await fetch("/api/detections/pipeline/frame", { method: "POST", body });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Analysis failed.");
-      setResult(payload);
+      await analyzeFrame(file);
       await loadHistory();
       await loadPlacement(cameraId);
     } catch (reason) {
@@ -89,14 +118,74 @@ export function PipelinePage() {
     }
   }
 
+  function stopVideoAnalysis() {
+    stopStreaming.current = true;
+    videoRef.current?.pause();
+    setStreaming(false);
+  }
+
+  async function captureVideoFrame(video: HTMLVideoElement, frameNumber: number) {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser cannot capture video frames.");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
+      (value) => value ? resolve(value) : reject(new Error("Could not encode the video frame.")),
+      "image/jpeg",
+      0.9,
+    ));
+    return new File([blob], `cctv-frame-${String(frameNumber).padStart(5, "0")}.jpg`, { type: "image/jpeg" });
+  }
+
+  async function startVideoAnalysis() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) { setError("Wait for the video preview to finish loading."); return; }
+    stopStreaming.current = false;
+    setStreaming(true);
+    setError(undefined);
+    setFramesAnalyzed(0);
+    try {
+      video.currentTime = 0;
+      await video.play();
+      let frameNumber = 0;
+      while (!stopStreaming.current && !video.ended) {
+        const startedAt = performance.now();
+        frameNumber += 1;
+        const frame = await captureVideoFrame(video, frameNumber);
+        setPreview((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return URL.createObjectURL(frame);
+        });
+        await analyzeFrame(frame);
+        setFramesAnalyzed(frameNumber);
+        const remaining = sampleInterval * 1000 - (performance.now() - startedAt);
+        if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+      }
+      await Promise.all([loadHistory(), loadPlacement(cameraId)]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Video analysis failed.");
+    } finally {
+      video.pause();
+      setStreaming(false);
+    }
+  }
+
   return <main className="app-shell pipeline-page">
     <header className="hero"><div><p className="eyebrow">LITTERSPOT / UNIFIED ANALYSIS</p><h1>One frame.<br /><em>Every risk.</em></h1><p className="lede">Draw a focus area for floor hazards; bin and people detection continue using the full frame.</p></div><button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>Dashboard</button></header>
     <section className="workspace">
       <article className="card">
         <div className="card-heading"><div><span className="step">01</span><h2>Analyze camera frame</h2></div></div>
         <label className="dropzone"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectFile(event.target.files?.[0])} />{preview ? <img src={preview} alt="Selected camera frame" /> : <><span className="upload-icon">↑</span><strong>Upload a camera image</strong><span>JPEG, PNG, or WebP · 10 MB maximum</span></>}</label>
-        {preview && <FocusRegionEditor preview={preview} points={focusPoints} drawing={drawing} onPointsChange={setFocusPoints} onDrawingChange={setDrawing} />}
+        {preview && !videoUrl && <FocusRegionEditor preview={preview} points={focusPoints} drawing={drawing} onPointsChange={setFocusPoints} onDrawingChange={setDrawing} />}
+        <div className="video-ingest">
+          <label><span>CCTV video</span><input type="file" accept="video/mp4,video/webm,video/ogg" disabled={streaming} onChange={(event) => selectVideo(event.target.files?.[0])} /></label>
+          {videoUrl && <video ref={videoRef} src={videoUrl} controls muted playsInline onEnded={stopVideoAnalysis} />}
+          {videoUrl && <label className="control"><span>Sample interval <b>{sampleInterval}s</b></span><input type="range" min="1" max="10" step="1" value={sampleInterval} disabled={streaming} onChange={(event) => setSampleInterval(Number(event.target.value))} /><small>Frames follow the clip's current playback position, with only one inference request running at a time.</small></label>}
+        </div>
         <label className="control"><span>Camera ID</span><input type="text" value={cameraId} onChange={(event) => setCameraId(event.target.value)} onBlur={() => void loadPlacement(cameraId)} /></label>
+        {videoUrl && <div className="action-row"><button className="primary" disabled={streaming} onClick={() => void startVideoAnalysis()}>{streaming ? "Analyzing stream..." : "Start CCTV simulation"}</button>{streaming && <button className="quiet" onClick={stopVideoAnalysis}>Stop</button>}<span className="frame-counter">{framesAnalyzed} frames analyzed</span></div>}
         <div className="action-row"><button className="primary" disabled={!file || loading} onClick={() => void analyze()}>{loading ? "Analyzing…" : "Run unified analysis"}</button></div>
         {error && <p className="error">{error}</p>}
       </article>
