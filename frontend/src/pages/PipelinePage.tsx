@@ -5,6 +5,7 @@ import { HistoryPanel } from "../features/pipeline/HistoryPanel";
 import { PlacementPanel } from "../features/pipeline/PlacementPanel";
 import { VideoAnalysisPanel } from "../features/pipeline/VideoAnalysisPanel";
 import type { PipelineHistory, PipelineResult, PlacementRecommendation, Point } from "../features/pipeline/types";
+import { cameraOptions, moveLiveVideo, publishLiveVideo, updateLiveVideoAnalysis } from "../features/pipeline/liveVideoStore";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
@@ -12,7 +13,7 @@ const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
 export function PipelinePage() {
   const [mode, setMode] = useState<"image" | "video">("image");
   const [file, setFile] = useState<File>();
-  const [cameraId, setCameraId] = useState("camera-1");
+  const [cameraId, setCameraId] = useState("CAMERA-1");
   const [result, setResult] = useState<PipelineResult>();
   const [history, setHistory] = useState<PipelineHistory[]>([]);
   const [placement, setPlacement] = useState<PlacementRecommendation>();
@@ -27,6 +28,7 @@ export function PipelinePage() {
   const [sampleInterval, setSampleInterval] = useState(2);
   const [framesAnalyzed, setFramesAnalyzed] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const liveVideoIdRef = useRef<string | undefined>(undefined);
   const stopStreaming = useRef(false);
 
   async function loadHistory() {
@@ -57,7 +59,7 @@ export function PipelinePage() {
     setPlacement(body);
   }
 
-  useEffect(() => { void loadHistory(); void loadPlacement("camera-1"); }, []);
+  useEffect(() => { void loadHistory(); void loadPlacement("CAMERA-1"); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
   useEffect(() => () => { stopStreaming.current = true; }, []);
@@ -86,6 +88,7 @@ export function PipelinePage() {
     if (!allowedVideoTypes.has(next.type)) { setError("Use an MP4, WebM, or Ogg video."); return; }
     setFile(undefined);
     setPreview(undefined);
+    liveVideoIdRef.current = publishLiveVideo(next, cameraId);
     setVideoUrl(URL.createObjectURL(next));
   }
 
@@ -99,14 +102,16 @@ export function PipelinePage() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Analysis failed.");
     setResult(payload);
+    updateLiveVideoAnalysis(cameraId, payload);
   }
 
   async function analyze() {
     if (!file) return;
-    if (drawing || focusPoints.length === 1 || focusPoints.length === 2) {
-      setError("Finish the focus area with at least three points, or clear it.");
+    if (focusPoints.length === 1 || focusPoints.length === 2) {
+      setError("Add at least three focus-area points, or clear the area.");
       return;
     }
+    if (drawing && focusPoints.length >= 3) setDrawing(false);
     setLoading(true);
     setError(undefined);
     try {
@@ -191,7 +196,7 @@ export function PipelinePage() {
           {videoUrl && <video ref={videoRef} src={videoUrl} controls muted playsInline onEnded={stopVideoAnalysis} />}
           {videoUrl && <label className="control"><span>Sample interval <b>{sampleInterval}s</b></span><input type="range" min="1" max="10" step="1" value={sampleInterval} disabled={streaming} onChange={(event) => setSampleInterval(Number(event.target.value))} /><small>Frames follow the clip's current playback position, with only one inference request running at a time.</small></label>}
         </div>
-        <label className="control"><span>Camera ID</span><input type="text" value={cameraId} onChange={(event) => setCameraId(event.target.value)} onBlur={() => void loadPlacement(cameraId)} /></label>
+        <label className="control"><span>Camera ID</span><select value={cameraId} onChange={(event) => { setCameraId(event.target.value); if (liveVideoIdRef.current) moveLiveVideo(liveVideoIdRef.current, event.target.value); void loadPlacement(event.target.value); }}>{cameraOptions.map((id) => <option value={id} key={id}>{id}</option>)}</select></label>
         {videoUrl && <div className="action-row"><button className="primary" disabled={streaming} onClick={() => void startVideoAnalysis()}>{streaming ? "Analyzing stream..." : "Start CCTV simulation"}</button>{streaming && <button className="quiet" onClick={stopVideoAnalysis}>Stop</button>}<span className="frame-counter">{framesAnalyzed} frames analyzed</span></div>}
         <div className="action-row"><button className="primary" disabled={!file || loading} onClick={() => void analyze()}>{loading ? "Analyzing…" : "Run unified analysis"}</button></div>
         {error && <p className="error">{error}</p>}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FocusRegionEditor } from "./FocusRegionEditor";
 import type { Box, PipelineResult, Point, VideoChange, VideoFrameResponse } from "./types";
+import { cameraOptions, moveLiveVideo, publishLiveVideo, updateLiveVideoAnalysis } from "./liveVideoStore";
 
 const allowedVideoTypes = new Set(["video/mp4", "video/webm"]);
 const maxVideoBytes = 500 * 1024 * 1024;
@@ -41,6 +42,7 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
   const lastSampleSecondRef = useRef(-1);
   const startedRef = useRef(false);
   const fileRef = useRef<File | undefined>(undefined);
+  const liveVideoIdRef = useRef<string | undefined>(undefined);
   const focusPointsRef = useRef<Point[]>([]);
   const cameraIdRef = useRef(cameraId);
   const onPersistedRef = useRef(onPersisted);
@@ -103,6 +105,7 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
     if (next.size > maxVideoBytes) { setError("Video must be 500 MB or smaller."); return; }
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     const url = URL.createObjectURL(next);
+    liveVideoIdRef.current = publishLiveVideo(next, cameraIdRef.current);
     setFile(next);
     setVideoUrl(url);
     setPoster(undefined);
@@ -169,6 +172,7 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
       const payload = await response.json() as VideoFrameResponse & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Video-frame analysis failed.");
       setResult(payload.result);
+      updateLiveVideoAnalysis(cameraIdRef.current, payload.result);
       setConfirmationProgress(payload.confirmationProgress);
       setFlagConfirmationProgress(payload.flagConfirmationProgress);
       setLastAnalyzedSecond(Math.floor(payload.videoTimestampSeconds));
@@ -194,10 +198,11 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
     const video = videoRef.current;
     if (!video || !file) return;
     if (!cameraId.trim()) { setError("Camera ID is required."); return; }
-    if (drawing || focusPoints.length === 1 || focusPoints.length === 2) {
-      setError("Finish the focus area with at least three points, or clear it.");
+    if (focusPoints.length === 1 || focusPoints.length === 2) {
+      setError("Add at least three focus-area points, or clear the area.");
       return;
     }
+    if (drawing && focusPoints.length >= 3) setDrawing(false);
     if (duration > maxDurationSeconds) { setError("Video must be 10 minutes or shorter."); return; }
     resetSessionState();
     setStarted(true);
@@ -257,7 +262,7 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
       </article>
       <aside className="card settings-card">
         <div className="card-heading"><div><span className="step">02</span><h2>Video analysis</h2></div></div>
-        <label className="control"><span>Camera ID <b>Required</b></span><input type="text" value={cameraId} disabled={started} onChange={(event) => onCameraIdChange(event.target.value)} /></label>
+        <label className="control"><span>Camera ID <b>Required</b></span><select value={cameraId} disabled={started} onChange={(event) => { onCameraIdChange(event.target.value); cameraIdRef.current = event.target.value; if (liveVideoIdRef.current) moveLiveVideo(liveVideoIdRef.current, event.target.value); }}>{cameraOptions.map((id) => <option value={id} key={id}>{id}</option>)}</select></label>
         <div className="video-status"><span className={playing ? "active" : ""} /><div><strong>{analyzing ? "Analyzing frame…" : playing ? "Live analysis" : started ? "Paused" : "Ready to configure"}</strong><small>{lastAnalyzedSecond === undefined ? "Every video second is processed" : `Last result ${formatTimestamp(lastAnalyzedSecond)} · every video second is processed`}</small></div></div>
         {confirmationProgress === 1 && <p className="confirmation-note">Change detected · confirming next sample</p>}
         {flagConfirmationProgress > 0 && flagConfirmationProgress < 4 && <p className="confirmation-note">Detection frequency · {flagConfirmationProgress}/4 occurrences within 10 seconds</p>}
