@@ -329,8 +329,12 @@ class AnalysisStore:
     @staticmethod
     def _analysis_row(row: sqlite3.Row) -> dict[str, Any]:
         payload = json.loads(row["payload_json"])
+        evidence_name = Path(row["evidence_path"]).name if row["evidence_path"] else payload.get("imageName")
         return {
             **payload,
+            # The UI name must match the persisted file in data/evidence. The
+            # original upload name remains available inside payload_json.
+            "imageName": evidence_name,
             "id": row["id"],
             "analysisId": row["id"],
             "createdAt": row["created_at"],
@@ -378,6 +382,7 @@ class AnalysisStore:
     @staticmethod
     def _alert_row(row: sqlite3.Row) -> dict[str, Any]:
         payload = json.loads(row["payload_json"])
+        evidence_name = Path(row["evidence_path"]).name if row["evidence_path"] else payload.get("imageName")
         return {
             "id": row["id"],
             "analysisId": row["analysis_run_id"],
@@ -391,7 +396,7 @@ class AnalysisStore:
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
             "resolvedAt": row["resolved_at"],
-            "imageName": payload.get("imageName"),
+            "imageName": evidence_name,
             "peopleCount": payload.get("peopleCount", 0),
             "evidenceAvailable": bool(row["evidence_path"]),
         }

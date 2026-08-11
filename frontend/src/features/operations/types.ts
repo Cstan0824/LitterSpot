@@ -2,6 +2,7 @@ export type Box = { x1: number; y1: number; x2: number; y2: number };
 export type Point = { x: number; y: number };
 export type FrameResult = {
   analysisId: number;
+  cameraId?: string | null;
   imageName: string;
   createdAt: string;
   peopleCount: number;
