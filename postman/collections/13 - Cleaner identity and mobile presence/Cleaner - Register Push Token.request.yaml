@@ -1,0 +1,27 @@
+$kind: http-request
+name: Cleaner - Register Push Token
+description: Optional Cleaner-only FCM web token registration. Set cleanerFcmToken from the frontend Firebase Messaging SDK. Never paste or commit a real token. The durable in-app inbox works even without this request.
+url: "{{baseUrl}}/api/cleaner/push-token"
+method: PUT
+headers:
+  Authorization: "Bearer {{cleanerFirebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "deviceId": "{{cleanerDeviceId}}",
+      "token": "{{cleanerFcmToken}}",
+      "userAgent": "Postman manual Phase 11 test"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('cleanerFcmToken')) throw new Error('Set a real local cleanerFcmToken or skip this optional request.');
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner push device registered', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().pushDevice.status).to.eql('active');
+    language: text/javascript
+order: 8000

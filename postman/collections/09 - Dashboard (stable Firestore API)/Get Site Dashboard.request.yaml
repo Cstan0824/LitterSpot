@@ -1,0 +1,57 @@
+$kind: http-request
+description: Get the stable site-dashboard-v1 response for the selected site. The response combines configured cameras and their latest runs/evidence with bounded current-workflow alerts, recent detections, recent failures, completeness indicators, and the query mode used for chronological lists.
+url: "{{baseUrl}}/api/dashboard?siteId={{siteId}}&alertLimit=10&detectionLimit=10&failedJobLimit=10"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Site dashboard returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const dashboard = pm.response.json().dashboard;
+        const limits = { alerts: 10, detections: 10, failedJobs: 10 };
+
+        pm.test('Stable dashboard contract and site returned', () => {
+          pm.expect(dashboard).to.be.an('object');
+          pm.expect(dashboard.contractVersion).to.eql('site-dashboard-v1');
+          pm.expect(dashboard.workflowVersion).to.eql('grouped-temporal-v2');
+          pm.expect(dashboard.generatedAt).to.be.a('string');
+          pm.expect(dashboard.site).to.be.an('object');
+          pm.expect(dashboard.site.id).to.eql(pm.environment.get('siteId'));
+        });
+
+        pm.test('Dashboard summary and bounded lists returned', () => {
+          pm.expect(dashboard.summary).to.be.an('object');
+          pm.expect(dashboard.summary.activeAlertCounts).to.include.all.keys(
+            'new', 'acknowledged', 'inProgress', 'total'
+          );
+          pm.expect(dashboard.summary.configuredCameraCount).to.be.a('number');
+          pm.expect(dashboard.cameras).to.be.an('array');
+          pm.expect(dashboard.activeAlerts).to.be.an('array');
+          pm.expect(dashboard.recentDetections).to.be.an('array');
+          pm.expect(dashboard.recentFailedJobs).to.be.an('array');
+          pm.expect(dashboard.activeAlerts.length).to.be.at.most(limits.alerts);
+          pm.expect(dashboard.recentDetections.length).to.be.at.most(limits.detections);
+          pm.expect(dashboard.recentFailedJobs.length).to.be.at.most(limits.failedJobs);
+          dashboard.activeAlerts.forEach((alert) => {
+            pm.expect(alert.workflowVersion).to.eql('grouped-temporal-v2');
+            pm.expect(['new', 'acknowledged', 'in_progress']).to.include(alert.status);
+          });
+        });
+
+        pm.test('Completeness and query modes are explicit', () => {
+          pm.expect(dashboard.completeness).to.be.an('object');
+          pm.expect(['complete', 'more_available']).to.include(dashboard.completeness.activeAlerts);
+          pm.expect(['complete', 'bounded_source_scan']).to.include(dashboard.completeness.configuredCameras);
+          pm.expect(dashboard.completeness.latestRuns).to.eql('complete_for_configured_cameras');
+          pm.expect(['complete_within_site_query', 'bounded_source_scan']).to.include(dashboard.completeness.recentDetections);
+          pm.expect(['complete_within_site_query', 'bounded_source_scan']).to.include(dashboard.completeness.recentFailedJobs);
+          pm.expect(dashboard.sourceQueryMode).to.be.an('object');
+          pm.expect(dashboard.sourceQueryMode.activeAlerts).to.eql('indexed');
+          pm.expect(['indexed', 'fallback_bounded_scan']).to.include(dashboard.sourceQueryMode.detections);
+          pm.expect(['indexed', 'fallback_bounded_scan']).to.include(dashboard.sourceQueryMode.failedJobs);
+        });
+      }
+    language: text/javascript
+order: 1000

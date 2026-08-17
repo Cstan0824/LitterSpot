@@ -1,0 +1,22 @@
+$kind: http-request
+description: View the versioned grouped-cleanliness and temporal-confirmation policy used by Node. Current rules confirm floor litter with at least 3 positive observations in 5, floor spill with 2 consecutive positives, and bin overflow with at least 2 positives in 3. These configurable prototype rules may change when requirements are finalized.
+url: "{{baseUrl}}/api/alerts/policy"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert policy returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const policy = pm.response.json().alertPolicy;
+        pm.test('Grouped temporal policy shape is valid', () => {
+          pm.expect(policy.version).to.be.a('string');
+          pm.expect(policy.activeAlertScope).to.eql('zone_issue');
+          pm.expect(policy.rules.floor_litter.confirmation).to.include({ mode: 'at_least', requiredPositive: 3, windowSize: 5 });
+          pm.expect(policy.rules.floor_spill.confirmation).to.include({ mode: 'consecutive', requiredPositive: 2, windowSize: 2 });
+          pm.expect(policy.rules.bin_overflow.confirmation).to.include({ mode: 'at_least', requiredPositive: 2, windowSize: 3 });
+        });
+      }
+    language: text/javascript
+order: 1000

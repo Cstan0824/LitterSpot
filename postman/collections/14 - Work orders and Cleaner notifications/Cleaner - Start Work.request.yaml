@@ -1,0 +1,19 @@
+$kind: http-request
+name: Cleaner - Start Work
+description: Cleaner-only accepted or rework_required to in_progress transition.
+url: "{{baseUrl}}/api/cleaner/work-orders/{{workOrderId}}/start"
+method: POST
+headers:
+  Authorization: "Bearer {{cleanerFirebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    { "idempotencyKey": "postman-work-start-001", "note": null }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner started work', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().workOrder.status).to.eql('in_progress');
+    language: text/javascript
+order: 5000

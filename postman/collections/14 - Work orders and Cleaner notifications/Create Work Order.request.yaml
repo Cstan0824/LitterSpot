@@ -1,0 +1,32 @@
+$kind: http-request
+name: Create Work Order
+description: Supervisor-only assignment for an active Phase 4 alert. The linked Cleaner must have a fresh online heartbeat, matching site/zone permission, matching capability, and no other active work. Reusing workOrderRequestId is idempotent; assignmentDecisionId is independently single-use.
+url: "{{baseUrl}}/api/work-orders"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "alertId": "{{alertId}}",
+      "assignedCleanerId": "{{cleanerId}}",
+      "instructions": "Clean the confirmed issue in the assigned zone and submit the work for review.",
+      "assignmentDecisionId": "{{workOrderDecisionId}}",
+      "idempotencyKey": "{{workOrderRequestId}}",
+      "overrideAvailability": false
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Work order created or safely reused', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.expect(result.workOrder.alertId).to.eql(pm.environment.get('alertId'));
+        pm.expect(result.workOrder.assignedCleanerId).to.eql(pm.environment.get('cleanerId'));
+        pm.expect(result.workOrder.status).to.eql('assigned');
+        pm.environment.set('workOrderId', result.workOrder.id);
+      }
+    language: text/javascript
+order: 1000

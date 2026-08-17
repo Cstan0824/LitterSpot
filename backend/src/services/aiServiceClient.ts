@@ -1,28 +1,11 @@
 import axios from "axios";
 import FormData from "form-data";
 import { env } from "../config/env.js";
-import { detectionResponseSchema, imageBinAnalysisResponseSchema, stateClassificationResponseSchema, type BatchAnalysisOptions, type DetectionOptions, type DetectionResponse, type ImageBinAnalysisResponse, type StateClassificationOptions, type StateClassificationResponse } from "../schemas/detection.js";
+import { imageBinAnalysisResponseSchema, stateClassificationResponseSchema, type BatchAnalysisOptions, type ImageBinAnalysisResponse, type StateClassificationOptions, type StateClassificationResponse } from "../schemas/detection.js";
 
 export async function checkAiHealth() {
   const response = await axios.get(`${env.aiServiceUrl}/health`, { timeout: 3_000 });
   return response.data;
-}
-
-export async function detectImage(file: Express.Multer.File, options: DetectionOptions): Promise<DetectionResponse> {
-  const body = new FormData();
-  body.append("file", file.buffer, { filename: file.originalname, contentType: file.mimetype });
-  body.append("confidence", String(options.confidence));
-  body.append("iou", String(options.iou));
-  body.append("imgsz", String(options.imgsz));
-  body.append("max_detections", String(options.maxDetections));
-  if (options.cameraId) body.append("camera_id", options.cameraId);
-  body.append("confirmation_frames", String(options.confirmationFrames));
-  const response = await axios.post(`${env.aiServiceUrl}/detect/image`, body, {
-    headers: { ...body.getHeaders(), ...(env.aiServiceToken ? { "x-internal-token": env.aiServiceToken } : {}) },
-    maxBodyLength: 10 * 1024 * 1024,
-    timeout: 30_000,
-  });
-  return detectionResponseSchema.parse(response.data);
 }
 
 export async function classifyBinState(file: Express.Multer.File, options: StateClassificationOptions): Promise<StateClassificationResponse> {

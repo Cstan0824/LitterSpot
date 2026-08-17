@@ -1,0 +1,19 @@
+$kind: http-request
+name: Cleaner - Accept Work Order
+description: Cleaner-only assigned to accepted transition. Reusing the action idempotency key returns the same state without another history record.
+url: "{{baseUrl}}/api/cleaner/work-orders/{{workOrderId}}/accept"
+method: POST
+headers:
+  Authorization: "Bearer {{cleanerFirebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    { "idempotencyKey": "postman-work-accept-001", "note": null }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner accepted work', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().workOrder.status).to.eql('accepted');
+    language: text/javascript
+order: 4000

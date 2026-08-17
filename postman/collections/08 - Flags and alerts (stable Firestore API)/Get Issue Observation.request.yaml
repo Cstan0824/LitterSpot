@@ -1,0 +1,26 @@
+$kind: http-request
+description: Get one grouped issue observation with detection membership, qualification metrics, positive/negative decision, temporal-confirmation state, and optional flag/alert links. Run List Issue Observations first to select an ID.
+url: "{{baseUrl}}/api/issue-observations/{{issueObservationId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Issue observation found', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const observation = pm.response.json().issueObservation;
+        pm.test('Issue observation traceability returned', () => {
+          pm.expect(observation.id).to.eql(pm.environment.get('issueObservationId'));
+          pm.expect(observation.detectionIds).to.be.an('array');
+          pm.expect(observation.metrics).to.be.an('object');
+          pm.expect(observation.positive).to.be.a('boolean');
+          pm.expect(observation.temporalStatus).to.be.a('string');
+        });
+        if (observation.flagId) pm.environment.set('flagId', observation.flagId);
+        else pm.environment.unset('flagId');
+        if (observation.alertId) pm.environment.set('alertId', observation.alertId);
+        else pm.environment.unset('alertId');
+      }
+    language: text/javascript
+order: 4000

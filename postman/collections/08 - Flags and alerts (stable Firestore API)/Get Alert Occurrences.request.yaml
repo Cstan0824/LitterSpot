@@ -1,0 +1,12 @@
+$kind: http-request
+description: Retrieve every positive grouped-observation flag attached as evidence to the confirmed incident. An occurrence includes observationId and the contributing detectionIds rather than representing one raw detection by itself.
+url: "{{baseUrl}}/api/alerts/{{alertId}}/occurrences"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert occurrences returned', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 13000

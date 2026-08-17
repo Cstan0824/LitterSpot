@@ -2,28 +2,15 @@ import type {
   AlertStatus,
   CleanlinessAlert
 } from "../types/alert";
-
-async function readErrorMessage(
-  response: Response
-): Promise<string> {
-  try {
-    const body = (await response.json()) as {
-      error?: string;
-    };
-
-    return body.error ?? "The request could not be completed.";
-  } catch {
-    return "The request could not be completed.";
-  }
-}
+import { apiFetch, readApiError } from "./apiClient";
 
 export async function getAlerts(): Promise<
   CleanlinessAlert[]
 > {
-  const response = await fetch("/api/alerts");
+  const response = await apiFetch("/api/alerts");
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new Error(await readApiError(response));
   }
 
   return (await response.json()) as CleanlinessAlert[];
@@ -33,7 +20,7 @@ export async function updateAlertStatus(
   alertId: string,
   status: AlertStatus
 ): Promise<CleanlinessAlert> {
-  const response = await fetch(
+  const response = await apiFetch(
     `/api/alerts/${encodeURIComponent(alertId)}/status`,
     {
       method: "PATCH",
@@ -47,7 +34,7 @@ export async function updateAlertStatus(
   );
 
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response));
+    throw new Error(await readApiError(response));
   }
 
   return (await response.json()) as CleanlinessAlert;

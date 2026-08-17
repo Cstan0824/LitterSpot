@@ -1,0 +1,11 @@
+$kind: http-request
+description: Soft-deactivates the camera and retains its code reservation.
+url: "{{baseUrl}}/api/cameras/{{cameraId}}"
+method: DELETE
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Camera deactivated', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 5000

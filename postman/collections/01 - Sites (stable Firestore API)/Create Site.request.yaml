@@ -1,0 +1,22 @@
+$kind: http-request
+description: Creates a cloud Firestore site and saves its ID into siteId. This changes cloud data.
+url: "{{baseUrl}}/api/sites"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Postman Test Site",
+      "description": "Created during manual API testing",
+      "timezone": "Asia/Kuala_Lumpur"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Site created', () => pm.response.to.have.status(201));
+      if (pm.response.code === 201) pm.environment.set('siteId', pm.response.json().site.id);
+    language: text/javascript
+order: 2000

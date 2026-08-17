@@ -1,0 +1,39 @@
+$kind: http-request
+description: Upload a non-test image that is eligible for automatic flags, alerts, and future analytics. Select a JPEG, PNG, or WebP and use a new operationalClientRequestId for every intentional upload.
+url: "{{baseUrl}}/api/media/images"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+body:
+  type: formdata
+  content:
+    - type: file
+      key: image
+      src: []
+    - type: text
+      key: cameraId
+      value: "{{cameraId}}"
+    - type: text
+      key: clientRequestId
+      value: "{{operationalClientRequestId}}"
+    - type: text
+      key: isTest
+      value: "false"
+    - type: text
+      key: floorConfidence
+      value: "0.25"
+    - type: text
+      key: binLocalizerConfidence
+      value: "0.80"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Operational upload created or reused', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.expect(result.media.isTest).to.eql(false);
+        pm.environment.set('mediaId', result.media.id);
+        pm.environment.set('processingJobId', result.job.id);
+      }
+    language: text/javascript
+order: 1500

@@ -1,0 +1,3 @@
+$kind: collection
+description: Combined Phase 10 identity and Phase 11 mobile-presence workflow. Supervisor provisions the existing Cleaner business record; the Cleaner follows the one-time setup link, signs in separately, and can access only Cleaner-owned profile, presence, work, and notification routes.
+order: 8950

@@ -1,0 +1,27 @@
+$kind: http-request
+description: Read the last explicitly reconciled site-dashboard-summary-v1 document. Run Reconcile Dashboard Summary first for a site that does not yet have this rebuildable read model.
+url: "{{baseUrl}}/api/dashboard/summary?siteId={{siteId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Dashboard summary returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const summary = pm.response.json().summary;
+        pm.test('Stored summary contract is current', () => {
+          pm.expect(summary).to.be.an('object');
+          pm.expect(summary.id).to.eql(pm.environment.get('siteId'));
+          pm.expect(summary.siteId).to.eql(pm.environment.get('siteId'));
+          pm.expect(summary.version).to.eql('site-dashboard-summary-v1');
+          pm.expect(summary.workflowVersion).to.eql('grouped-temporal-v2');
+          pm.expect(summary.activeAlertCounts).to.include.all.keys(
+            'new', 'acknowledged', 'inProgress', 'total'
+          );
+          pm.expect(summary.reconciledAt).to.be.a('string');
+          pm.expect(summary.updatedAt).to.be.a('string');
+        });
+      }
+    language: text/javascript
+order: 3000

@@ -1,0 +1,17 @@
+$kind: http-request
+description: Get a temporally confirmed, zone-and-issue alert together with chronological status history and grouped-observation occurrences.
+url: "{{baseUrl}}/api/alerts/{{alertId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert details found', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.history).to.be.an('array');
+        pm.expect(result.occurrences).to.be.an('array');
+      }
+    language: text/javascript
+order: 8000

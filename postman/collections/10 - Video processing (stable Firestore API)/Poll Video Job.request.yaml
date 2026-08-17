@@ -1,0 +1,34 @@
+$kind: http-request
+description: >-
+  Poll the selected video job. Repeat manually until status is completed or
+  failed. Progress distinguishes processed, successful, and failed sampled
+  frames; successful frame results can then be listed by processingJobId in the
+  Analysis results folder.
+url: "{{baseUrl}}/api/processing-jobs/{{processingJobId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Video job found', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const job = pm.response.json().processingJob;
+        pm.test('Video progress contract returned', () => {
+          pm.expect(job.type).to.eql('video');
+          pm.expect(['uploading', 'queued', 'processing', 'completed', 'failed', 'cancelled']).to.include(job.status);
+          pm.expect(job.progress).to.be.an('object');
+          pm.expect(job.progress.plannedFrames).to.be.a('number').and.above(0);
+          pm.expect(job.progress.processedFrames).to.be.a('number').and.at.least(0);
+          pm.expect(job.progress.successfulFrames).to.be.a('number').and.at.least(0);
+          pm.expect(job.progress.failedFrames).to.be.a('number').and.at.least(0);
+          pm.expect(job.progress.processedFrames).to.eql(
+            job.progress.successfulFrames + job.progress.failedFrames
+          );
+          pm.expect(job.summary).to.be.an('object');
+        });
+        const alertIds = Array.isArray(job.summary.alertIds) ? job.summary.alertIds : [];
+        if (alertIds.length) pm.environment.set('alertId', alertIds[0]);
+      }
+    language: text/javascript
+order: 4000

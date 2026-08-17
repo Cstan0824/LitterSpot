@@ -1,0 +1,23 @@
+$kind: http-request
+description: >-
+  Reset and enqueue a failed video job. A 202 response means retry was accepted;
+  409 is expected when the selected job is not failed. Poll afterward because
+  retry processing is asynchronous.
+url: "{{baseUrl}}/api/processing-jobs/{{processingJobId}}/retry"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Retry accepted or correctly rejected', () => pm.expect([202, 409]).to.include(pm.response.code));
+      if (pm.response.code === 202) {
+        const result = pm.response.json();
+        pm.test('Video retry queued', () => {
+          pm.expect(result.processingJob.type).to.eql('video');
+          pm.expect(['queued', 'processing', 'completed']).to.include(result.processingJob.status);
+          pm.expect(result.enqueued).to.eql(true);
+        });
+      }
+    language: text/javascript
+order: 5000
