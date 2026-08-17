@@ -1,0 +1,23 @@
+$kind: http-request
+name: Cancel Work Order
+description: Supervisor override that releases the assigned Cleaner and active-alert work key. Run this instead of Complete when the assignment should end without claiming successful cleaning.
+url: "{{baseUrl}}/api/work-orders/{{workOrderId}}/status"
+method: PATCH
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "cancelled",
+      "idempotencyKey": "postman-work-cancel-001",
+      "note": "Cancelled by Supervisor during manual testing."
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Work order cancelled', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().workOrder.status).to.eql('cancelled');
+    language: text/javascript
+order: 8500

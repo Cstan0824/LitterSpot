@@ -1,0 +1,31 @@
+$kind: http-request
+name: Provision Cleaner Account
+description: >-
+  Supervisor-only, idempotent Firebase Auth provisioning for the selected
+  Cleaner personnel record. The returned password-setup link is a one-time
+  credential: send it privately to the Cleaner, never commit or paste it into
+  chat, then set cleanerEmail and cleanerPassword locally after the Cleaner
+  chooses a password.
+url: "{{baseUrl}}/api/cleaners/{{cleanerId}}/account"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    { "email": "{{cleanerEmail}}" }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner account created or safely reused', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.expect(result.cleaner.id).to.eql(pm.environment.get('cleanerId'));
+        pm.expect(['invited', 'active']).to.include(result.cleaner.accountStatus);
+        pm.expect(result.cleaner.authUid).to.be.a('string').and.not.empty;
+        pm.expect(result.setupLink).to.be.a('string').and.not.empty;
+        pm.environment.set('cleanerSetupLink', result.setupLink);
+      }
+    language: text/javascript
+order: 1000

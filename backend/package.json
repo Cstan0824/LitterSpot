@@ -7,6 +7,15 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "bootstrap:supervisor": "tsx src/scripts/bootstrapSupervisor.ts",
+    "smoke:alerts": "tsx src/scripts/smokeAlertWorkflow.ts",
+    "smoke:dashboard": "tsx src/scripts/smokeDashboard.ts",
+    "smoke:analytics": "tsx src/scripts/smokeAnalytics.ts",
+    "smoke:system-events": "tsx src/scripts/smokeSystemEvents.ts",
+    "smoke:video": "tsx src/scripts/smokeVideoWorkflow.ts",
+    "media:retention": "tsx src/scripts/mediaRetention.ts",
+    "migrate:cleaner-accounts": "tsx src/scripts/migrateCleanerAccounts.ts",
+    "location:retention": "tsx src/scripts/locationRetention.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -14,7 +23,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "firebase-admin": "^14.2.0",
     "form-data": "^4.0.2",
+    "helmet": "^8.3.0",
     "multer": "^1.4.5-lts.2",
     "zod": "^3.24.3"
   },
@@ -23,6 +34,8 @@
     "@types/express": "^5.0.1",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.15.3",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"

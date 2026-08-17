@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/api/zones?status=all&siteId={{siteId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+queryParams:
+  status: all
+  siteId: "{{siteId}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Zones returned', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 1000

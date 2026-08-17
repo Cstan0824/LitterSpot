@@ -1,0 +1,33 @@
+$kind: http-request
+name: List System Events
+description: List newest operational dependency events. The default is open events only. Use status=all without another filter to inspect resolved history; keep the same filters when following nextCursor.
+url: "{{baseUrl}}/api/system-events?status=all&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+queryParams:
+  status: all
+  limit: "25"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Bounded system-event page returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.events).to.be.an('array');
+        pm.expect(result.events.length).to.be.at.most(25);
+        pm.expect(result.page).to.include.all.keys('limit', 'hasMore', 'nextCursor');
+        pm.expect(result.page.limit).to.eql(25);
+        pm.expect(result.page.nextCursor === null || typeof result.page.nextCursor === 'string').to.eql(true);
+        pm.expect(pm.response.headers.get('X-Request-ID')).to.be.a('string').and.not.empty;
+        pm.expect(Number(pm.response.headers.get('RateLimit-Limit'))).to.be.above(0);
+        result.events.forEach((event) => {
+          pm.expect(['open', 'resolved']).to.include(event.status);
+          pm.expect(['warning', 'critical']).to.include(event.maximumSeverity);
+          pm.expect(event.latestSafeDetails).to.be.an('object');
+          ['rawError', 'stack', 'token', 'headers'].forEach((key) => pm.expect(event).not.to.have.property(key));
+        });
+        if (result.events[0]) pm.environment.set('systemEventKey', result.events[0].eventKey);
+      }
+    language: text/javascript
+order: 3000

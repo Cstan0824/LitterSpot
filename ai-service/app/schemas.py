@@ -80,6 +80,20 @@ class LocalizedBinAnalysis(BaseModel):
     processingTimeMs: float = Field(ge=0)
 
 
+class FrameBinInference(BaseModel):
+    """One stateless bin result returned by the combined frame endpoint."""
+
+    binIndex: int = Field(ge=1)
+    localizerConfidence: float = Field(ge=0, le=1)
+    bbox: BoundingBox
+    classificationRegion: BoundingBox
+    state: str
+    stateConfidence: float = Field(ge=0, le=1)
+    signals: StateSignals
+    unknownReasons: list[str] = Field(default_factory=list)
+    processingTimeMs: float = Field(ge=0)
+
+
 class ImageBinAnalysisResponse(BaseModel):
     localizerVersion: str
     stateModelVersion: str
@@ -102,61 +116,30 @@ class PersonDetection(BaseModel):
     bbox: BoundingBox
 
 
-class PipelineFlag(BaseModel):
-    severity: str
-    kind: str
-    message: str
+class PipelineModelVersions(BaseModel):
+    floorHazard: str
+    people: str
+    binLocalizer: str
+    binState: str
 
 
 class PipelineAnalysisResponse(BaseModel):
-    analysisId: int | None = None
-    isDemo: bool = False
-    imageName: str
-    cameraId: str | None = None
     image: ImageInfo
     focusRegion: list[Point] = Field(default_factory=list)
     peopleCount: int = Field(ge=0)
     people: list[PersonDetection]
-    bins: list[LocalizedBinAnalysis]
+    bins: list[FrameBinInference]
     floorHazards: list[FloorHazard]
-    flags: list[PipelineFlag]
+    modelVersions: PipelineModelVersions = Field(default_factory=lambda: PipelineModelVersions(
+        floorHazard="unknown",
+        people="unknown",
+        binLocalizer="unknown",
+        binState="unknown",
+    ))
     processingTimeMs: float = Field(ge=0)
-    sourceType: str | None = None
-    videoSessionId: str | None = None
-    videoTimestampSeconds: float | None = None
-
-
-class VideoChange(BaseModel):
-    kind: str
-    entityId: str
-    previous: str | None = None
-    current: str | None = None
-    videoTimestampSeconds: float = Field(ge=0)
-
-
-class VideoFrameAnalysisResponse(BaseModel):
-    result: PipelineAnalysisResponse
-    changes: list[VideoChange] = Field(default_factory=list)
-    persisted: bool = False
-    baseline: bool = False
-    confirmationProgress: int = Field(default=0, ge=0, le=2)
-    flagConfirmationProgress: int = Field(default=0, ge=0, le=4)
-    videoTimestampSeconds: float = Field(ge=0)
 
 
 class PipelineOptions(BaseModel):
-    cameraId: str | None = None
     floorConfidence: float = Field(default=0.25, ge=0.01, le=0.99)
     localizerConfidence: float = Field(default=0.80, ge=0.01, le=0.99)
-    confirmationFrames: int = Field(default=1, ge=1, le=20)
     focusRegion: list[Point] = Field(default_factory=list)
-
-
-class PlacementSettingsUpdate(BaseModel):
-    windowDays: int = Field(default=3, ge=1, le=30)
-
-
-class AlertStatusUpdate(BaseModel):
-    status: str = Field(pattern="^(active|resolved|dismissed)$")
-    operatorName: str = Field(default="MVP operator", min_length=1, max_length=100)
-    note: str | None = Field(default=None, max_length=500)

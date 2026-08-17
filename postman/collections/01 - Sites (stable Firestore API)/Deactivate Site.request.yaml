@@ -1,0 +1,11 @@
+$kind: http-request
+description: Soft-deactivates only after child zones are inactive. It does not erase the Firestore record.
+url: "{{baseUrl}}/api/sites/{{siteId}}"
+method: DELETE
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Site deactivated or correctly blocked', () => pm.expect([200, 409]).to.include(pm.response.code));
+    language: text/javascript
+order: 5000

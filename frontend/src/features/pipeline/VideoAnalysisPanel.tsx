@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FocusRegionEditor } from "./FocusRegionEditor";
 import type { Box, PipelineResult, Point, VideoChange, VideoFrameResponse } from "./types";
 import { cameraOptions, moveLiveVideo, publishLiveVideo, updateLiveVideoAnalysis } from "./liveVideoStore";
+import { apiFetch } from "../../services/apiClient";
 
 const allowedVideoTypes = new Set(["video/mp4", "video/webm"]);
 const maxVideoBytes = 500 * 1024 * 1024;
@@ -168,7 +169,7 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
       body.append("cameraId", cameraIdRef.current.trim());
       body.append("videoTimestampSeconds", String(timestamp));
       if (focusPointsRef.current.length >= 3) body.append("focusRegion", JSON.stringify(focusPointsRef.current));
-      const response = await fetch("/api/detections/pipeline/video-frame", { method: "POST", body });
+      const response = await apiFetch("/api/detections/pipeline/video-frame", { method: "POST", body });
       const payload = await response.json() as VideoFrameResponse & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Video-frame analysis failed.");
       setResult(payload.result);

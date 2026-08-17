@@ -1,0 +1,19 @@
+$kind: http-request
+name: List Work Orders
+description: Supervisor-only newest-first work-order page. status defaults to active; use a single alertId or cleanerId filter and keep the same filters with nextCursor.
+url: "{{baseUrl}}/api/work-orders?status=active&alertId={{alertId}}&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Supervisor work orders listed', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.workOrders).to.be.an('array');
+        pm.expect(result.nextCursor === null || typeof result.nextCursor === 'string').to.eql(true);
+        if (result.workOrders[0]) pm.environment.set('workOrderId', result.workOrders[0].id);
+      }
+    language: text/javascript
+order: 2000

@@ -1,0 +1,18 @@
+$kind: http-request
+description: Get one Node-owned analysis run, including people count, bin observations, issue counts, and model versions.
+url: "{{baseUrl}}/api/analysis-runs/{{analysisRunId}}"
+method: GET
+headers:
+  Authorization: Bearer {{firebaseIdToken}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Analysis run found', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const run = pm.response.json().analysisRun;
+        pm.expect(run.id).to.eql(pm.environment.get('analysisRunId'));
+        pm.expect(run).not.to.have.property('inferenceFlags');
+        pm.expect(run.evidenceContentUrl).to.be.a('string');
+      }
+    language: text/javascript
+order: 2000

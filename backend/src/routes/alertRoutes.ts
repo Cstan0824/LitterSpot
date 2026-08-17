@@ -1,65 +1,43 @@
 import { Router } from "express";
-import { z } from "zod";
-import {
-  alerts,
-  type AlertStatus
-} from "../data/alertStore.js";
+import { alertChildListQuerySchema, alertListQuerySchema, alertStatusUpdateSchema } from "../schemas/alert.js";
+import { getAlertDetails, listAlertHistory, listAlertOccurrences, listAlerts, updateAlertStatus } from "../services/alertWorkflowService.js";
+import { ALERT_POLICY } from "../services/alertPolicy.js";
 
 export const alertRoutes = Router();
 
-const statusSchema = z.object({
-  status: z.enum([
-    "NEW",
-    "ACKNOWLEDGED",
-    "IN_PROGRESS",
-    "RESOLVED"
-  ])
+alertRoutes.get("/", async (req, res) => {
+  const query = alertListQuerySchema.parse(req.query);
+  const page = await listAlerts(query);
+  return res.json({ alerts: page.items, nextCursor: page.nextCursor, ...(
+    page.paginationMode ? {
+      paginationMode: page.paginationMode,
+      resultCompleteness: page.resultCompleteness,
+      scannedCount: page.scannedCount,
+    } : {}
+  ) });
 });
 
-// Retrieve all alerts
-alertRoutes.get("/", (_req, res) => {
-  res.json(alerts);
+alertRoutes.get("/policy", (_req, res) => {
+  return res.json({ alertPolicy: ALERT_POLICY });
 });
 
-// Retrieve one alert
-alertRoutes.get("/:alertId", (req, res) => {
-  const alert = alerts.find(
-    (item) => item.id === req.params.alertId
-  );
-
-  if (!alert) {
-    return res.status(404).json({
-      error: "Alert not found."
-    });
-  }
-
-  return res.json(alert);
+alertRoutes.get("/:alertId/history", async (req, res) => {
+  const query = alertChildListQuerySchema.parse(req.query);
+  const page = await listAlertHistory(req.params.alertId, query);
+  return res.json({ history: page.items, nextCursor: page.nextCursor });
 });
 
-// Update alert status
-alertRoutes.patch("/:alertId/status", (req, res) => {
-  const parsed = statusSchema.safeParse(req.body);
+alertRoutes.get("/:alertId/occurrences", async (req, res) => {
+  const query = alertChildListQuerySchema.parse(req.query);
+  const page = await listAlertOccurrences(req.params.alertId, query);
+  return res.json({ occurrences: page.items, nextCursor: page.nextCursor });
+});
 
-  if (!parsed.success) {
-    return res.status(400).json({
-      error: "Invalid alert status."
-    });
-  }
+alertRoutes.get("/:alertId", async (req, res) => {
+  return res.json(await getAlertDetails(req.params.alertId));
+});
 
-  const alert = alerts.find(
-    (item) => item.id === req.params.alertId
-  );
-
-  if (!alert) {
-    return res.status(404).json({
-      error: "Alert not found."
-    });
-  }
-
-  const nextStatus: AlertStatus = parsed.data.status;
-
-  alert.status = nextStatus;
-  alert.updatedAt = new Date().toISOString();
-
-  return res.json(alert);
+alertRoutes.patch("/:alertId/status", async (req, res) => {
+  const update = alertStatusUpdateSchema.parse(req.body);
+  return res.json(await updateAlertStatus(req.params.alertId, update.status, req.supervisor, update.note));
 });

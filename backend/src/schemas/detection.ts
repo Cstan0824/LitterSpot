@@ -1,35 +1,5 @@
 import { z } from "zod";
 
-export const detectionResponseSchema = z.object({
-  modelVersion: z.string(),
-  decisionPolicy: z.string(),
-  cameraId: z.string().nullable().optional(),
-  image: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
-  focusRegion: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).default([]),
-  detections: z.array(z.object({
-    binId: z.string().nullable().optional(),
-    className: z.enum(["normal trash bin", "full trash bin", "overflowing trash bin"]),
-    confidence: z.number().min(0).max(1),
-    confirmed: z.boolean(),
-    confirmationFrames: z.number().int().nonnegative(),
-    bbox: z.object({ x1: z.number(), y1: z.number(), x2: z.number(), y2: z.number() }),
-  })),
-  processingTimeMs: z.number().nonnegative(),
-});
-
-export type DetectionResponse = z.infer<typeof detectionResponseSchema>;
-
-export const detectionOptionsSchema = z.object({
-  confidence: z.coerce.number().min(0.01).max(0.99).default(0.25),
-  iou: z.coerce.number().min(0.05).max(0.95).default(0.70),
-  imgsz: z.coerce.number().int().min(320).max(1280).default(768),
-  maxDetections: z.coerce.number().int().min(1).max(300).default(100),
-  cameraId: z.string().trim().min(1).max(100).optional(),
-  confirmationFrames: z.coerce.number().int().min(1).max(20).default(3),
-});
-
-export type DetectionOptions = z.infer<typeof detectionOptionsSchema>;
-
 export const stateClassificationResponseSchema = z.object({
   modelVersion: z.string(),
   state: z.enum(["normal", "full", "overflow", "unknown"]),
@@ -113,11 +83,23 @@ export const batchAnalysisOptionsSchema = z.object({
 export type ImageBinAnalysisResponse = z.infer<typeof imageBinAnalysisResponseSchema>;
 export type BatchAnalysisOptions = z.infer<typeof batchAnalysisOptionsSchema>;
 
-const pipelineBinSchema = imageBinAnalysisResponseSchema.shape.detections.element;
+const pipelineBinSchema = z.object({
+  binIndex: z.number().int().positive(),
+  localizerConfidence: z.number().min(0).max(1),
+  bbox: boundingBoxSchema,
+  classificationRegion: boundingBoxSchema,
+  state: z.enum(["normal", "full", "overflow", "unknown"]),
+  stateConfidence: z.number().min(0).max(1),
+  signals: z.object({
+    binPresence: z.number().min(0).max(1),
+    fullness: z.number().min(0).max(1),
+    overflow: z.number().min(0).max(1),
+  }).strict(),
+  unknownReasons: z.array(z.string()),
+  processingTimeMs: z.number().nonnegative(),
+}).strict();
+
 export const pipelineAnalysisResponseSchema = z.object({
-  analysisId: z.number().int().positive().nullable().optional(),
-  imageName: z.string(),
-  cameraId: z.string().nullable().optional(),
   image: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
   focusRegion: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).default([]),
   peopleCount: z.number().int().nonnegative(),
@@ -129,46 +111,13 @@ export const pipelineAnalysisResponseSchema = z.object({
     bbox: boundingBoxSchema,
     polygon: z.array(z.object({ x: z.number(), y: z.number() })).default([]),
   })),
-  flags: z.array(z.object({ severity: z.enum(["critical", "warning"]), kind: z.string(), message: z.string() })),
+  modelVersions: z.object({
+    floorHazard: z.string(),
+    people: z.string(),
+    binLocalizer: z.string(),
+    binState: z.string(),
+  }),
   processingTimeMs: z.number().nonnegative(),
-  sourceType: z.string().nullable().optional(),
-  videoSessionId: z.string().nullable().optional(),
-  videoTimestampSeconds: z.number().nonnegative().nullable().optional(),
-});
+}).strict();
 
 export type PipelineAnalysisResponse = z.infer<typeof pipelineAnalysisResponseSchema>;
-export const pipelineOptionsSchema = z.object({
-  cameraId: z.string().trim().min(1).max(100).optional(),
-  floorConfidence: z.coerce.number().min(0.01).max(0.99).default(0.25),
-  localizerConfidence: z.coerce.number().min(0.01).max(0.99).default(0.80),
-  confirmationFrames: z.coerce.number().int().min(1).max(20).default(1),
-  focusRegion: z.string().optional(),
-});
-export type PipelineOptions = z.infer<typeof pipelineOptionsSchema>;
-
-export const videoFrameOptionsSchema = z.object({
-  sessionId: z.string().trim().min(1).max(100),
-  cameraId: z.string().trim().min(1).max(100),
-  videoTimestampSeconds: z.coerce.number().nonnegative(),
-  floorConfidence: z.coerce.number().min(0.01).max(0.99).default(0.25),
-  localizerConfidence: z.coerce.number().min(0.01).max(0.99).default(0.80),
-  focusRegion: z.string().optional(),
-});
-export type VideoFrameOptions = z.infer<typeof videoFrameOptionsSchema>;
-
-export const videoFrameAnalysisResponseSchema = z.object({
-  result: pipelineAnalysisResponseSchema,
-  changes: z.array(z.object({
-    kind: z.enum(["bin_state", "bin_appeared", "bin_disappeared", "floor_hazard_appeared", "floor_hazard_disappeared", "people_count"]),
-    entityId: z.string(),
-    previous: z.string().nullable().optional(),
-    current: z.string().nullable().optional(),
-    videoTimestampSeconds: z.number().nonnegative(),
-  })),
-  persisted: z.boolean(),
-  baseline: z.boolean(),
-  confirmationProgress: z.number().int().min(0).max(2),
-  flagConfirmationProgress: z.number().int().min(0).max(4),
-  videoTimestampSeconds: z.number().nonnegative(),
-});
-export type VideoFrameAnalysisResponse = z.infer<typeof videoFrameAnalysisResponseSchema>;

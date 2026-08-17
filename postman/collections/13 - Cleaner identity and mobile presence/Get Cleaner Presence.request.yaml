@@ -1,0 +1,14 @@
+$kind: http-request
+name: Get Cleaner Presence
+description: Supervisor-only view of the selected Cleaner availability, active work, last-known measurement, and server-derived fresh/stale/unavailable status.
+url: "{{baseUrl}}/api/cleaners/{{cleanerId}}/presence"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner presence returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(['fresh', 'stale', 'unavailable']).to.include(pm.response.json().presence.locationStatus);
+    language: text/javascript
+order: 6000

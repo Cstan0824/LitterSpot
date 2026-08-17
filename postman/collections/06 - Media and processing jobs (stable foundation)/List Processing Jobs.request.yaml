@@ -1,0 +1,16 @@
+$kind: http-request
+description: List processing jobs. Newly stored images remain queued until the Node-owned inference worker is added in the next milestone.
+url: "{{baseUrl}}/api/processing-jobs?status=all&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+queryParams:
+  status: all
+  limit: "25"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Processing jobs returned', () => pm.response.to.have.status(200));
+      pm.test('Response contains an array', () => pm.expect(pm.response.json().processingJobs).to.be.an('array'));
+    language: text/javascript
+order: 5000

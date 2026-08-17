@@ -1,0 +1,17 @@
+$kind: http-request
+name: Backend Readiness
+description: Public dependency readiness. It exposes only a stable generic AI-inference status and no model internals.
+url: "{{baseUrl}}/api/health/ready"
+method: GET
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Backend and inference dependency are ready', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        pm.expect(pm.response.json()).to.eql({ status: 'ok', dependencies: { aiInference: 'ready' } });
+        pm.expect(pm.response.text()).not.to.include('modelVersion');
+      }
+    language: text/javascript
+order: 2000

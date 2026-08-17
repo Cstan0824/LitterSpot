@@ -1,0 +1,23 @@
+$kind: http-request
+description: Requires an active zone. Change cameraCode before rerunning because codes remain reserved.
+url: "{{baseUrl}}/api/cameras"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "zoneId": "{{zoneId}}",
+      "code": "{{cameraCode}}",
+      "name": "Postman test camera",
+      "sourceMode": "upload"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Camera created', () => pm.response.to.have.status(201));
+      if (pm.response.code === 201) pm.environment.set('cameraId', pm.response.json().camera.id);
+    language: text/javascript
+order: 2000

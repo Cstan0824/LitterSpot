@@ -6,6 +6,7 @@ import { PlacementPanel } from "../features/pipeline/PlacementPanel";
 import { VideoAnalysisPanel } from "../features/pipeline/VideoAnalysisPanel";
 import type { PipelineHistory, PipelineResult, PlacementRecommendation, Point } from "../features/pipeline/types";
 import { cameraOptions, moveLiveVideo, publishLiveVideo, updateLiveVideoAnalysis } from "../features/pipeline/liveVideoStore";
+import { apiFetch } from "../services/apiClient";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
@@ -33,7 +34,7 @@ export function PipelinePage() {
 
   async function loadHistory() {
     try {
-      const response = await fetch("/api/detections/pipeline/recent");
+      const response = await apiFetch("/api/detections/pipeline/recent");
       const body = await response.json();
       setHistory(body.items ?? []);
     } catch { /* Optional while services start. */ }
@@ -42,14 +43,14 @@ export function PipelinePage() {
   async function loadPlacement(targetCamera = cameraId) {
     if (!targetCamera.trim()) return;
     try {
-      const response = await fetch(`/api/detections/pipeline/placement/${encodeURIComponent(targetCamera)}`);
+      const response = await apiFetch(`/api/detections/pipeline/placement/${encodeURIComponent(targetCamera)}`);
       const body = await response.json();
       if (response.ok) { setPlacement(body); setWindowDays(body.windowDays); }
     } catch { /* Optional while services start. */ }
   }
 
   async function saveWindow() {
-    const response = await fetch(`/api/detections/pipeline/placement/${encodeURIComponent(cameraId)}`, {
+    const response = await apiFetch(`/api/detections/pipeline/placement/${encodeURIComponent(cameraId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ windowDays }),
@@ -98,7 +99,7 @@ export function PipelinePage() {
     body.append("cameraId", cameraId);
     body.append("confirmationFrames", "3");
     if (focusPoints.length >= 3) body.append("focusRegion", JSON.stringify(focusPoints));
-    const response = await fetch("/api/detections/pipeline/frame", { method: "POST", body });
+    const response = await apiFetch("/api/detections/pipeline/frame", { method: "POST", body });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Analysis failed.");
     setResult(payload);
