@@ -11,9 +11,11 @@ Cleaner, autonomous-orchestrator, and self-hosted deployment design is in
 
 The implementation sequence and database design are maintained in [backend-build-and-migration-plan.md](./backend-build-and-migration-plan.md) and [firestore-data-model.md](./firestore-data-model.md).
 
-**Architecture status:** the Supervisor detection platform and the Phase 10-11
-authenticated Cleaner/work-order backend are implemented. The Cleaner PWA and
-autonomous AI Supervisor extension remain approved but not yet implemented.
+**Architecture status:** the Supervisor detection platform, Phase 10-11
+authenticated Cleaner/work-order backend, Node-owned orchestrator foundation,
+and backend-owned Phase 14 review/rework foundation are implemented. The
+Cleaner PWA, LangGraph runtime, LLM/VLM providers, and model reasoning remain
+approved but not yet implemented.
 
 ## 2. Technology stack
 
@@ -28,7 +30,7 @@ autonomous AI Supervisor extension remain approved but not yet implemented.
 | AI models | Teammate-provided weights and Python inference code | Floor litter, bin overflow, people counting, and optional liquid-spill detection |
 | Prototype media storage | Local filesystem | Uploaded images/videos and generated snapshot evidence |
 | Prototype analytics | Node.js deterministic aggregation and scoring | Zone statistics, heatmaps, priority scores, and explainable zone ranking |
-| Autonomous orchestration | Python with LangGraph and an LLM provider | Approved target for Cleaner assignment, rework, and verification decisions; not yet implemented |
+| Autonomous orchestration | Python with LangGraph and an LLM provider | Model/runtime teammate owns reasoning; Node-owned claims, review tools, persistence, and invariants are implemented |
 | Local model runtime | Ollama | Approved Option A runtime for the orchestration LLM and optional VLM; not yet implemented |
 | Agent checkpoints | PostgreSQL | Durable LangGraph threads and recovery in Option A; not yet implemented |
 
@@ -359,6 +361,13 @@ These later changes should extend the same ownership boundaries rather than move
   notifications, and best-effort FCM behind Node-only application APIs.
 - Kept the Cleaner PWA, LangGraph/LLM decisions, PostgreSQL checkpoints, and
   automated evidence review in their later owned phases.
+
+### 2026-08-18 - Node-owned review/rework foundation implemented
+
+- Added `awaiting_verification`, durable review requests, immutable review
+  attempts, cleaner evidence submission, and claimed orchestrator review tools.
+- Kept media IDs, model results, versions, and prompt policy metadata as Node
+  persistence/audit facts; VLM/LLM reasoning remains outside this repository.
 
 ### 2026-08-17 - Autonomous Cleaner workflow and Option A deployment
 

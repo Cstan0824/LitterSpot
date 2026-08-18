@@ -20,7 +20,8 @@ are deliberately retired and must not be restored.
 
 ## 2. Current implementation status
 
-Backend Phases 1–11 are implemented:
+Backend Phases 1–11 are implemented, with the Node-owned Phase 12 and backend
+Phase 14 foundations now layered on top:
 
 1. Firebase foundation and Supervisor authentication.
 2. Site, zone, camera, Cleaner-directory, media, and local-storage foundation.
@@ -34,13 +35,18 @@ Backend Phases 1–11 are implemented:
    hardening.
 10. Authenticated Cleaner identity, role dispatch, migration, and access.
 11. Cleaner presence/location, work orders, notifications, and FCM effect.
+12. Orchestrator outbox/runs, leases, typed context/assignment tools, and audit.
+14. Backend review/rework foundation: cleaner evidence submission,
+    `awaiting_verification`, durable review requests, immutable review attempts,
+    and claimed clean/rework decision tools.
 
 Not implemented yet:
 
 - the Cleaner mobile PWA;
 - React cutover for live dashboard/alerts/analytics/work orders;
 - LangGraph, PostgreSQL checkpoints, or autonomous LLM assignment;
-- automated visual review and alert resolution;
+- LangGraph/LLM/VLM reasoning and fresh-camera evidence collection (Node review
+  persistence and transitions are implemented; the model runtime is not);
 - live CCTV/IP-camera streams;
 - Option A Caddy/Compose/Ollama deployment packaging.
 
@@ -242,9 +248,10 @@ assigned -> accepted -> in_progress -> ready_for_review -> completed
 active state -> cancelled (Supervisor override)
 ```
 
-Cleaner submission does not resolve the cleanliness alert. Until autonomous
-review is implemented, a Supervisor completes/cancels the work order and then
-resolves the alert separately.
+Cleaner submission does not resolve the cleanliness alert. The backend now
+holds the alert in `awaiting_verification`; a claimed orchestrator review can
+resolve it cleanly or return it to active work for rework. The LangGraph/VLM
+runtime that supplies the reasoning is still a separate teammate deliverable.
 
 Notifications are written durably in Firestore inside the business workflow.
 FCM is a best-effort effect. Missing/failed push remains visible in the in-app
@@ -340,9 +347,12 @@ extending retired `/api/operations` or `/api/detections/pipeline` shapes.
 ### 6.3 Future orchestrator teammate
 
 The implemented work-order and Cleaner context records are the foundation, but
-Phase 12 private orchestrator tools/outbox are not built yet. The LangGraph
-service must not write Firestore directly. It will call typed, authenticated
-Node tools; PostgreSQL will own LangGraph checkpoints.
+The Node-owned Phase 12 foundation now provides durable alert outbox/run
+records, lease claims, typed context and Cleaner-fact tools, decision audit
+records, and validated orchestrator work-order creation. The LangGraph service
+must still not write Firestore directly. It will call these authenticated Node
+tools; PostgreSQL will own LangGraph checkpoints when the AI teammate builds
+that runtime.
 
 ## 7. What each teammate can test now
 
@@ -607,10 +617,11 @@ privacy, and backup procedure in `docs/operations-runbook.md`.
 - Current React dashboard/alerts/placement sections are not fully integrated
   with the stable backend DTOs.
 - No Cleaner mobile UI exists yet; only the backend/Postman contract exists.
-- No LangGraph service, private agent tools, outbox, or PostgreSQL checkpoints
-  exist yet.
-- Work completion and alert resolution remain separate manual actions until
-  automated review is implemented.
+- No LangGraph service, VLM provider adapter, or PostgreSQL checkpoints exist
+  yet; Node-owned private review tools and the Firestore outbox/run state are
+  implemented.
+- Model reasoning and fresh-camera evidence collection remain separate
+  teammate deliverables; Node enforces review transitions and idempotency.
 - No live camera stream ingestion or fresh-camera evidence request exists.
 - Local media and the in-process video queue constrain Node to one host.
 - FCM requires a real frontend web token/VAPID setup; without it the Firestore

@@ -27,6 +27,7 @@ import {
 import { assertForwardAlertTransition } from "./alertTransitions.js";
 import { queryCursorPage, type CursorPage } from "./firestoreCursorPagination.js";
 import { activeWorkOrderKeyId } from "../shared/workOrderKeys.js";
+import { enqueueAlertOrchestratorInTransaction } from "./orchestratorService.js";
 
 const issueTypes: IssueType[] = ["floor_litter", "floor_spill", "bin_overflow"];
 const issueTypeSet = new Set<IssueType>(issueTypes);
@@ -591,6 +592,12 @@ async function applyObservationToConfirmation(observationId: string): Promise<{
         actorEmailSnapshot: null,
         note: null,
         changedAt: FieldValue.serverTimestamp(),
+      });
+      enqueueAlertOrchestratorInTransaction(transaction, {
+        alertId,
+        siteId,
+        zoneId,
+        issueType: typedIssue,
       });
     } else if (attachments.length > 0) {
       const existing = activeAlertSnapshot!.data()!;

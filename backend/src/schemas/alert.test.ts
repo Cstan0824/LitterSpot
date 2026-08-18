@@ -40,6 +40,10 @@ describe("alert workflow query schemas", () => {
     expect(flagListQuerySchema.safeParse({ workflow: "v1" }).success).toBe(false);
   });
 
+  it("accepts awaiting verification as an alert lifecycle state", () => {
+    expect(alertListQuerySchema.parse({ status: "awaiting_verification" }).status).toBe("awaiting_verification");
+  });
+
   it("accepts only bounded opaque pagination cursors", () => {
     expect(alertListQuerySchema.parse({ cursor: "YWJjMTIz" }).cursor).toBe("YWJjMTIz");
     expect(flagListQuerySchema.safeParse({ cursor: "bad+cursor" }).success).toBe(false);

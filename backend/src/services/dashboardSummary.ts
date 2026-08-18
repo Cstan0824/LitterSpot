@@ -53,15 +53,17 @@ type SummaryBuildInput = {
 
 export function buildDashboardSummaryFields(input: SummaryBuildInput) {
   const currentAlerts = input.alerts.filter((alert) => alert.workflowVersion === ALERT_WORKFLOW_VERSION);
-  const activeAlertCounts = { new: 0, acknowledged: 0, inProgress: 0, total: 0 };
+  const activeAlertCounts = { new: 0, acknowledged: 0, inProgress: 0, awaitingVerification: 0, total: 0 };
   let resolvedAlertCount = 0;
   for (const alert of currentAlerts) {
     if (alert.status === "new") activeAlertCounts.new += 1;
     else if (alert.status === "acknowledged") activeAlertCounts.acknowledged += 1;
     else if (alert.status === "in_progress") activeAlertCounts.inProgress += 1;
+    else if (alert.status === "awaiting_verification") activeAlertCounts.awaitingVerification += 1;
     else if (alert.status === "resolved") resolvedAlertCount += 1;
   }
-  activeAlertCounts.total = activeAlertCounts.new + activeAlertCounts.acknowledged + activeAlertCounts.inProgress;
+  activeAlertCounts.total = activeAlertCounts.new + activeAlertCounts.acknowledged
+    + activeAlertCounts.inProgress + activeAlertCounts.awaitingVerification;
 
   const activeCameras = input.cameras.filter((camera) => camera.status === "active");
   const availableCameraCount = activeCameras.filter((camera) => camera.availability === "available").length;

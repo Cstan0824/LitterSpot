@@ -1,12 +1,15 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
 import { recoverVideoJobs, waitForVideoJobsToFinish } from "./services/videoJobProcessingService.js";
+import { recoverOrchestratorRuns } from "./services/orchestratorService.js";
 
 const server = app.listen(env.port, async () => {
   console.log(`LitterSpot backend listening on port ${env.port}`);
   try {
     const recovered = await recoverVideoJobs();
     if (recovered > 0) console.log(`Recovered ${recovered} queued or expired video job(s).`);
+    const orchestratorRecovered = await recoverOrchestratorRuns();
+    if (orchestratorRecovered > 0) console.log(`Recovered ${orchestratorRecovered} expired orchestrator run(s).`);
   } catch (error) {
     console.error("Video job recovery failed:", error);
   }

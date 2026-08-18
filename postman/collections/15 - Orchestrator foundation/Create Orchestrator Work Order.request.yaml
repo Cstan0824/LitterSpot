@@ -1,0 +1,36 @@
+$kind: http-request
+name: Create Orchestrator Work Order
+description: Private typed assignment command. Requires a claimed run and an active linked/online Cleaner. Node enforces all existing work-order invariants; the model supplies the selected Cleaner and instructions.
+url: "{{baseUrl}}/internal/orchestrator/work-orders"
+method: POST
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "runId": "{{orchestratorRunId}}",
+      "claimToken": "{{orchestratorClaimToken}}",
+      "decisionId": "{{orchestratorWorkOrderDecisionId}}",
+      "rationale": "Selected from Node-provided eligible Cleaner facts.",
+      "alertId": "{{alertId}}",
+      "assignedCleanerId": "{{cleanerId}}",
+      "instructions": "Clean the confirmed issue in the assigned zone and submit the work for review.",
+      "idempotencyKey": "{{orchestratorWorkOrderRequestId}}",
+      "overrideAvailability": false
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Orchestrator assignment is created or safely reused', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.expect(result.workOrder.alertId).to.eql(pm.environment.get('alertId'));
+        pm.expect(result.workOrder.status).to.eql('assigned');
+        pm.environment.set('workOrderId', result.workOrder.id);
+        pm.variables.set('workOrderId', result.workOrder.id);
+      }
+    language: text/javascript
+order: 1065

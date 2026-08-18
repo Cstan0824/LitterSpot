@@ -1,0 +1,26 @@
+$kind: http-request
+name: Internal Request Fresh Evidence
+description: Durable idempotent request for additional evidence while the work order awaits review.
+url: "{{baseUrl}}/internal/orchestrator/runs/{{orchestratorRunId}}/review-requests"
+method: POST
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "claimToken": "{{orchestratorClaimToken}}",
+      "workOrderId": "{{workOrderId}}",
+      "alertId": "{{alertId}}",
+      "idempotencyKey": "{{reviewRequestIdempotencyKey}}",
+      "rationale": "Capture a closer view of the remaining area."
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Fresh evidence request succeeds or replays', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code) && pm.response.json().reviewRequest?.id) pm.environment.set('reviewRequestId', pm.response.json().reviewRequest.id);
+    language: text/javascript
+order: 1130

@@ -2,17 +2,20 @@
 
 ## 1. Decision status
 
-**Approved target architecture as of 2026-08-18. Phase 10-11 backend
-implemented; Cleaner PWA and autonomous orchestration not yet implemented.**
+**Approved target architecture as of 2026-08-18. Phase 10-11 backend, the
+Node-owned Phase 12 orchestrator foundation, and the backend-owned Phase 14
+review/rework foundation are implemented; the Cleaner PWA and autonomous model
+runtime are not yet implemented.**
 
 This document defines the next product direction for LitterSpot: authenticated
 Cleaner users carry out physical work while an autonomous LLM-based
 orchestrator performs the routine operational work of a human Supervisor.
 
 The existing detection/alert APIs plus Cleaner identity, role isolation,
-presence, work-order, and notification backend are the implemented baseline.
-The future orchestrator does not replace the deterministic detection, flag, and alert
-rules already implemented; it begins work after those rules produce an alert.
+presence, work-order, notification, orchestrator-run, and review backend are
+the implemented baseline. The future model runtime does not replace the
+deterministic detection, flag, alert, or Node state-transition rules; it begins
+work after those rules produce an alert.
 
 ## 2. Product objective
 
@@ -111,33 +114,31 @@ flowchart LR
 
 ### 4.1 Alert lifecycle
 
-The currently implemented lifecycle is:
-
-```text
-new -> acknowledged -> in_progress -> resolved
-```
-
-The target autonomous lifecycle adds explicit verification:
+The Node-owned backend lifecycle is:
 
 ```text
 new -> acknowledged -> in_progress -> awaiting_verification -> resolved
                                       -> in_progress (rework)
 ```
 
-The orchestrator normally performs these transitions through validated Node.js
-commands. Existing manual Supervisor transitions remain as override paths.
+Cleaner submission enters `awaiting_verification` but never resolves the alert.
+The future orchestrator runtime supplies the reasoning; Node validates and
+persists the typed review decision. Existing manual Supervisor transitions
+remain as override paths.
 
 ### 4.2 Work-order lifecycle
 
 ```text
-unassigned -> assigned -> accepted -> in_progress -> ready_for_review -> completed
+    unassigned -> assigned -> accepted -> in_progress -> ready_for_review -> completed
                   |           |              |               |
                   |           +-> rejected   |               +-> rework_required
                   +-> cancelled              +-> cancelled
 ```
 
-Rejection, timeout, deactivation, or stale location may cause reassignment. All
-transitions must be idempotent and append immutable history records.
+Rejection, timeout, deactivation, or stale location may cause reassignment.
+Cleaner submission creates a durable review request; only a clean review
+completes the work order and resolves the alert. All transitions must be
+idempotent and append immutable history records.
 
 ## 5. Orchestrator design
 
@@ -210,19 +211,21 @@ blocked, delayed, or unsupported. Notification payloads should contain only the
 minimum operational information and should open the authenticated work-order
 view.
 
-## 7. Planned application data
+## 7. Application data boundary
 
-The detailed schemas will be designed before implementation. At minimum the
-target needs:
+The Node-owned application schemas below are implemented in Firestore. The
+model teammate still owns provider-specific prompts, checkpoints, and model
+runtime state:
 
 - authenticated role/profile records for Supervisors and Cleaners;
 - Cleaner site/zone assignments and capabilities;
 - availability sessions and bounded location history;
 - work orders, assignment attempts, and immutable work-order histories;
 - persisted notifications and delivery attempts;
-- orchestrator runs, checkpoints, tool calls, decisions, and policy/model
-  versions;
-- review attempts and references to before/after evidence;
+- orchestrator runs, leases, tool calls, decisions, and policy/model versions;
+- review requests and immutable review attempts with before/after evidence
+  references;
+- model checkpoints and provider state (future PostgreSQL/LangGraph runtime);
 - automation settings, pause state, and human overrides.
 
 The current `cleaners/{cleanerId}` personnel documents require an explicit,

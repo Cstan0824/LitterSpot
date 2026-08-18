@@ -10,8 +10,12 @@ not call Firestore or the private FastAPI service directly.
 
 | Status | Routes | Persistence | Safe for future frontend integration? |
 | --- | --- | --- | --- |
-| Stable foundation | `/api/me`, `/api/sites`, `/api/zones`, `/api/cameras`, `/api/cleaners`, `/api/cleaner/*`, `/api/work-orders`, `/api/media`, `/api/processing-jobs`, `/api/analysis-runs`, `GET /api/detections*`, `/api/issue-observations`, `/api/flags`, `/api/alerts`, `/api/dashboard`, `/api/analytics`, `/api/system-events` | Firebase Authentication, cloud Firestore, FCM, and Node-owned local media storage | Yes |
+| Stable foundation | `/api/me`, `/api/sites`, `/api/zones`, `/api/cameras`, `/api/cleaners`, `/api/cleaner/*`, `/api/work-orders`, `/api/media`, `/api/processing-jobs`, `/api/analysis-runs`, `GET /api/detections*`, `/api/issue-observations`, `/api/flags`, `/api/alerts`, `/api/dashboard`, `/api/analytics`, `/api/system-events`, `/api/orchestrator/*` | Firebase Authentication, cloud Firestore, FCM, and Node-owned local media storage | Yes |
 | AI model-test adapter | `POST /api/detections/bin-state`, `POST /api/detections/bin-state/batch` | Private FastAPI inference only; no application persistence | Use only for isolated model testing; the operational workflow uses processing jobs |
+
+Private orchestrator-worker routes under `/internal/orchestrator/*` are not
+Firebase-user APIs. They require the separately configured internal token and
+worker ID described in section 15.1.
 | Public health checks | `/api/health/live`, `/api/health/ready` (`/api/health` is a readiness alias) | None | Yes |
 
 The former `/api/operations/*`, `/api/detections/pipeline/*`, and legacy image
@@ -376,6 +380,7 @@ availability override.
 | `GET` | `/api/work-orders?status=active&alertId={id}&cleanerId={id}&limit=25&cursor={cursor}` | Supervisor | Bounded newest-first list; use at most one ownership filter |
 | `GET` | `/api/work-orders/{id}` | Supervisor | Work-order detail |
 | `GET` | `/api/work-orders/{id}/history` | Supervisor | Immutable newest-first status history |
+| `GET` | `/api/work-orders/{id}/reviews` | Supervisor | Review context: work order, durable review requests, and immutable review attempts |
 | `POST` | `/api/work-orders/{id}/reassign` | Supervisor | Reassign assigned/rejected work to a different eligible Cleaner |
 | `PATCH` | `/api/work-orders/{id}/status` | Supervisor | Manual accept/start/review/rework/completion/cancellation override |
 | `GET` | `/api/cleaner/work-orders` | Cleaner | Only the authenticated Cleaner queue/history |
@@ -383,7 +388,7 @@ availability override.
 | `POST` | `/api/cleaner/work-orders/{id}/accept` | Cleaner | `assigned -> accepted` |
 | `POST` | `/api/cleaner/work-orders/{id}/reject` | Cleaner | `assigned -> rejected` |
 | `POST` | `/api/cleaner/work-orders/{id}/start` | Cleaner | `accepted/rework_required -> in_progress` |
-| `POST` | `/api/cleaner/work-orders/{id}/ready-for-review` | Cleaner | `in_progress -> ready_for_review` |
+| `POST` | `/api/cleaner/work-orders/{id}/ready-for-review` | Cleaner | Submit evidence: work order `in_progress -> ready_for_review`, alert `in_progress -> awaiting_verification` |
 
 Create body:
 
@@ -411,8 +416,29 @@ active state -> cancelled (Supervisor override)
 Every create, reassignment, and transition has semantic idempotency. Reusing a
 key with different content returns `409`. Rejection releases the Cleaner but
 keeps the alert's active work record for reassignment. Completion/cancellation
-releases both Cleaner and active key. Phase 11 manual completion does not yet
-resolve the Phase 4 alert; Phase 14 will require automated evidence review.
+releases both Cleaner and active key. Cleaner submission never resolves an
+alert. Only a `clean` review resolves the alert; `rework` returns alert and work
+order to active work.
+
+### Review and rework
+
+The target alert lifecycle is:
+
+```text
+new -> acknowledged -> in_progress -> awaiting_verification -> resolved
+                                      -> in_progress (rework)
+```
+
+| Method | Route | Role | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/work-orders/{id}/reviews` | Supervisor | Read review context |
+| `GET` | `/internal/orchestrator/work-orders/{id}/review-context` | Orchestrator | Read the same context with service authentication |
+| `POST` | `/internal/orchestrator/runs/{runId}/review-requests` | Orchestrator | Request fresh evidence while a claimed run is active |
+| `POST` | `/internal/orchestrator/runs/{runId}/reviews` | Orchestrator | Record `clean`, `rework`, `more_evidence`, or `supervisor_exception` |
+
+Review mutations require the active orchestrator claim and semantic idempotency
+keys. Evidence fields are media-ID references plus model/audit facts; Node does
+not perform VLM reasoning or provider calls.
 
 ### Notifications and FCM
 
@@ -1413,6 +1439,57 @@ folder and must be sent child-first only after the hierarchy has been tested.
 
 For the two model-test adapter requests, select a local image in Postman's file
 picker; collection files intentionally contain no machine-specific image paths.
+
+## 15.1 Orchestrator foundation
+
+Phase 12 adds a Node-owned orchestration boundary. Alert creation writes one
+deterministic `orchestratorRuns/{runId}` record and one matching
+`orchestratorOutbox/{eventId}` record in the same Firestore transaction. The
+outbox/run pair is created only for a newly confirmed active alert; the
+Supervisor ensure route can safely repair or seed an active alert during
+integration testing.
+
+Supervisor routes use the normal Firebase bearer token:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/orchestrator/runs?status=all&alertId={alertId}&limit=25` | List durable runs |
+| `GET` | `/api/orchestrator/runs/{runId}` | Read one run |
+| `POST` | `/api/orchestrator/runs/ensure` | Create/reuse a run for an active alert |
+| `POST` | `/api/orchestrator/recover` | Requeue expired worker leases |
+
+Private worker routes use `X-Orchestrator-Token` and
+`X-Orchestrator-Worker-ID`. The token is configured with
+`ORCHESTRATOR_INTERNAL_TOKEN`; it is never a Firebase user token.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/internal/orchestrator/runs?status=queued&limit=25` | Poll available runs |
+| `POST` | `/internal/orchestrator/runs/{runId}/claim` | Claim a lease |
+| `GET` | `/internal/orchestrator/runs/{runId}/context` | Read typed alert/work-order context |
+| `GET` | `/internal/orchestrator/alerts/{alertId}/eligible-cleaners` | Read Node-computed Cleaner facts |
+| `POST` | `/internal/orchestrator/runs/{runId}/decisions` | Append an idempotent tool-call audit record |
+| `POST` | `/internal/orchestrator/work-orders` | Create a validated orchestrator-owned work order |
+| `GET` | `/internal/orchestrator/work-orders/{workOrderId}/review-context` | Read review evidence and attempts |
+| `POST` | `/internal/orchestrator/runs/{runId}/review-requests` | Request fresh evidence |
+| `POST` | `/internal/orchestrator/runs/{runId}/reviews` | Record a typed review decision |
+| `POST` | `/internal/orchestrator/runs/{runId}/complete` | Complete, wait, requeue, or fail a claimed run |
+
+The internal worker ID in the body must match the authenticated header. A run
+claim is lease-bound and includes a random claim token. A worker cannot finish
+another worker's run, and expired leases are requeued by startup recovery or
+`POST /api/orchestrator/recover`.
+
+The Node service computes Cleaner eligibility from active linked account,
+site/zone permissions, capabilities, online availability, five-minute
+heartbeat freshness, and active-work state. It does not rank or select a
+Cleaner for the model. Orchestrator work-order commands still pass through the
+existing Node work-order invariants and persist `actorType: "orchestrator"`.
+
+The canonical requests are in `postman/collections/15 - Orchestrator foundation`
+and `postman/collections/16 - Review and rework foundation`. Set
+`orchestratorInternalToken` in the local environment before running private
+requests.
 
 ## 16. Future frontend integration rule
 

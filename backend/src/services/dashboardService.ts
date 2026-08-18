@@ -7,7 +7,7 @@ import { DASHBOARD_FALLBACK_SCAN_LIMIT } from "./dashboardLimits.js";
 import type { DashboardQuery } from "../schemas/dashboard.js";
 
 const MAX_CONFIGURED_CAMERAS = 200;
-const ACTIVE_ALERT_STATUSES = ["new", "acknowledged", "in_progress"] as const;
+const ACTIVE_ALERT_STATUSES = ["new", "acknowledged", "in_progress", "awaiting_verification"] as const;
 
 function isMissingIndexError(error: unknown) {
   return Boolean(error && typeof error === "object" && Number((error as { code?: unknown }).code) === 9);
@@ -67,11 +67,12 @@ async function getActiveCurrentWorkflowAlerts(siteId: string, limit: number) {
     .where("siteId", "==", siteId)
     .where("workflowVersion", "==", ALERT_WORKFLOW_VERSION)
     .where("status", "in", [...ACTIVE_ALERT_STATUSES]);
-  const [snapshot, newCount, acknowledgedCount, inProgressCount] = await Promise.all([
+  const [snapshot, newCount, acknowledgedCount, inProgressCount, awaitingVerificationCount] = await Promise.all([
     alerts.orderBy("lastDetectedAt", "desc").limit(limit + 1).get(),
     countActiveAlertsByStatus(siteId, "new"),
     countActiveAlertsByStatus(siteId, "acknowledged"),
     countActiveAlertsByStatus(siteId, "in_progress"),
+    countActiveAlertsByStatus(siteId, "awaiting_verification"),
   ]);
   return {
     records: snapshot.docs.slice(0, limit).map(serialize),
@@ -80,7 +81,8 @@ async function getActiveCurrentWorkflowAlerts(siteId: string, limit: number) {
       new: newCount,
       acknowledged: acknowledgedCount,
       inProgress: inProgressCount,
-      total: newCount + acknowledgedCount + inProgressCount,
+      awaitingVerification: awaitingVerificationCount,
+      total: newCount + acknowledgedCount + inProgressCount + awaitingVerificationCount,
     },
     queryMode: "indexed" as const,
   };

@@ -1,0 +1,15 @@
+$kind: http-request
+name: Internal List Available Runs
+description: Private orchestrator-worker polling endpoint. Requires the internal service token and worker ID.
+url: "{{baseUrl}}/internal/orchestrator/runs?status=queued&limit=25"
+method: GET
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Private run polling is authenticated', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().runs).to.be.an('array');
+    language: text/javascript
+order: 1020

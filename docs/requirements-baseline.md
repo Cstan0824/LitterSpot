@@ -213,7 +213,7 @@ the backend baseline:
 | UMM-FR-08 | Allow an active Cleaner to authenticate and access only their own profile, notifications, and work orders. | **Backend implemented** |
 | UMM-FR-09 | Allow a Cleaner to publish online/offline/busy/break availability and consented device-location heartbeats. | **Backend implemented** |
 | UMM-FR-10 | Disabling a Cleaner must prevent login and future assignment while preserving history. | **Backend implemented** |
-| UMM-FR-11 | Enforce role-specific Node.js authorisation for Supervisor, Cleaner, and private orchestrator tools. | **Supervisor/Cleaner backend implemented; private orchestrator tools remain Phase 12** |
+| UMM-FR-11 | Enforce role-specific Node.js authorisation for Supervisor, Cleaner, and private orchestrator tools. | **Implemented for Supervisor, Cleaner, and the Phase 12/14 internal orchestrator boundary** |
 
 ### 7.1 Cleaner mobile operations and work orders
 
@@ -228,7 +228,7 @@ the backend baseline:
 | CMO-FR-07 | Allow Supervisor reassignment, rework, completion, and cancellation overrides with immutable history. | **Backend implemented** |
 | CMO-FR-08 | Persist assignment/reassignment/rework/cancellation notifications even when FCM cannot deliver push. | **Backend implemented** |
 | CMO-FR-09 | Make create, heartbeat, reassignment, transition, notification, and replay operations semantically idempotent. | **Backend implemented** |
-| CMO-FR-10 | Prevent Cleaner submission from directly resolving the cleanliness alert. | **Backend implemented; Phase 14 will connect review-to-alert resolution** |
+| CMO-FR-10 | Prevent Cleaner submission from directly resolving the cleanliness alert. | **Backend implemented; Node review decisions now control clean resolution and rework** |
 
 ### 7.2 Original functional requirements
 
@@ -690,6 +690,15 @@ For the upload-first prototype, service-unavailable notification applies to the 
   rework path.
 
 ## 16. Change log
+
+### 2026-08-18 - Node-owned review/rework foundation implemented
+
+- Implemented durable review requests, immutable review attempts, and the
+  `awaiting_verification` alert state.
+- Added claimed private request/decision tools with idempotent clean, rework,
+  more-evidence, and supervisor-exception outcomes.
+- Kept LLM/VLM reasoning, provider adapters, fresh-camera capture strategy, and
+  LangGraph checkpoints outside the Node backend boundary.
 
 ### 2026-08-18 - Cleaner identity and work-order backend implemented
 

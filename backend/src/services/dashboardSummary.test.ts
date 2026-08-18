@@ -14,6 +14,7 @@ describe("dashboard summary reconciliation", () => {
       alerts: [
         { workflowVersion: "grouped-temporal-v2", status: "new" },
         { workflowVersion: "grouped-temporal-v2", status: "in_progress" },
+        { workflowVersion: "grouped-temporal-v2", status: "awaiting_verification" },
         { workflowVersion: "grouped-temporal-v2", status: "resolved" },
         { workflowVersion: "prototype-v1", status: "new" },
       ],
@@ -29,10 +30,9 @@ describe("dashboard summary reconciliation", () => {
       availableCameraCount: 1,
       unavailableCameraCount: 1,
       unknownCameraCount: 1,
-      activeAlertCounts: { new: 1, acknowledged: 0, inProgress: 1, total: 2 },
+      activeAlertCounts: { new: 1, acknowledged: 0, inProgress: 1, awaitingVerification: 1, total: 3 },
       resolvedAlertCount: 1,
       latestDetectionAt: "2026-08-13T10:00:00.000Z",
     });
   });
 });
-

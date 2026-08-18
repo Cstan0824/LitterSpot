@@ -927,23 +927,45 @@ completion history, rejection/reassignment to a second Cleaner, presence
 release, notification read state, account deactivation, and mutual
 Supervisor/Cleaner route denial.
 
-### Phase 12 - Autonomous orchestrator foundation (Approved; not implemented)
+### Phase 12 - Autonomous orchestrator foundation (Node foundation implemented; LangGraph runtime not implemented)
 
 **Ownership split:** the application-backend owner builds the durable trigger,
 typed Node.js tools, validation, and audit persistence. The orchestrator/AI
 teammate builds LangGraph, PostgreSQL checkpoint use, provider adapters, and
 agent execution.
 
-Work:
+Completed Node-owned work:
+
+- added deterministic alert-triggered `orchestratorRuns` and
+  `orchestratorOutbox` records in the alert creation transaction;
+- added Supervisor run inspection, idempotent run seeding, and expired-lease
+  recovery;
+- added private token-authenticated worker polling, claim leases, typed alert
+  context, Cleaner eligibility facts, decision audit records, and completion;
+- routed orchestrator work-order creation through the existing Node invariants
+  with `actorType: "orchestrator"`;
+- added Postman requests, Firestore indexes, schemas, and emulator acceptance
+  coverage.
+
+Remaining teammate-owned work:
 
 - add a private Python/LangGraph service and one durable thread per alert;
 - add PostgreSQL checkpointing and startup recovery;
-- create a durable Node-owned alert outbox/orchestrator-run trigger;
-- expose typed, authenticated Node tools for context, assignment,
-  notification, evidence, review, rework, resolution, and exception handling;
+- integrate the already-authenticated Node tools into the runtime's tool loop;
 - add Ollama/vLLM/online-provider abstraction and bounded audit records.
 
-Acceptance:
+Node foundation acceptance:
+
+- duplicate alert/run triggers create one run and one outbox event;
+- a run claim is exclusive and lease-bound;
+- a mismatched worker cannot complete a claim;
+- decision retries are idempotent;
+- expired leases requeue through startup recovery or the Supervisor recovery
+  endpoint;
+- the orchestrator cannot write Firestore directly and all work-order commands
+  pass through Node validation.
+
+Remaining full Phase 12 acceptance:
 
 - a restarted orchestrator resumes from its checkpoint;
 - duplicate alert events create one run and one active work order;
@@ -974,19 +996,27 @@ Acceptance:
 - invalid LLM commands are rejected and returned to the agent for replanning;
 - every successful decision creates exactly one auditable work-order mutation.
 
-### Phase 14 - Autonomous review and rework (Approved; not implemented)
+### Phase 14 - Autonomous review and rework (Backend foundation implemented)
 
 **Ownership split:** the application-backend owner owns evidence/review APIs,
 state transitions, persistence, and idempotency. The orchestrator/AI teammate
 owns LLM/VLM review reasoning and model integration.
 
-Work:
+Backend-owned work completed:
 
 - add `awaiting_verification` to the target alert workflow;
 - request fresh visual evidence after Cleaner submission;
-- use current trained models first, behind a future-compatible VLM adapter;
+- durable `reviewRequests` and immutable `reviews` subcollections;
+- Cleaner evidence submission and `awaiting_verification` transition;
+- private claimed-run request/decision routes with semantic idempotency;
+- clean/rework/more-evidence/exception persistence and notification effects;
+- dashboard counts and active-alert reads include `awaiting_verification`.
+
+Still owned by the orchestrator/model teammate:
+
+- use current trained models behind a future-compatible VLM adapter;
 - let the LLM decide clean, rework, more evidence, or visible exception;
-- resolve the alert only after a clean review.
+- provide fresh-camera evidence collection and model reasoning.
 
 Acceptance:
 

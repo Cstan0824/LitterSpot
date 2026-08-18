@@ -1,0 +1,15 @@
+$kind: http-request
+name: Internal Get Review Context
+description: Private orchestrator read model for review evidence and decisions.
+url: "{{baseUrl}}/internal/orchestrator/work-orders/{{workOrderId}}/review-context"
+method: GET
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Internal review context is readable', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().workOrder.id).to.eql(pm.variables.get('workOrderId'));
+    language: text/javascript
+order: 1120

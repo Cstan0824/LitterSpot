@@ -7,6 +7,7 @@ import {
   updateCleanerPresenceSchema,
   workOrderListQuerySchema,
 } from "../schemas/cleanerOperations.js";
+import { cleanerReviewSubmissionSchema } from "../schemas/review.js";
 import { getCleaner } from "../services/cleanerService.js";
 import { getCleanerPresence, updateCleanerPresence } from "../services/cleanerPresenceService.js";
 import {
@@ -16,6 +17,7 @@ import {
   removeCleanerPushToken,
 } from "../services/notificationService.js";
 import { getWorkOrder, listWorkOrders, transitionWorkOrder } from "../services/workOrderService.js";
+import { submitCleanerForReview } from "../services/reviewService.js";
 import { HttpError } from "../shared/httpError.js";
 
 export const cleanerSelfRoutes = Router();
@@ -57,7 +59,15 @@ async function cleanerTransition(req: Request, res: Response, status: "accepted"
 cleanerSelfRoutes.post("/work-orders/:workOrderId/accept", async (req, res) => cleanerTransition(req, res, "accepted"));
 cleanerSelfRoutes.post("/work-orders/:workOrderId/reject", async (req, res) => cleanerTransition(req, res, "rejected"));
 cleanerSelfRoutes.post("/work-orders/:workOrderId/start", async (req, res) => cleanerTransition(req, res, "in_progress"));
-cleanerSelfRoutes.post("/work-orders/:workOrderId/ready-for-review", async (req, res) => cleanerTransition(req, res, "ready_for_review"));
+cleanerSelfRoutes.post("/work-orders/:workOrderId/ready-for-review", async (req, res) => {
+  const input = cleanerReviewSubmissionSchema.parse(req.body);
+  const result = await submitCleanerForReview(String(req.params.workOrderId), input, {
+    type: "cleaner",
+    id: req.cleaner!.cleanerId,
+    cleaner: req.cleaner!,
+  });
+  return res.json(result);
+});
 
 cleanerSelfRoutes.get("/notifications", async (req, res) => {
   const query = notificationListQuerySchema.parse(req.query);

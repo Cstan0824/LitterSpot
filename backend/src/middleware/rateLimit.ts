@@ -23,7 +23,7 @@ export function rateLimit(options: RateLimitOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
     cleanup(now, windowMilliseconds);
-    const identity = req.authUser?.uid ?? req.supervisor?.uid ?? req.ip ?? "unknown";
+    const identity = req.authUser?.uid ?? req.supervisor?.uid ?? req.orchestrator?.workerId ?? req.ip ?? "unknown";
     const key = `${options.namespace}:${identity}`;
     const previous = windows.get(key);
     const current = !previous || now - previous.startedAt >= windowMilliseconds

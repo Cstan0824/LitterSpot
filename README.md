@@ -9,8 +9,11 @@ analytics.
 
 The repository now implements the Supervisor backend plus authenticated Cleaner
 identity, role isolation, mobile presence/location APIs, work orders, durable
-notifications, and best-effort FCM delivery. The Cleaner PWA and autonomous AI
-Supervisor are still future integration work and must not be assumed to exist.
+notifications, best-effort FCM delivery, the Node-owned orchestrator foundation,
+and the backend-owned review/rework foundation: durable review requests,
+immutable review attempts, `awaiting_verification`, and idempotent clean/rework
+state transitions. The Cleaner PWA and LangGraph/LLM autonomous execution
+runtime are still future integration work and must not be assumed to exist.
 The agreed workflow and selected **Option A** deployment are documented in
 [the autonomous orchestrator and Cleaner plan](./docs/autonomous-orchestrator-and-cleaner-plan.md).
 
@@ -207,6 +210,11 @@ work order; the work-order folder then covers accept/reject, start,
 ready-for-review, rework, reassignment, completion/cancellation, history, and
 the durable notification inbox. The React Cleaner PWA is intentionally not part
 of this backend phase.
+
+The `16 - Review and rework foundation` folder adds Cleaner evidence submission,
+Supervisor review context, and private orchestrator fresh-evidence/decision
+requests. These can be run after the Phase 10-12 setup has produced a valid
+`workOrderId`, alert, Cleaner token, and claimed orchestrator run.
 
 The collection separates stable Node/Firestore services from the two isolated
 bin-model test adapters. Retired Python/SQLite and pipeline-proxy requests are

@@ -14,6 +14,7 @@ import {
   reassignWorkOrder,
   transitionWorkOrder,
 } from "../services/workOrderService.js";
+import { getReviewContext } from "../services/reviewService.js";
 
 export const workOrderRoutes = Router();
 
@@ -24,13 +25,17 @@ workOrderRoutes.get("/", async (req, res) => {
 });
 
 workOrderRoutes.post("/", async (req, res) => {
-  const result = await createWorkOrder(createWorkOrderSchema.parse(req.body), req.supervisor.uid);
+  const result = await createWorkOrder(createWorkOrderSchema.parse(req.body), { type: "supervisor", id: req.supervisor.uid });
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
 
 workOrderRoutes.get("/:workOrderId/history", async (req, res) => {
   const page = await listWorkOrderHistory(req.params.workOrderId, alertChildListQuerySchema.parse(req.query));
   return res.json({ history: page.items, nextCursor: page.nextCursor });
+});
+
+workOrderRoutes.get("/:workOrderId/reviews", async (req, res) => {
+  return res.json(await getReviewContext(req.params.workOrderId));
 });
 
 workOrderRoutes.post("/:workOrderId/reassign", async (req, res) => {
