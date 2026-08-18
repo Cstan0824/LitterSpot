@@ -1,7 +1,7 @@
 import type { DocumentData } from "firebase-admin/firestore";
 import { ALERT_WORKFLOW_VERSION } from "../shared/workflowVersions.js";
 
-export const ACTIVE_ALERT_STATUSES = new Set(["new", "acknowledged", "in_progress"]);
+export const ACTIVE_ALERT_STATUSES = new Set(["new", "acknowledged", "in_progress", "awaiting_verification"]);
 export const IN_FLIGHT_JOB_STATUSES = new Set(["uploading", "queued", "processing"]);
 export const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
 export const RETAINABLE_MEDIA_KINDS = new Set(["original_upload", "extracted_frame"]);

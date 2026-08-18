@@ -29,6 +29,7 @@ import { HttpError } from "./shared/httpError.js";
 import { env } from "./config/env.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { rateLimit } from "./middleware/rateLimit.js";
+import { orchestratorInternalRoutes, orchestratorSupervisorRoutes } from "./routes/orchestratorRoutes.js";
 
 export const app = express();
 
@@ -84,6 +85,8 @@ app.use("/api/sites", siteRoutes);
 app.use("/api/system-events", systemEventRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 app.use("/api/zones", zoneRoutes);
+app.use("/api/orchestrator", orchestratorSupervisorRoutes);
+app.use("/internal/orchestrator", orchestratorInternalRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found.", requestId: req.requestId }));
 

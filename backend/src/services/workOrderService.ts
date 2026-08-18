@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot, type Query } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import type { AuthenticatedCleaner } from "../middleware/authenticateUser.js";
@@ -10,6 +10,7 @@ import type {
 } from "../schemas/cleanerOperations.js";
 import { HttpError } from "../shared/httpError.js";
 import { activeWorkOrderKeyId } from "../shared/workOrderKeys.js";
+import { assertForwardAlertTransition, assertReviewAlertTransition } from "./alertTransitions.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
 import { createNotificationInTransaction, deliverNotification } from "./notificationService.js";
 
@@ -19,6 +20,7 @@ const ACTIVE_WORK_ORDER_STATUSES: WorkOrderStatus[] = [
 
 type WorkOrderActor =
   | { type: "supervisor"; id: string }
+  | { type: "orchestrator"; id: string }
   | { type: "cleaner"; id: string; cleaner: AuthenticatedCleaner };
 
 function hash(namespace: string, ...parts: string[]) {
@@ -51,6 +53,9 @@ function presentWorkOrder(snapshot: DocumentSnapshot) {
     assignmentAttempt: Number(data.assignmentAttempt ?? 0),
     instructions: String(data.instructions ?? ""),
     assignmentDecisionId: String(data.assignmentDecisionId ?? ""),
+    readyForReviewEvidenceMediaIds: Array.isArray(data.readyForReviewEvidenceMediaIds)
+      ? data.readyForReviewEvidenceMediaIds.map(String)
+      : [],
     availabilityOverride: Boolean(data.availabilityOverride),
     assignedAt: instant(data.assignedAt),
     acceptedAt: instant(data.acceptedAt),
@@ -126,9 +131,11 @@ export async function getWorkOrder(workOrderId: string) {
   return presentWorkOrder(await firestore.collection("workOrders").doc(workOrderId).get());
 }
 
-export async function createWorkOrder(input: CreateWorkOrderInput, actorUid: string) {
+export async function createWorkOrder(input: CreateWorkOrderInput, actor: Extract<WorkOrderActor, { type: "supervisor" | "orchestrator" }>) {
   const fingerprint = requestFingerprint(input);
-  const workOrderId = hash("work-order-v1", actorUid, input.idempotencyKey);
+  const workOrderId = actor.type === "supervisor"
+    ? hash("work-order-v1", actor.id, input.idempotencyKey)
+    : hash("work-order-orchestrator-v1", actor.id, input.idempotencyKey);
   const workOrderReference = firestore.collection("workOrders").doc(workOrderId);
   const alertReference = firestore.collection("alerts").doc(input.alertId);
   const cleanerReference = firestore.collection("cleaners").doc(input.assignedCleanerId);
@@ -193,22 +200,23 @@ export async function createWorkOrder(input: CreateWorkOrderInput, actorUid: str
       acceptedAt: null,
       startedAt: null,
       readyForReviewAt: null,
+      readyForReviewEvidenceMediaIds: [],
       completedAt: null,
       rejectedAt: null,
       cancelledAt: null,
       createdAt: FieldValue.serverTimestamp(),
-      createdByUid: actorUid,
+      createdByUid: actor.id,
       updatedAt: FieldValue.serverTimestamp(),
-      updatedByType: "supervisor",
-      updatedById: actorUid,
+      updatedByType: actor.type,
+      updatedById: actor.id,
     });
     transaction.create(activeKeyReference, { alertId: alert.id, workOrderId, createdAt: FieldValue.serverTimestamp() });
     transaction.create(decisionReference, { assignmentDecisionId: input.assignmentDecisionId, workOrderId, alertId: alert.id, createdAt: FieldValue.serverTimestamp() });
     transaction.create(historyReference, {
       fromStatus: null,
       toStatus: "assigned",
-      actorType: "supervisor",
-      actorId: actorUid,
+      actorType: actor.type,
+      actorId: actor.id,
       note: null,
       idempotencyKey: input.idempotencyKey,
       createdAt: FieldValue.serverTimestamp(),
@@ -221,8 +229,8 @@ export async function createWorkOrder(input: CreateWorkOrderInput, actorUid: str
       cleanerStaffCodeSnapshot: assigned.staffCode,
       assignmentDecisionId: input.assignmentDecisionId,
       instructions: input.instructions,
-      actorType: "supervisor",
-      actorId: actorUid,
+      actorType: actor.type,
+      actorId: actor.id,
       createdAt: FieldValue.serverTimestamp(),
     });
     transaction.set(presenceReference, {
@@ -272,13 +280,15 @@ export async function transitionWorkOrder(workOrderId: string, input: Transition
     const workOrder = await transaction.get(reference);
     if (!workOrder.exists) throw new HttpError(404, "Work order not found.");
     const data = workOrder.data()!;
+    const alertReference = firestore.collection("alerts").doc(String(data.alertId));
     const historyReference = reference.collection("statusHistory").doc(hash("work-order-history-v1", workOrderId, input.idempotencyKey));
     const presenceReference = firestore.collection("cleanerPresence").doc(String(data.assignedCleanerId));
     const activeKeyReference = activeWorkOrderKeyReference(String(data.alertId));
-    const [history, presence, activeKey] = await Promise.all([
+    const [history, presence, activeKey, alert] = await Promise.all([
       transaction.get(historyReference),
       transaction.get(presenceReference),
       transaction.get(activeKeyReference),
+      transaction.get(alertReference),
     ]);
     if (history.exists) {
       if (history.data()?.requestFingerprint !== fingerprint) throw new HttpError(409, "Transition idempotency key conflicts with another action.");
@@ -301,6 +311,7 @@ export async function transitionWorkOrder(workOrderId: string, input: Transition
     transaction.update(reference, {
       status: input.status,
       ...(timestampField ? { [timestampField]: FieldValue.serverTimestamp() } : {}),
+      ...(input.status === "ready_for_review" ? { readyForReviewEvidenceMediaIds: input.evidenceMediaIds ?? [] } : {}),
       updatedAt: FieldValue.serverTimestamp(),
       updatedByType: actor.type,
       updatedById: actor.id,
@@ -315,6 +326,45 @@ export async function transitionWorkOrder(workOrderId: string, input: Transition
       requestFingerprint: fingerprint,
       createdAt: FieldValue.serverTimestamp(),
     });
+    if (input.status === "in_progress" && alert.exists && ["new", "acknowledged"].includes(String(alert.data()?.status))) {
+      const currentAlertStatus = String(alert.data()?.status) as "new" | "acknowledged";
+      assertForwardAlertTransition(currentAlertStatus, "in_progress");
+      transaction.update(alertReference, {
+        status: "in_progress",
+        statusUpdatedAt: FieldValue.serverTimestamp(),
+        statusUpdatedByUid: actor.type === "cleaner" ? actor.cleaner.uid : actor.id,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.create(alertReference.collection("statusHistory").doc(randomUUID()), {
+        previousStatus: currentAlertStatus,
+        newStatus: "in_progress",
+        actorType: actor.type,
+        actorUid: actor.type === "cleaner" ? actor.cleaner.uid : actor.id,
+        actorNameSnapshot: actor.type === "cleaner" ? actor.cleaner.displayName : "LitterSpot operator",
+        actorEmailSnapshot: actor.type === "cleaner" ? actor.cleaner.email || null : null,
+        note: input.note ?? null,
+        changedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    if (input.status === "rework_required" && alert.exists && String(alert.data()?.status) === "awaiting_verification") {
+      assertReviewAlertTransition("awaiting_verification", "in_progress");
+      transaction.update(alertReference, {
+        status: "in_progress",
+        statusUpdatedAt: FieldValue.serverTimestamp(),
+        statusUpdatedByUid: actor.id,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.create(alertReference.collection("statusHistory").doc(randomUUID()), {
+        previousStatus: "awaiting_verification",
+        newStatus: "in_progress",
+        actorType: actor.type,
+        actorUid: actor.id,
+        actorNameSnapshot: actor.type === "cleaner" ? actor.cleaner.displayName : "LitterSpot operator",
+        actorEmailSnapshot: actor.type === "cleaner" ? actor.cleaner.email || null : null,
+        note: input.note ?? null,
+        changedAt: FieldValue.serverTimestamp(),
+      });
+    }
     if (["rejected", "cancelled", "completed"].includes(input.status)
       && presence.exists && presence.data()?.activeWorkOrderId === workOrderId) {
       transaction.update(presenceReference, {

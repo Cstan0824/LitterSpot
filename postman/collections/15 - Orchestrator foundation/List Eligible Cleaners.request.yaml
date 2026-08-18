@@ -1,0 +1,15 @@
+$kind: http-request
+name: List Eligible Cleaners
+description: Private facts endpoint. Node computes permission, capability, online, location-freshness, and active-work eligibility; the agent chooses among the returned facts.
+url: "{{baseUrl}}/internal/orchestrator/alerts/{{alertId}}/eligible-cleaners"
+method: GET
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Eligible Cleaner facts are returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().cleaners).to.be.an('array');
+    language: text/javascript
+order: 1050

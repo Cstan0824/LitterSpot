@@ -62,11 +62,13 @@ export const transitionWorkOrderSchema = z.object({
   status: workOrderStatusSchema,
   idempotencyKey: idempotencyKeySchema,
   note: z.string().trim().max(500).nullable().optional(),
+  evidenceMediaIds: z.array(idSchema).max(10).default([]),
 }).strict();
 
 export const cleanerWorkOrderActionSchema = z.object({
   idempotencyKey: idempotencyKeySchema,
   note: z.string().trim().max(500).nullable().optional(),
+  evidenceMediaIds: z.array(idSchema).max(10).default([]),
 }).strict();
 
 export const workOrderListQuerySchema = z.object({

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { boundedListQueryFields } from "./pagination.js";
 
-export const alertStatusSchema = z.enum(["new", "acknowledged", "in_progress", "resolved"]);
+export const alertStatusSchema = z.enum(["new", "acknowledged", "in_progress", "awaiting_verification", "resolved"]);
 export type AlertStatus = z.infer<typeof alertStatusSchema>;
 
 export const alertStatusUpdateSchema = z.object({
@@ -10,7 +10,7 @@ export const alertStatusUpdateSchema = z.object({
 }).strict();
 
 export const alertListQuerySchema = z.object({
-  status: z.enum(["new", "acknowledged", "in_progress", "resolved", "all"]).default("all"),
+  status: z.enum(["new", "acknowledged", "in_progress", "awaiting_verification", "resolved", "all"]).default("all"),
   issueType: z.enum(["floor_litter", "floor_spill", "bin_overflow"]).optional(),
   severity: z.enum(["warning", "critical"]).optional(),
   siteId: z.string().trim().min(1).max(128).optional(),

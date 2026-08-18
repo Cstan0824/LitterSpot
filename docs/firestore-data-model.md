@@ -1480,8 +1480,9 @@ If meaningful legacy data appears later, use the optional importer described in 
 
 ## 19. Cleaner operations implementation and orchestrator target
 
-Sections 19.1-19.4 describe the implemented Phase 10-11 backend. Sections
-19.5-19.6 remain the Phase 12-14 target.
+Sections 19.1-19.6 describe the implemented Phase 10-12 and backend Phase 14
+boundary. LangGraph checkpoints and model-provider state remain outside
+Firestore.
 
 ### 19.1 Identity migration
 
@@ -1643,38 +1644,82 @@ Cleaner marks it `read`.
 ```ts
 orchestratorRuns/{runId} {
   alertId: string,
-  threadId: string,              // durable LangGraph thread/checkpoint key
-  status: "queued" | "running" | "waiting_for_cleaner" |
-          "waiting_for_evidence" | "completed" | "failed" | "paused",
+  threadKey: string,             // LangGraph may reuse this in PostgreSQL
+  status: "queued" | "running" | "waiting" | "completed" |
+          "failed" | "paused",
+  triggerEventId: string,
+  siteId: string,
+  zoneId: string,
+  issueType: string,
   currentWorkOrderId: string | null,
-  modelProvider: "ollama" | "vllm" | "online_api",
-  modelName: string,
-  promptPolicyVersion: string,
+  workerId: string | null,
+  claimToken: string | null,
+  leaseExpiresAt: Timestamp | null,
   attemptCount: number,
-  lastErrorCode: string | null,
+  lastError: { code: string, message: string | null, occurredAt: Timestamp } | null,
+  result: object | null,
   createdAt: Timestamp,
-  updatedAt: Timestamp
+  updatedAt: Timestamp,
+  completedAt: Timestamp | null
 }
 
-orchestratorRuns/{runId}/decisions/{decisionId} {
-  decisionType: "assign" | "reassign" | "request_evidence" |
-                "rework" | "resolve" | "raise_exception",
-  contextSnapshot: object,       // bounded, redacted, typed facts
-  selectedCleanerId: string | null,
-  rationaleSummary: string,
-  modelProvider: string,
-  modelName: string,
-  promptPolicyVersion: string,
+orchestratorOutbox/{eventId} {
+  type: "alert_confirmed",
+  alertId: string,
+  runId: string,
+  status: "pending" | "claimed" | "completed" | "failed" | "paused",
+  attemptCount: number,
+  workerId: string | null,
+  claimToken: string | null,
+  leaseExpiresAt: Timestamp | null,
+  lastError: object | null,
+  createdAt: Timestamp,
+  updatedAt: Timestamp,
+  completedAt: Timestamp | null
+}
+
+orchestratorDecisions/{decisionId} {
+  runId: string,
+  alertId: string,
+  actionId: string,
+  toolName: string,
+  outcome: "succeeded" | "rejected" | "failed",
+  input: object,
+  result: object | null,
+  rationale: string | null,
   idempotencyKey: string,
+  fingerprint: string,
+  workerId: string,
   createdAt: Timestamp
 }
 ```
 
-LangGraph checkpoint payloads belong in Option A PostgreSQL, not Firestore.
-Firestore stores business-visible run state and bounded audit summaries. Typed
-Node.js tool invocations should also have an immutable, correlated audit record.
+The alert transaction creates the run and outbox pair exactly once. LangGraph
+checkpoint payloads belong in Option A PostgreSQL, not Firestore. Firestore
+stores business-visible run state and bounded audit summaries. Claims use a
+random token and expiring lease; startup recovery requeues expired claims.
+Typed Node.js tool invocations have immutable, correlated decision records.
 
 ### 19.6 Review attempts and target alert states
+
+```ts
+workOrders/{workOrderId}/reviewRequests/{requestId} {
+  workOrderId: string,
+  alertId: string,
+  status: "requested" | "fulfilled" | "expired" | "cancelled",
+  beforeEvidenceMediaIds: string[],
+  afterEvidenceMediaIds: string[],
+  requestedByType: "cleaner" | "supervisor" | "orchestrator",
+  requestedById: string,
+  rationale: string | null,
+  decision: string | null,
+  decisionReviewId: string | null,
+  idempotencyKey: string,
+  requestFingerprint: string,
+  createdAt: Timestamp,
+  fulfilledAt: Timestamp | null
+}
+```
 
 ```ts
 workOrders/{workOrderId}/reviews/{reviewId} {
@@ -1690,21 +1735,24 @@ workOrders/{workOrderId}/reviews/{reviewId} {
 }
 ```
 
-The target alert lifecycle adds `awaiting_verification`. Cleaner completion
-moves work to review; it does not resolve the alert. A clean review resolves the
-alert. Rework returns the alert/work to `in_progress` using a new immutable
-history entry.
+The implemented target alert lifecycle adds `awaiting_verification`. Cleaner
+completion moves work to review; it does not resolve the alert. A clean review
+resolves the alert and releases active work/presence keys. Rework returns the
+alert/work to `in_progress` using a new immutable history entry and creates a
+durable Cleaner notification. Evidence IDs are references; model results and
+versions are audit facts, not Node-owned inference logic.
 
 ### 19.7 Implemented and future indexes
 
-Phase 10-11 indexes are deployed for:
+Phase 10-12 indexes are deployed/tracked for:
 
 - active work orders by `assignedCleanerId + status + createdAt`;
 - Cleaner history by `assignedCleanerId + createdAt`;
 - work orders by `alertId + createdAt` and `status + createdAt`;
 - notification inbox by `recipientCleanerId + status + createdAt` and complete
   history by `recipientCleanerId + createdAt`;
-- active push devices by `cleanerId + status`.
+- active push devices by `cleanerId + status`;
+- orchestrator runs by `status + createdAt` and `alertId + createdAt`.
 
 Future orchestrator work must validate indexes for:
 

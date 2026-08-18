@@ -84,6 +84,36 @@ values:
     secret: true
   - key: alertId
     value: ''
+  - key: orchestratorInternalToken
+    secret: true
+  - key: orchestratorWorkerId
+    value: postman-orchestrator-worker
+  - key: orchestratorRunId
+    value: ''
+  - key: orchestratorClaimToken
+    secret: true
+  - key: orchestratorDecisionId
+    value: postman-orchestrator-decision-001
+  - key: orchestratorWorkOrderDecisionId
+    value: postman-orchestrator-work-order-decision-001
+  - key: orchestratorWorkOrderRequestId
+    value: postman-orchestrator-work-order-001
+  - key: reviewSubmissionIdempotencyKey
+    value: postman-review-submission-001
+  - key: reviewRequestIdempotencyKey
+    value: postman-review-request-001
+  - key: reviewDecisionIdempotencyKey
+    value: postman-review-decision-001
+  - key: reviewRequestId
+    value: ''
+  - key: reviewId
+    value: ''
+  - key: reviewDecision
+    value: rework
+  - key: reviewRationale
+    value: Visible litter remains after the first cleaning pass.
+  - key: reviewEvidenceMediaId
+    value: postman-review-evidence-001
   - key: issueObservationId
     value: ''
   - key: flagId

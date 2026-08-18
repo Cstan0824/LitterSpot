@@ -44,5 +44,9 @@ describe("Cleaner operations API schemas", () => {
     expect(workOrderListQuerySchema.safeParse({ alertId: "a", cleanerId: "b" }).success).toBe(false);
     expect(notificationListQuerySchema.parse({})).toMatchObject({ status: "unread", limit: 25 });
     expect(cleanerWorkOrderActionSchema.safeParse({ idempotencyKey: "action-001", surprise: true }).success).toBe(false);
+    expect(cleanerWorkOrderActionSchema.parse({
+      idempotencyKey: "action-001",
+      evidenceMediaIds: ["media-1", "media-2"],
+    }).evidenceMediaIds).toEqual(["media-1", "media-2"]);
   });
 });

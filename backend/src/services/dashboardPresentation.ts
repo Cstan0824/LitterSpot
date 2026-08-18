@@ -16,6 +16,7 @@ export type DashboardActiveAlertCounts = {
   new: number;
   acknowledged: number;
   inProgress: number;
+  awaitingVerification: number;
   total: number;
 };
 
@@ -189,7 +190,7 @@ export function buildDashboardDto(input: DashboardBuildInput) {
   const cameras = input.cameras
     .map((camera) => presentCamera(camera, latestRunForCamera(camera, latestRuns)))
     .sort((left, right) => String(left.code ?? "").localeCompare(String(right.code ?? ""), undefined, { numeric: true }));
-  const activeAlertStatuses = new Set(["new", "acknowledged", "in_progress"]);
+  const activeAlertStatuses = new Set(["new", "acknowledged", "in_progress", "awaiting_verification"]);
   const eligibleActiveAlerts = input.activeAlerts
     .filter((alert) => alert.workflowVersion === ALERT_WORKFLOW_VERSION
       && activeAlertStatuses.has(String(alert.status)))

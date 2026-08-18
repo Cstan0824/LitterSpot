@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildDashboardDto } from "./dashboardPresentation.js";
 
 const limits = { alertLimit: 10, detectionLimit: 10, failedJobLimit: 10 };
-const noActiveAlerts = { new: 0, acknowledged: 0, inProgress: 0, total: 0 };
+const noActiveAlerts = { new: 0, acknowledged: 0, inProgress: 0, awaitingVerification: 0, total: 0 };
 
 describe("dashboard API presentation", () => {
   it("builds a stable site dashboard with camera latest-run evidence", () => {
@@ -57,16 +57,17 @@ describe("dashboard API presentation", () => {
       activeAlerts: [
         { id: "alert-new", workflowVersion: "grouped-temporal-v2", status: "new", lastDetectedAt: "2026-08-13T09:00:00.000Z", latestEvidenceMediaId: "media-1" },
         { id: "alert-work", workflowVersion: "grouped-temporal-v2", status: "in_progress", lastDetectedAt: "2026-08-13T10:00:00.000Z" },
+        { id: "alert-review", workflowVersion: "grouped-temporal-v2", status: "awaiting_verification", lastDetectedAt: "2026-08-13T10:30:00.000Z" },
         { id: "alert-old", workflowVersion: "prototype-v1", status: "new", lastDetectedAt: "2026-08-13T11:00:00.000Z" },
         { id: "alert-done", workflowVersion: "grouped-temporal-v2", status: "resolved", lastDetectedAt: "2026-08-13T12:00:00.000Z" },
       ],
-      activeAlertCounts: { new: 12, acknowledged: 3, inProgress: 8, total: 23 },
+      activeAlertCounts: { new: 12, acknowledged: 3, inProgress: 8, awaitingVerification: 2, total: 25 },
       activeAlertsHasMore: true,
       recentDetections: [], recentFailedJobs: [], limits: { ...limits, alertLimit: 1 }, generatedAt: "2026-08-13T13:00:00.000Z",
     });
 
-    expect(dashboard.activeAlerts.map((alert) => alert.id)).toEqual(["alert-work"]);
-    expect(dashboard.summary.activeAlertCounts).toEqual({ new: 12, acknowledged: 3, inProgress: 8, total: 23 });
+    expect(dashboard.activeAlerts.map((alert) => alert.id)).toEqual(["alert-review"]);
+    expect(dashboard.summary.activeAlertCounts).toEqual({ new: 12, acknowledged: 3, inProgress: 8, awaitingVerification: 2, total: 25 });
     expect(dashboard.completeness.activeAlerts).toBe("more_available");
     expect(dashboard.sourceQueryMode.activeAlerts).toBe("indexed");
   });

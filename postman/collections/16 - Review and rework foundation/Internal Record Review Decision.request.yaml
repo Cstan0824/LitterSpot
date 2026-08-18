@@ -1,0 +1,36 @@
+$kind: http-request
+name: Internal Record Review Decision
+description: Private orchestrator review command. Use clean, rework, more_evidence, or supervisor_exception.
+url: "{{baseUrl}}/internal/orchestrator/runs/{{orchestratorRunId}}/reviews"
+method: POST
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "claimToken": "{{orchestratorClaimToken}}",
+      "workOrderId": "{{workOrderId}}",
+      "alertId": "{{alertId}}",
+      "reviewRequestId": "{{reviewRequestId}}",
+      "decision": "{{reviewDecision}}",
+      "rationaleSummary": "{{reviewRationale}}",
+      "afterEvidenceMediaIds": ["{{reviewEvidenceMediaId}}"],
+      "visionResults": { "reviewedBy": "postman" },
+      "modelVersions": { "vlm": "postman-manual" },
+      "promptPolicyVersion": "postman-manual-v1",
+      "idempotencyKey": "{{reviewDecisionIdempotencyKey}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Review decision succeeds or replays', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.expect(result.review.decision).to.eql(pm.variables.get('reviewDecision'));
+        if (result.review?.id) pm.environment.set('reviewId', result.review.id);
+      }
+    language: text/javascript
+order: 1140

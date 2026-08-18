@@ -1,0 +1,20 @@
+$kind: http-request
+name: Get Alert Context
+description: Private typed context read for a claimed or queued run. Includes alert details, occurrences, status history, and existing work orders.
+url: "{{baseUrl}}/internal/orchestrator/runs/{{orchestratorRunId}}/context"
+method: GET
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert context is returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const context = pm.response.json().context;
+        pm.expect(context.alert.id).to.eql(pm.environment.get('alertId'));
+        pm.expect(context.occurrences).to.be.an('array');
+        pm.expect(context.workOrders).to.be.an('array');
+      }
+    language: text/javascript
+order: 1040

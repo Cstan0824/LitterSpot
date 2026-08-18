@@ -37,4 +37,6 @@ export const env = {
   inferenceRateLimitPerMinute: numberSetting("INFERENCE_RATE_LIMIT_PER_MINUTE", 120, { integer: true, minimum: 1, maximum: 100_000 }),
   uploadRateLimitPerMinute: numberSetting("UPLOAD_RATE_LIMIT_PER_MINUTE", 20, { integer: true, minimum: 1, maximum: 100_000 }),
   processingMutationRateLimitPerMinute: numberSetting("PROCESSING_MUTATION_RATE_LIMIT_PER_MINUTE", 60, { integer: true, minimum: 1, maximum: 100_000 }),
+  orchestratorInternalToken: process.env.ORCHESTRATOR_INTERNAL_TOKEN,
+  orchestratorLeaseSeconds: numberSetting("ORCHESTRATOR_LEASE_SECONDS", 300, { integer: true, minimum: 30, maximum: 900 }),
 };
