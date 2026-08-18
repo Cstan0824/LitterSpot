@@ -372,6 +372,14 @@ PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover \
   -s ai-service/tests -p 'test_*.py'
 ```
 
+````markdown
+Windows PowerShell:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"
+.\.venv\Scripts\python.exe -m unittest discover -s ai-service\tests -p 'test_*.py'
+Remove-Item Env:PYTHONDONTWRITEBYTECODE
+
 Use Postman folder `05 - AI model test adapters` for isolated bin-state tests.
 Use operational media jobs only when testing the full model-to-Firestore path.
 
@@ -406,6 +414,17 @@ Check tools:
 node --version
 npm --version
 python3.12 --version
+ffmpeg -version
+ffprobe -version
+java -version
+```
+
+Windows PowerShell:
+
+```powershell
+node --version
+npm --version
+py -3.12 --version
 ffmpeg -version
 ffprobe -version
 java -version
@@ -455,6 +474,13 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env.local
 ```
 
+Windows PowerShell:
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+Copy-Item frontend\.env.example frontend\.env.local
+```
+
 In `backend/.env` set:
 
 - `FIREBASE_PROJECT_ID=litterspot`
@@ -468,11 +494,22 @@ Settings. These identify the Firebase web application; never put the Firebase
 Admin private key in frontend configuration.
 
 The service-account file must be distributed privately by an authorised team
-member and stored outside this repository. On macOS/Linux:
+member and stored outside this repository. 
+
+On macOS/Linux:
 
 ```bash
 chmod 600 /absolute/path/to/firebase-admin-service-account.json
 ```
+
+On Windows PowerShell, store the file outside the repository and restrict its
+NTFS permissions to the current Windows user:
+
+```powershell
+icacls "C:\absolute\path\to\firebase-admin-service-account.json" /inheritance:r /grant:r "$($env:USERNAME):(R)"
+```
+
+Replace the example path with the actual location of the service-account file.
 
 Email/Password Authentication, the named Firestore database `litterspot`,
 Phase 1–11 indexes, two migrated Cleaner records, and one Supervisor role
