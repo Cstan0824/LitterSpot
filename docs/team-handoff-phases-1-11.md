@@ -372,13 +372,13 @@ PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python -m unittest discover \
   -s ai-service/tests -p 'test_*.py'
 ```
 
-````markdown
 Windows PowerShell:
 
 ```powershell
 $env:PYTHONDONTWRITEBYTECODE="1"
 .\.venv\Scripts\python.exe -m unittest discover -s ai-service\tests -p 'test_*.py'
 Remove-Item Env:PYTHONDONTWRITEBYTECODE
+```
 
 Use Postman folder `05 - AI model test adapters` for isolated bin-state tests.
 Use operational media jobs only when testing the full model-to-Firestore path.
