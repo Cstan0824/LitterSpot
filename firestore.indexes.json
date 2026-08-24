@@ -35,6 +35,14 @@
       ]
     },
     {
+      "collectionGroup": "analysisRuns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "zoneId", "order": "ASCENDING" },
+        { "fieldPath": "capturedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "processingJobs",
       "queryScope": "COLLECTION",
       "fields": [

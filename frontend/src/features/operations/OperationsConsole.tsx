@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { Alert, Camera, FrameResult, Placement } from "./types";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import type { Alert, Camera, FrameResult } from "./types";
 import { getLiveVideos, subscribeLiveVideo, type LiveVideo } from "../pipeline/liveVideoStore";
 import { createCleaner, getCleaners, updateCleanerStatus, type Cleaner } from "../../services/cleanerAPI";
 import { createCamera, createSite, createZone, getCameras, getSites, getZones, updateCamera, updateSite, updateZone, type CameraRecord, type Site, type Zone } from "../../services/locationAPI";
+import { evaluateBinReplacement, type BinReplacementRecommendation } from "../../services/binReplacementAPI";
 
 type Page = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
 type AdminProfile = { displayName: string; email: string };
@@ -11,22 +12,6 @@ const evidenceUrl = (_analysisId: number) => "/mock/spill.jpg";
 const formatTime = (value?: string | null) => value ? new Date(`${value.endsWith("Z") ? value : `${value}Z`}`).toLocaleString() : "—";
 const statusClass = (value: string) => value.replaceAll("_", "-");
 
-const demoFrame = (analysisId: number, cameraId: string, imageName: string, peopleCount: number, state: "normal" | "full" | "overflow", flags: FrameResult["flags"]): FrameResult => ({
-  analysisId, cameraId, imageName, peopleCount, flags, createdAt: new Date(Date.now() - analysisId * 9 * 60_000).toISOString(),
-  image: { width: 1280, height: 720 }, evidenceAvailable: true, isDemo: true,
-  people: Array.from({ length: peopleCount }, (_, index) => ({ confidence: .91, bbox: { x1: 90 + index * 150, y1: 175, x2: 180 + index * 150, y2: 580 } })),
-  bins: [{ binIndex: 1, state, bbox: { x1: 820, y1: 245, x2: 1060, y2: 630 } }], floorHazards: [],
-});
-
-const demoCameras: Camera[] = [
-  { id: "CAMERA-1", name: "CAMERA-1", zone: "North Entrance", enabled: true, latest: demoFrame(1, "CAMERA-1", "north-entrance.jpg", 3, "normal", []) },
-  { id: "CAMERA-2", name: "CAMERA-2", zone: "Food Court", enabled: true, latest: demoFrame(2, "CAMERA-2", "food-court.jpg", 5, "overflow", [{ severity: "critical", kind: "bin_overflow", message: "Bin capacity exceeded" }]) },
-  { id: "CAMERA-3", name: "CAMERA-3", zone: "East Walkway", enabled: true, latest: demoFrame(3, "CAMERA-3", "east-walkway.jpg", 2, "full", [{ severity: "warning", kind: "floor_litter", message: "Loose litter detected" }]) },
-  { id: "CAMERA-4", name: "CAMERA-4", zone: "Parking Lobby", enabled: true, latest: demoFrame(4, "CAMERA-4", "parking-lobby.jpg", 1, "normal", []) },
-  { id: "CAMERA-5", name: "CAMERA-5", zone: "West Plaza", enabled: true, latest: demoFrame(5, "CAMERA-5", "west-plaza.jpg", 4, "full", [{ severity: "warning", kind: "floor_spill", message: "Possible spill detected" }]) },
-  { id: "CAMERA-6", name: "CAMERA-6", zone: "Service Corridor", enabled: true, latest: null },
-];
-
 const demoAlerts: Alert[] = [
   { id: 1042, analysisId: 2, cameraId: "cam-02", cameraName: "CAM-02", zone: "Food Court", kind: "bin_overflow", severity: "critical", confidence: .96, status: "active", createdAt: new Date(Date.now() - 8 * 60_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "food-court.jpg", peopleCount: 5, evidenceAvailable: true },
   { id: 1041, analysisId: 3, cameraId: "cam-03", cameraName: "CAM-03", zone: "East Walkway", kind: "floor_litter", severity: "warning", confidence: .88, status: "active", createdAt: new Date(Date.now() - 28 * 60_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "east-walkway.jpg", peopleCount: 2, evidenceAvailable: true },
@@ -34,7 +19,6 @@ const demoAlerts: Alert[] = [
   { id: 1039, analysisId: 1, cameraId: "cam-01", cameraName: "CAM-01", zone: "North Entrance", kind: "bin_overflow", severity: "critical", confidence: .92, status: "dismissed", createdAt: new Date(Date.now() - 3.5 * 3_600_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "north-entrance.jpg", peopleCount: 3, evidenceAvailable: true },
 ];
 
-const demoPlacement: Placement[] = demoCameras.slice(0, 5).map((camera, index) => ({ cameraId: camera.id, cameraName: camera.name, zone: camera.zone, recommended: index === 1, status: index === 1 ? "action_required" : "monitoring", overflowRank: index + 1, overflowThreshold: 3, overflowEpisodes: 12 - index, popularityRank: [3, 1, 5, 4, 2][index], popularityThreshold: 3, averagePeoplePerFrame: [2.8, 6.4, 1.7, 2.1, 4.8][index], validDays: 7, requiredValidDays: 7, triggerReason: index === 1 ? "overflow_frequency" : null }));
 function percentBox(box: { x1: number; y1: number; x2: number; y2: number }, image: FrameResult["image"]) {
   const left = Math.max(0, Math.min(100, box.x1 / image.width * 100));
   const top = Math.max(0, Math.min(100, box.y1 / image.height * 100));
@@ -174,12 +158,36 @@ export function OperationsConsole({ supervisor, page, onNavigate, onLogout }: { 
   const [staffError, setStaffError] = useState<string>();
   const [locationError, setLocationError] = useState<string>();
   const [liveVideos, setLiveVideos] = useState<LiveVideo[]>(() => getLiveVideos());
+  const [placementRecommendations, setPlacementRecommendations] = useState<BinReplacementRecommendation[]>([]);
+  const [placementError, setPlacementError] = useState<string>();
+  const [placementLoading, setPlacementLoading] = useState(false);
   useEffect(() => subscribeLiveVideo(() => setLiveVideos(getLiveVideos())), []);
   useEffect(() => {
     void Promise.all([getCleaners(), getSites(), getZones(), getCameras()])
       .then(([cleaners, siteItems, zoneItems, cameraItems]) => { setStaff(cleaners); setSites(siteItems); setZones(zoneItems); setCameraRecords(cameraItems); setStaffError(undefined); setLocationError(undefined); })
       .catch((error) => { const message = error instanceof Error ? error.message : "Cloud application data could not be loaded."; setStaffError(message); setLocationError(message); });
   }, []);
+  const refreshPlacement = useCallback(async () => {
+    const activeZones = zones.filter((zone) => zone.status === "active");
+    if (activeZones.length === 0) {
+      setPlacementRecommendations([]);
+      setPlacementError(undefined);
+      return;
+    }
+    setPlacementLoading(true);
+    try {
+      const results = await Promise.all(activeZones.map((zone) => evaluateBinReplacement(zone.id, { windowMinutes: 10 })));
+      setPlacementRecommendations(results);
+      setPlacementError(undefined);
+    } catch (error) {
+      setPlacementError(error instanceof Error ? error.message : "Placement recommendations could not be loaded.");
+    } finally {
+      setPlacementLoading(false);
+    }
+  }, [zones]);
+  useEffect(() => {
+    if (page === "placement") void refreshPlacement();
+  }, [page, refreshPlacement]);
   const cameras = useMemo<Camera[]>(() => cameraRecords.filter((camera) => camera.status === "active").map((camera) => ({ id: camera.code, name: camera.name, zone: camera.zoneName, enabled: true, latest: null })), [cameraRecords]);
   const [allAlerts, setAllAlerts] = useState<Alert[]>(demoAlerts);
   const dashboard = useMemo(() => ({ cameras, summary: { activeAlerts: allAlerts.filter((item) => item.status === "active").length, resolvedAlerts: allAlerts.filter((item) => item.status === "resolved").length, configuredCameras: cameras.length } }), [allAlerts, cameras]);
@@ -189,14 +197,12 @@ export function OperationsConsole({ supervisor, page, onNavigate, onLogout }: { 
   const [historyQuery, setHistoryQuery] = useState("");
   const alerts = useMemo(() => allAlerts.filter((item) => (status === "all" || item.status === status) && (severity === "all" || item.severity === severity)), [allAlerts, severity, status]);
   const history = useMemo(() => { const query = historyQuery.trim().toLowerCase(); return allAlerts.filter((item) => item.status !== "active" && (!query || `${item.cameraName} ${item.zone} ${labelForKind(item.kind)}`.toLowerCase().includes(query))); }, [allAlerts, historyQuery]);
-  const placement = demoPlacement;
   const gridColumns = gridView === "3x2" ? 3 : gridView === "2x3" ? 2 : 1;
   const loading = false;
   const error: string | undefined = undefined;
   const refreshDashboard = () => undefined;
   const refreshAlerts = () => undefined;
   const refreshHistory = () => undefined;
-  const refreshPlacement = () => undefined;
   const load = () => undefined;
 
   function changeStatus(alert: Alert, next: Alert["status"]) {
@@ -209,9 +215,9 @@ export function OperationsConsole({ supervisor, page, onNavigate, onLogout }: { 
     if (page === "cameras") return <LocationManagementPage sites={sites} zones={zones} cameras={cameraRecords} error={locationError} onCreateSite={async (name) => { const site = await createSite({ name }); setSites((items) => [...items, site].sort((left, right) => left.name.localeCompare(right.name))); setLocationError(undefined); }} onCreateZone={async (siteId, name) => { const zone = await createZone({ siteId, name }); setZones((items) => [...items, zone].sort((left, right) => left.name.localeCompare(right.name))); setLocationError(undefined); }} onCreateCamera={async (zoneId, code, name) => { const camera = await createCamera({ zoneId, code, name }); setCameraRecords((items) => [...items, camera].sort((left, right) => left.code.localeCompare(right.code, undefined, { numeric: true }))); setLocationError(undefined); }} onToggleSite={async (site) => { const updated = await updateSite(site.id, { status: site.status === "active" ? "inactive" : "active" }); setSites((items) => items.map((item) => item.id === updated.id ? updated : item)); }} onToggleZone={async (zone) => { const updated = await updateZone(zone.id, { status: zone.status === "active" ? "inactive" : "active" }); setZones((items) => items.map((item) => item.id === updated.id ? updated : item)); }} onToggleCamera={async (camera) => { const updated = await updateCamera(camera.id, { status: camera.status === "active" ? "inactive" : "active" }); setCameraRecords((items) => items.map((item) => item.id === updated.id ? updated : item)); }} />;
     if (page === "alerts") return <section className="ops-page"><header className="page-title"><div><span>ALERTS</span><h1>Alert center</h1><p>Review and manage detection events.</p></div><button className="outline-button" onClick={() => void refreshAlerts()}>Refresh</button></header><div className="summary-cards"><button onClick={() => setStatus("all")} className={status === "all" ? "active" : ""}><b>{allAlerts.length}</b><span>Total events</span></button><button onClick={() => setStatus("active")} className={status === "active" ? "active" : ""}><b>{allAlerts.filter((item) => item.status === "active").length}</b><span>Active</span></button><button onClick={() => setStatus("resolved")} className={status === "resolved" ? "active" : ""}><b>{allAlerts.filter((item) => item.status === "resolved").length}</b><span>Resolved</span></button><button onClick={() => setStatus("dismissed")} className={status === "dismissed" ? "active" : ""}><b>{allAlerts.filter((item) => item.status === "dismissed").length}</b><span>Dismissed</span></button></div><AlertFilters severity={severity} status={status} onSeverity={setSeverity} onStatus={setStatus} /><AlertTable alerts={alerts} onStatus={(alert, next) => void changeStatus(alert, next)} /></section>;
     if (page === "history") return <section className="ops-page"><header className="page-title"><div><span>HISTORY</span><h1>Resolved events</h1><p>Read-only record of completed detection cases.</p></div><button className="outline-button" onClick={() => void refreshHistory()}>Refresh</button></header><input className="search-field" placeholder="Search camera, zone, or detection type" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} /><AlertTable alerts={history} onStatus={() => undefined} /></section>;
-    if (page === "placement") return <section className="ops-page"><header className="page-title"><div><span>REPORTS</span><h1>Bin placement analysis</h1><p>Overflow frequency and people popularity are ranked independently.</p></div><button className="outline-button" onClick={() => void refreshPlacement()}>Refresh</button></header><div className="placement-grid">{placement.map((item) => <article className={`placement-tile ${item.recommended ? "recommended" : ""}`} key={item.cameraId}><div><span>{item.zone}</span><h2>{item.cameraName}</h2></div><b className={item.recommended ? "critical" : "ok"}>{item.recommended ? "RECOMMENDED" : item.status.replaceAll("_", " ")}</b><dl><div><dt>Overflow rank</dt><dd>{item.overflowRank} / {item.overflowThreshold}</dd></div><div><dt>Popularity rank</dt><dd>{item.popularityRank} / {item.popularityThreshold}</dd></div><div><dt>Observation</dt><dd>{item.validDays}/{item.requiredValidDays} days</dd></div></dl><p>{item.recommended ? `Raised by ${item.triggerReason?.replaceAll("_", " ") ?? "rank"}.` : "Continue collecting camera observations."}</p></article>)}</div></section>;
+    if (page === "placement") return <section className="ops-page"><header className="page-title"><div><span>REPORTS</span><h1>Bin replacement decision</h1><p>Firestore-backed, ten-minute evidence window with hysteresis to prevent one-frame recommendations.</p></div><button className="outline-button" onClick={() => void refreshPlacement()}>Refresh</button></header>{placementError && <p className="profile-feedback" role="alert">{placementError}</p>}{placementLoading ? <p className="ops-loading">Evaluating active zones…</p> : placementRecommendations.length === 0 ? <p className="empty-copy">No active zones have enough observations yet.</p> : <div className="placement-grid">{placementRecommendations.map((item) => <article className={`placement-tile ${item.recommended ? "recommended" : ""}`} key={item.zoneId}><div><span>{item.zoneId}</span><h2>{item.recommended ? "Replacement needed" : "Keep current bin"}</h2></div><b className={item.recommended ? "critical" : item.coverage.coverageReady ? "ok" : "warning"}>{item.decision.replaceAll("_", " ")}</b><dl><div><dt>Decision score</dt><dd>{item.score.toFixed(1)} / {item.scoreThreshold}</dd></div><div><dt>Capacity pressure</dt><dd>{item.signals.binPressure.toFixed(0)}%</dd></div><div><dt>Litter · spill</dt><dd>{item.litterEpisodes} · {item.spillEpisodes} episodes</dd></div><div><dt>Evidence</dt><dd>{item.coverage.validSamples}/{item.coverage.requiredValidSamples} minutes</dd></div></dl><p>{item.recommended ? `Raised by ${item.triggerReason?.replaceAll("_", " ") ?? "multiple signals"}.` : item.coverage.coverageReady ? "No replacement trigger in the current short window." : "Evidence is insufficient; the current decision is preserved."}</p></article>)}</div>}</section>;
     return <section className="ops-page"><header className="page-title"><div><span>DASHBOARD</span><h1>Live camera overview</h1><p>Latest analyzed snapshots from each registered camera.</p></div><button className="outline-button" onClick={() => void refreshDashboard()}>Refresh</button></header><div className="dashboard-statline"><span><b>{dashboard?.summary.activeAlerts ?? 0}</b> Active alerts</span><span><b>{dashboard?.summary.resolvedAlerts ?? 0}</b> Resolved</span><span><b>{dashboard?.summary.configuredCameras ?? 0}</b> Cameras configured</span></div><div className="camera-grid-toolbar"><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([['1x6', 'Single column', 1], ['2x3', 'Two columns', 2], ['3x2', 'Three columns', 6]] as const).map(([value, label, cells]) => <button className={gridView === value ? "active" : ""} aria-label={label} title={label} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div><section className="camera-grid camera-grid-adjustable" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{dashboard.cameras.map((camera) => { const uploaded = liveVideos.find((video) => video.cameraId === camera.id); return uploaded ? <UploadedVideoCard video={uploaded} key={camera.id} /> : <CameraCard camera={camera} key={camera.id} />; })}</section><section className="dashboard-empty"><h2>Need a fresh camera frame?</h2><p>Use the pipeline playground to upload the exact camera image, plot a floor-only ROI, and create a saved evidence record.</p><button className="primary" onClick={() => { location.hash = "/pipeline"; }}>Open pipeline playground</button></section></section>;
-  }, [alerts, allAlerts, cameraRecords, cameras, dashboard, gridColumns, gridView, history, historyQuery, liveVideos, locationError, page, placement, severity, sites, staff, staffError, status, supervisor, zones]);
+  }, [alerts, allAlerts, cameraRecords, cameras, dashboard, gridColumns, gridView, history, historyQuery, liveVideos, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, severity, sites, staff, staffError, status, supervisor, zones]);
 
   const go = (target: Page) => { onNavigate(target); setDrawerOpen(false); };
   return <div className={`ops-shell ${drawerOpen ? "drawer-open" : ""}`}>

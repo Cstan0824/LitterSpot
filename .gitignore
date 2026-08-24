@@ -308,6 +308,7 @@ node_modules/
 .local/
 data/*.sqlite3
 data/media-store/
+data/heldout-evaluation/
 data/Test videos/
 .postman/
 postman/exports/

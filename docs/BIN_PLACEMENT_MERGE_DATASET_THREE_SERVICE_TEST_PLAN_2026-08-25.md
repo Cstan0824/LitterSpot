@@ -40,6 +40,27 @@ The approved direction is:
 The temporary fallback is therefore a migration mechanism, not a supported
 product mode.
 
+### Implemented Firestore seam
+
+The protected integration branch now contains the first production seam:
+
+- `backend/src/services/binReplacementPolicy.ts` is pure and deterministic;
+- `backend/src/services/binReplacementRepository.ts` owns the Firestore
+  `analysisRuns` read and `binReplacementRecommendations` current/history
+  writes, with a bounded index fallback;
+- `backend/src/services/binReplacementService.ts` evaluates a zone and advances
+  hysteresis in Firestore;
+- `POST /api/bin-replacement/:zoneId/evaluate` is the authenticated mutation;
+  `GET /api/bin-replacement/:zoneId` reads the current persisted decision;
+- `frontend/src/services/binReplacementAPI.ts` and the operations report now
+  consume that contract instead of the old demo ranking values;
+- `firestore.indexes.json` includes the zone/capturedAt query required by the
+  ten-minute read window.
+
+The remote baseline already removed the Python `AnalysisStore` runtime path.
+The old Python policy is retained only as a migration test oracle until the
+Firestore behavior is benchmarked; it is not wired to the backend route.
+
 ## Phase 1: protect and merge the work
 
 1. Create a `codex/` integration branch; do not merge directly on a dirty
@@ -91,6 +112,13 @@ product mode.
 7. Remove the SQLite adapter and all reachable SQLite placement code after the
    Firestore adapter passes the agreed public seams.
 
+Execution note: the merge removed `AnalysisStore` before this port, so there
+was no safe SQLite adapter left to wire into production. The pure Python
+policy oracle was replayed instead, and its four locked mock timelines match
+the TypeScript/Firestore policy exactly. The tracked placement test no longer
+imports SQLite; the Firestore emulator smoke script is now the persistence
+comparison gate.
+
 ## Phase 2: discover a genuinely held-out evaluation set
 
 1. Inventory every current source manifest, URL, source ID, checksum, and split
@@ -116,6 +144,11 @@ Prototype target: at least 30 independently sourced scenes, including at least
 10 bin hard negatives, 10 bin-state cases, and 10 floor/occupancy context
 cases. This is a diagnostic benchmark, not a statistical production claim.
 
+Execution note: the frozen CC0 CDW-Seg localizer replay used all 43 acquired
+proxy images. It produced 0/17 bin matches at IoU 0.50 (11 predictions, 17
+misses) and five raw overflow diagnostics. This is a domain-shift warning for
+construction skip bins, not evidence for tuning the theme-park overflow rule.
+
 ## Phase 3: install and verify the AI runtime
 
 1. Use the project `.venv` (Python 3.12.4) and upgrade packaging tools.
@@ -127,6 +160,11 @@ cases. This is a diagnostic benchmark, not a statistical production claim.
    local load-only smoke check.
 5. Run the full AI test suite. Dependency/import failures are environment
    failures; inference-contract or metric failures are product failures.
+
+Execution note: `.venv` already contains the pinned runtime (Torch 2.7.1,
+torchvision 0.22.1, Ultralytics 8.4.92, OpenCV 5.0.0.93, Transformers 4.52.4,
+FastAPI 0.139.0, Pillow 12.2.0) and `pip install -r ai-service/requirements.txt`
+is reproducible without global installs.
 
 ## Phase 4: agreed public test seams
 
@@ -145,6 +183,12 @@ New regression tests are added one vertical slice at a time against these
 seams. Existing implementation-level tests remain useful but are not accepted
 as end-to-end proof.
 
+Execution note: the Node placement endpoints are authenticated behind the
+existing Supervisor middleware, the frontend report calls the Node contract,
+and the Firestore/in-memory adapters share the same policy interface. The
+authenticated HTTP smoke returned a validated insufficient-evidence result
+for an empty zone, confirming the route fails closed without observations.
+
 ## Phase 5: run all three services
 
 1. Confirm ports 8000, 3000, and 5173 are free and no stale local stack is
@@ -156,6 +200,12 @@ as end-to-end proof.
 5. Verify response validation, persistence, authentication, UI rendering, and
    recommendation hysteresis across consecutive minute observations.
 6. Stop all services cleanly and retain sanitized logs and benchmark output.
+
+Execution note: FastAPI, Node, and Vite ran together on ports 8000, 3000, and
+5173 with the Firestore emulator on 8080. Health/readiness/page checks passed;
+the held-out replay submitted 43 CDW-Seg proxy images to FastAPI and completed
+without a request failure. The emulator smoke persisted two evaluations and
+confirmed the second evaluation raises only after the configured hysteresis.
 
 ## Phase 5A: legacy removal and pre-push gate
 
@@ -176,6 +226,13 @@ as end-to-end proof.
    tracked.
 7. Only then push the commits. Do not push an intermediate fallback commit.
 
+Execution note: the tracked source search found no SQLite placement runtime,
+adapter, route, schema, migration, or fallback flag. Remaining matches are
+historical migration documentation only. The old untracked
+`backend/src/schemas/detection.test.ts` is a separate pre-existing contract
+conflict and was excluded temporarily for the clean build/test gate, then
+restored unchanged; it is not part of the integration commit.
+
 ## Phase 6: metrics and mitigation loop
 
 Report metrics by source and scenario, not just an overall average:
@@ -192,6 +249,10 @@ Loop 1 records the untouched merged baseline. Loop 2 applies only the smallest
 mitigation supported by Loop 1 evidence: threshold calibration, hard-negative
 gating, stable-state coverage changes, or source-specific model improvement.
 The same held-out set is rerun without moving any sample into training.
+
+Execution note: Loop 1 and Loop 2 results, the CDW-Seg domain-shift warning,
+and the remaining production gap are recorded in
+`docs/reports/BIN_REPLACEMENT_FIRESTORE_LOOP_METRICS_2026-08-25.md`.
 
 ## Completion criteria
 

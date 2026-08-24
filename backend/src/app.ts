@@ -30,6 +30,7 @@ import { env } from "./config/env.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 import { orchestratorInternalRoutes, orchestratorSupervisorRoutes } from "./routes/orchestratorRoutes.js";
+import { binReplacementRoutes } from "./routes/binReplacementRoutes.js";
 
 export const app = express();
 
@@ -70,6 +71,7 @@ app.use("/api", rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMi
 app.use("/api/me", supervisorRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
+app.use("/api/bin-replacement", binReplacementRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
 app.use("/api/alerts", alertRoutes);

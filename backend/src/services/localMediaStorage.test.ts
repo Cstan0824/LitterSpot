@@ -17,10 +17,10 @@ import {
 } from "./localMediaStorage.js";
 
 describe("local media storage paths", () => {
-  const root = "/tmp/litterspot-storage-test";
+  const root = join(tmpdir(), "litterspot-storage-test");
 
   it("resolves generated keys under the configured root", () => {
-    expect(resolveStorageKey("media/abc/original.jpg", root)).toBe(`${root}/media/abc/original.jpg`);
+    expect(resolveStorageKey("media/abc/original.jpg", root)).toBe(join(root, "media", "abc", "original.jpg"));
   });
 
   it.each(["../secret", "media/../../secret", "/tmp/secret", "media\\secret.jpg", ""])("rejects unsafe key %s", (key) => {

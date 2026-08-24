@@ -189,6 +189,9 @@ class BinReplacementPolicy:
             hazards: dict[str, list[tuple[float, float]]] = {"floor_litter": [], "floor_spill": []}
             for _, payload in observations:
                 for bin_item in payload.get("bins", []):
+                    if bool(bin_item.get("stale")):
+                        states.append("unknown")
+                        continue
                     raw_state = str(bin_item.get("state") or "unknown").lower()
                     stable_value = bin_item.get("stableState")
                     stable_state = str(stable_value).lower() if stable_value is not None else ""
