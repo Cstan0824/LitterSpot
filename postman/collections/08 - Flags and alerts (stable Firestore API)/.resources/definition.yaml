@@ -1,0 +1,3 @@
+$kind: collection
+description: Node-owned grouped issue observations, positive flags, issue-specific temporal confirmation, zone-level active-alert deduplication, occurrences, and forward-only status history in cloud Firestore. One analysis run produces one observation per supported issue type; an individual positive observation does not necessarily create an alert.
+order: 8000

@@ -1,0 +1,31 @@
+$kind: http-request
+description: Signs in directly with Firebase Email/Password Auth. Credentials and tokens stay in the selected local Postman environment.
+url: https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseWebApiKey}}
+method: POST
+headers:
+  Content-Type: application/json
+queryParams:
+  key: "{{firebaseWebApiKey}}"
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{supervisorEmail}}",
+      "password": "{{supervisorPassword}}",
+      "returnSecureToken": true
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Firebase login succeeds', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.test('Firebase returned an ID token', () => pm.expect(result.idToken).to.be.a('string').and.not.empty);
+        pm.environment.set('firebaseIdToken', result.idToken);
+        pm.environment.set('firebaseRefreshToken', result.refreshToken);
+        pm.environment.set('firebaseTokenExpiresAt', String(Date.now() + Number(result.expiresIn || 3600) * 1000));
+      }
+    language: text/javascript
+order: 2000

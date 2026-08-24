@@ -1,0 +1,13 @@
+$kind: http-request
+description: Verifies both the Firebase ID token and the active Firestore Supervisor profile.
+url: "{{baseUrl}}/api/me"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Supervisor is authenticated', () => pm.response.to.have.status(200));
+      pm.test('Supervisor profile is returned', () => pm.expect(pm.response.json().supervisor).to.have.property('uid'));
+    language: text/javascript
+order: 3000

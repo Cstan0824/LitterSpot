@@ -1,0 +1,120 @@
+name: LitterSpot Local
+values:
+  - key: baseUrl
+    value: 'http://127.0.0.1:3000'
+  - key: firebaseWebApiKey
+    secret: true
+  - key: supervisorEmail
+    value: ''
+  - key: supervisorPassword
+    value: ''
+  - key: firebaseIdToken
+    value: ''
+  - key: firebaseRefreshToken
+    value: ''
+  - key: firebaseTokenExpiresAt
+    value: ''
+  - key: siteId
+    value: ''
+  - key: zoneId
+    value: ''
+  - key: cameraId
+    value: ''
+  - key: cameraCode
+    value: CAMERA-101
+  - key: cleanerId
+    value: ''
+  - key: cleanerStaffCode
+    value: CLN-101
+  - key: legacyAlertId
+    value: ALT-001
+  - key: analysisId
+    value: '1'
+  - key: clientRequestId
+    value: postman-image-001
+  - key: operationalClientRequestId
+    value: postman-operational-001
+  - key: mediaId
+    value: ''
+  - key: processingJobId
+    value: ''
+  - key: analysisRunId
+    value: ''
+  - key: detectionId
+    value: ''
+  - key: analyticsGenerationId
+    value: ''
+  - key: analyticsPeriodStart
+    value: '2026-08-17T00:00:00.000Z'
+  - key: analyticsPeriodEnd
+    value: '2026-08-18T00:00:00.000Z'
+  - key: analyticsReportId
+    value: ''
+  - key: systemEventKey
+    value: ''
+  - key: cleanerEmail
+    value: ''
+  - key: cleanerPassword
+    secret: true
+  - key: cleanerFirebaseIdToken
+    secret: true
+  - key: cleanerRefreshToken
+    secret: true
+  - key: cleanerTokenExpiresAt
+    value: ''
+  - key: cleanerSetupLink
+    secret: true
+  - key: cleanerHeartbeatId
+    value: cleaner-heartbeat-001
+  - key: cleanerCapturedAt
+    value: ''
+  - key: workOrderId
+    value: ''
+  - key: workOrderDecisionId
+    value: postman-assignment-decision-001
+  - key: workOrderRequestId
+    value: postman-work-order-001
+  - key: notificationId
+    value: ''
+  - key: replacementCleanerId
+    value: ''
+  - key: cleanerDeviceId
+    value: cleaner-browser-001
+  - key: cleanerFcmToken
+    secret: true
+  - key: alertId
+    value: ''
+  - key: orchestratorInternalToken
+    secret: true
+  - key: orchestratorWorkerId
+    value: postman-orchestrator-worker
+  - key: orchestratorRunId
+    value: ''
+  - key: orchestratorClaimToken
+    secret: true
+  - key: orchestratorDecisionId
+    value: postman-orchestrator-decision-001
+  - key: orchestratorWorkOrderDecisionId
+    value: postman-orchestrator-work-order-decision-001
+  - key: orchestratorWorkOrderRequestId
+    value: postman-orchestrator-work-order-001
+  - key: reviewSubmissionIdempotencyKey
+    value: postman-review-submission-001
+  - key: reviewRequestIdempotencyKey
+    value: postman-review-request-001
+  - key: reviewDecisionIdempotencyKey
+    value: postman-review-decision-001
+  - key: reviewRequestId
+    value: ''
+  - key: reviewId
+    value: ''
+  - key: reviewDecision
+    value: rework
+  - key: reviewRationale
+    value: Visible litter remains after the first cleaning pass.
+  - key: reviewEvidenceMediaId
+    value: postman-review-evidence-001
+  - key: issueObservationId
+    value: ''
+  - key: flagId
+    value: ''

@@ -1,0 +1,182 @@
+{
+  "metadata": {
+    "name": "LitterSpot task assignment simulation",
+    "version": 1,
+    "timezone": "Asia/Kuala_Lumpur",
+    "simulationTime": "2026-08-15T10:00:00+08:00"
+  },
+  "zones": [
+    {
+      "id": "ZONE-FOOD-COURT",
+      "name": "Food Court"
+    },
+    {
+      "id": "ZONE-WEST-PLAZA",
+      "name": "West Plaza"
+    },
+    {
+      "id": "ZONE-NORTH-ENTRANCE",
+      "name": "North Entrance"
+    }
+  ],
+  "zoneDistances": [
+    {
+      "fromZoneId": "ZONE-FOOD-COURT",
+      "toZoneId": "ZONE-FOOD-COURT",
+      "distanceRank": 0
+    },
+    {
+      "fromZoneId": "ZONE-FOOD-COURT",
+      "toZoneId": "ZONE-WEST-PLAZA",
+      "distanceRank": 1
+    },
+    {
+      "fromZoneId": "ZONE-FOOD-COURT",
+      "toZoneId": "ZONE-NORTH-ENTRANCE",
+      "distanceRank": 2
+    },
+    {
+      "fromZoneId": "ZONE-WEST-PLAZA",
+      "toZoneId": "ZONE-FOOD-COURT",
+      "distanceRank": 1
+    },
+    {
+      "fromZoneId": "ZONE-WEST-PLAZA",
+      "toZoneId": "ZONE-WEST-PLAZA",
+      "distanceRank": 0
+    },
+    {
+      "fromZoneId": "ZONE-WEST-PLAZA",
+      "toZoneId": "ZONE-NORTH-ENTRANCE",
+      "distanceRank": 1
+    },
+    {
+      "fromZoneId": "ZONE-NORTH-ENTRANCE",
+      "toZoneId": "ZONE-FOOD-COURT",
+      "distanceRank": 2
+    },
+    {
+      "fromZoneId": "ZONE-NORTH-ENTRANCE",
+      "toZoneId": "ZONE-WEST-PLAZA",
+      "distanceRank": 1
+    },
+    {
+      "fromZoneId": "ZONE-NORTH-ENTRANCE",
+      "toZoneId": "ZONE-NORTH-ENTRANCE",
+      "distanceRank": 0
+    }
+  ],
+  "cleaners": [
+    {
+      "id": "CLN-001",
+      "name": "Aisyah Rahman",
+      "registeredZoneId": "ZONE-FOOD-COURT",
+      "accountStatus": "ACTIVE",
+      "schedule": [
+        {
+          "days": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"],
+          "startTime": "08:00",
+          "endTime": "17:00"
+        }
+      ]
+    },
+    {
+      "id": "CLN-002",
+      "name": "Daniel Lim",
+      "registeredZoneId": "ZONE-FOOD-COURT",
+      "accountStatus": "ACTIVE",
+      "schedule": [
+        {
+          "days": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"],
+          "startTime": "08:00",
+          "endTime": "17:00"
+        }
+      ]
+    },
+    {
+      "id": "CLN-003",
+      "name": "Kumar Raj",
+      "registeredZoneId": "ZONE-WEST-PLAZA",
+      "accountStatus": "ACTIVE",
+      "schedule": [
+        {
+          "days": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"],
+          "startTime": "08:00",
+          "endTime": "17:00"
+        }
+      ]
+    },
+    {
+      "id": "CLN-004",
+      "name": "Nur Iman",
+      "registeredZoneId": "ZONE-NORTH-ENTRANCE",
+      "accountStatus": "ACTIVE",
+      "schedule": [
+        {
+          "days": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"],
+          "startTime": "08:00",
+          "endTime": "17:00"
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "id": "ALT-001",
+      "zoneId": "ZONE-FOOD-COURT",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ALT-101",
+      "zoneId": "ZONE-FOOD-COURT",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ALT-102",
+      "zoneId": "ZONE-WEST-PLAZA",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ALT-103",
+      "zoneId": "ZONE-FOOD-COURT",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ALT-104",
+      "zoneId": "ZONE-NORTH-ENTRANCE",
+      "status": "RESOLVED"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "alertId": "ALT-001",
+      "cleanerId": null,
+      "status": "UNASSIGNED"
+    },
+    {
+      "id": "TASK-101",
+      "alertId": "ALT-101",
+      "cleanerId": "CLN-001",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "id": "TASK-102",
+      "alertId": "ALT-102",
+      "cleanerId": "CLN-002",
+      "status": "ASSIGNED"
+    },
+    {
+      "id": "TASK-103",
+      "alertId": "ALT-103",
+      "cleanerId": "CLN-002",
+      "status": "PENDING_VERIFICATION"
+    },
+    {
+      "id": "TASK-104",
+      "alertId": "ALT-104",
+      "cleanerId": "CLN-003",
+      "status": "COMPLETED"
+    }
+  ]
+}

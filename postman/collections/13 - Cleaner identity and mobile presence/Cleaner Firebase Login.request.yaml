@@ -1,0 +1,29 @@
+$kind: http-request
+name: Cleaner Firebase Login
+description: Sign in as the Cleaner after using cleanerSetupLink to choose a password. This stores a separate Cleaner token and never overwrites the Supervisor session variables.
+url: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseWebApiKey}}"
+method: POST
+auth:
+  type: noauth
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{cleanerEmail}}",
+      "password": "{{cleanerPassword}}",
+      "returnSecureToken": true
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner signed in with Firebase', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.environment.set('cleanerFirebaseIdToken', result.idToken);
+        pm.environment.set('cleanerRefreshToken', result.refreshToken);
+        pm.environment.set('cleanerTokenExpiresAt', String(Date.now() + Number(result.expiresIn) * 1000));
+      }
+    language: text/javascript
+order: 3000

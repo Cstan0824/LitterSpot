@@ -1,0 +1,18 @@
+$kind: http-request
+name: Reconcile Cleaner Account
+description: Supervisor-only retry for a partially completed Firebase Auth/Firestore Cleaner account link. It uses the already reserved email and returns a fresh setup link when successful.
+url: "{{baseUrl}}/api/cleaners/{{cleanerId}}/account/reconcile"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner account reconciled', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.cleaner.authUid).to.be.a('string').and.not.empty;
+        pm.environment.set('cleanerSetupLink', result.setupLink);
+      }
+    language: text/javascript
+order: 2000

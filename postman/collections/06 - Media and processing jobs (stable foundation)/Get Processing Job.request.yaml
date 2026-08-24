@@ -1,0 +1,13 @@
+$kind: http-request
+description: Get the queued, processing, completed, failed, or cancelled state of one processing job.
+url: "{{baseUrl}}/api/processing-jobs/{{processingJobId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Processing job found', () => pm.response.to.have.status(200));
+      pm.test('Job references uploaded media', () => pm.expect(pm.response.json().processingJob.sourceMediaId).to.eql(pm.environment.get('mediaId')));
+    language: text/javascript
+order: 6000

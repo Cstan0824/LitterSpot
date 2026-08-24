@@ -1,0 +1,19 @@
+$kind: http-request
+name: Cleaner - List Notifications
+description: Cleaner-only durable inbox. pending, sent, and failed push states remain unread and visible; push delivery failure never removes the in-app notification.
+url: "{{baseUrl}}/api/cleaner/notifications?status=unread&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{cleanerFirebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner notification inbox returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.notifications).to.be.an('array');
+        result.notifications.forEach((item) => pm.expect(item.recipientCleanerId).to.eql(pm.environment.get('cleanerId')));
+        if (result.notifications[0]) pm.environment.set('notificationId', result.notifications[0].id);
+      }
+    language: text/javascript
+order: 10000

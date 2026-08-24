@@ -1,0 +1,14 @@
+$kind: http-request
+name: Cleaner - Mark Notification Read
+description: Cleaner-only idempotent read marker for a notification belonging to the authenticated Cleaner.
+url: "{{baseUrl}}/api/cleaner/notifications/{{notificationId}}/read"
+method: POST
+headers:
+  Authorization: "Bearer {{cleanerFirebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Notification marked read', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().notification.status).to.eql('read');
+    language: text/javascript
+order: 11000

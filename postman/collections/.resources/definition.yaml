@@ -1,0 +1,26 @@
+$kind: collection
+id: 980d45cb-c37a-4a44-93f3-248d76ab1d8b
+name: LitterSpot API
+description: Public Node/Express API tests. Run Firebase Login first. Stable Firestore APIs are separated from isolated, non-persisting bin-model test adapters; retired Python/SQLite proxy routes are excluded.
+scripts:
+  - type: http:beforeRequest
+    code: |-
+      const name = pm.info.requestName;
+      const publicRequest = ['Backend and AI Health', 'Backend Liveness', 'Backend Readiness', 'Firebase Login', 'Cleaner Firebase Login'].includes(name);
+      const cleanerRequest = name.startsWith('Cleaner -');
+      const token = pm.environment.get(cleanerRequest ? 'cleanerFirebaseIdToken' : 'firebaseIdToken');
+      if (!publicRequest && !token) {
+        throw new Error(cleanerRequest
+          ? 'No Cleaner Firebase ID token. Complete the invitation, set cleanerEmail/cleanerPassword, and run Cleaner Firebase Login.'
+          : 'No Supervisor Firebase ID token. Select LitterSpot Local and run Firebase Login first.');
+      }
+      if (!publicRequest) {
+        pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${token}` });
+      }
+    language: text/javascript
+auth:
+  - id: 837763fb-3836-40f3-aa7e-5df4e3af44ed
+    type: bearer
+    name: bearer auth
+    credentials:
+      token: "{{firebaseIdToken}}"

@@ -1,0 +1,53 @@
+$kind: http-request
+description: >-
+  Upload an intentional non-test MP4/WebM. Successful sampled frames are
+  eligible for Node's temporal confirmation, flags, alerts, and analytics.
+  Change the checked-in clientRequestId text before creating another
+  operational upload.
+url: "{{baseUrl}}/api/media/videos"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+body:
+  type: formdata
+  content:
+    - type: file
+      key: video
+      src: []
+    - type: text
+      key: cameraId
+      value: "{{cameraId}}"
+    - type: text
+      key: clientRequestId
+      value: postman-operational-video-001
+    - type: text
+      key: isTest
+      value: "false"
+    - type: text
+      key: frameIntervalSeconds
+      value: "2"
+    - type: text
+      key: floorConfidence
+      value: "0.25"
+    - type: text
+      key: binLocalizerConfidence
+      value: "0.80"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Operational video created or reused', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) {
+        const result = pm.response.json();
+        pm.test('Operational job is analytics eligible', () => {
+          pm.expect(result.media.sourceType).to.eql('video_upload');
+          pm.expect(result.media.isTest).to.eql(false);
+          pm.expect(result.job.type).to.eql('video');
+          pm.expect(result.job.isTest).to.eql(false);
+          pm.expect(result.job.analyticsEligible).to.eql(true);
+          pm.expect(result.job.progress.plannedFrames).to.be.a('number').and.above(0);
+        });
+        pm.environment.set('mediaId', result.media.id);
+        pm.environment.set('processingJobId', result.job.id);
+      }
+    language: text/javascript
+order: 2000

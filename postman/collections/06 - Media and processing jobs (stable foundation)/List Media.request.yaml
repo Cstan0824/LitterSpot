@@ -1,0 +1,17 @@
+$kind: http-request
+description: List recent media metadata. Firestore stores metadata only; file bytes remain under the configured local storage root.
+url: "{{baseUrl}}/api/media?cameraId={{cameraId}}&isTest=true&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+queryParams:
+  cameraId: "{{cameraId}}"
+  isTest: "true"
+  limit: "25"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Media returned', () => pm.response.to.have.status(200));
+      pm.test('Response contains an array', () => pm.expect(pm.response.json().mediaAssets).to.be.an('array'));
+    language: text/javascript
+order: 2000

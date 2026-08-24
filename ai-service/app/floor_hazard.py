@@ -8,7 +8,7 @@ from time import perf_counter
 from PIL import Image
 from ultralytics import YOLO
 
-from .config import DEVICE, FLOOR_HAZARD_PATH
+from .config import DEVICE, FLOOR_HAZARD_PATH, PEOPLE_COUNT_PATH
 from .schemas import BoundingBox, FloorHazard, PersonDetection, Point
 
 
@@ -65,7 +65,9 @@ class FloorHazardAnalyzer:
             return
         try:
             self.floor_model = YOLO(str(weights))
-            self.people_model = YOLO("yolo26s.pt")
+            if not PEOPLE_COUNT_PATH.is_file():
+                raise FileNotFoundError(f"People-count checkpoint is not available: {PEOPLE_COUNT_PATH}")
+            self.people_model = YOLO(str(PEOPLE_COUNT_PATH))
             self.load_error = None
         except Exception as error:
             self.floor_model, self.people_model, self.load_error = None, None, str(error)

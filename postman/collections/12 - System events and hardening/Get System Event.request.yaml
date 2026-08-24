@@ -1,0 +1,26 @@
+$kind: http-request
+name: Get System Event
+description: Get one safe, generated operational event. Run List System Events first. A clean system may have no event, in which case this request is intentionally skipped until systemEventKey exists.
+url: "{{baseUrl}}/api/system-events/{{systemEventKey}}"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('systemEventKey')) {
+        throw new Error('No systemEventKey. A healthy system may have no events; run List System Events after a smoke test or real dependency failure.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('System event found', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const event = pm.response.json().systemEvent;
+        pm.expect(event.eventKey).to.eql(pm.environment.get('systemEventKey'));
+        pm.expect(event.title).to.be.a('string').and.not.empty;
+        pm.expect(event.generation).to.be.a('number').and.above(0);
+        pm.expect(event.lifetimeOccurrenceCount).to.be.a('number').and.above(0);
+      }
+    language: text/javascript
+order: 4000

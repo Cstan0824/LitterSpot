@@ -1,0 +1,17 @@
+$kind: http-request
+description: List stable Firestore alerts created only after temporal confirmation. Active alerts are deduplicated by zone and issue type, while cameraId can still be used as a list filter. Optional filters include status, issueType, severity, siteId, zoneId, and cameraId.
+url: "{{baseUrl}}/api/alerts?status=all&cameraId={{cameraId}}&limit=25"
+method: GET
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alerts listed', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const alerts = pm.response.json().alerts;
+        if (alerts.length) pm.environment.set('alertId', alerts[0].id);
+        else pm.environment.unset('alertId');
+      }
+    language: text/javascript
+order: 7000

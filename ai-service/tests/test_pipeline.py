@@ -1,5 +1,4 @@
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,11 +6,10 @@ from types import SimpleNamespace
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.analysis_store import AnalysisStore
 from app.bin_localizer import LocalizedBin
 from app.floor_hazard import FloorAnalysis, FloorHazardAnalyzer
 from app.pipeline import AnalysisPipeline, InvalidFocusRegionError
-from app.schemas import BoundingBox, FloorHazard, PersonDetection, Point, StateSignals
+from app.schemas import BoundingBox, FloorHazard, PersonDetection, PipelineOptions, Point, StateSignals
 
 
 class ReadyStateClassifier:
@@ -52,9 +50,11 @@ class RecordingStateClassifier:
 
     def __init__(self):
         self.calls = 0
+        self.arguments = []
 
-    def classify(self, *_args):
+    def classify(self, *args):
         self.calls += 1
+        self.arguments.append(args)
         region = BoundingBox(x1=10, y1=10, x2=50, y2=90)
         return SimpleNamespace(
             region=region, state="overflow", stableState=None, confidence=0.9,
@@ -78,21 +78,16 @@ class ObjectAwareFloorAnalyzer:
 
 class PipelineRegionTests(unittest.TestCase):
     def test_person_covered_bin_candidate_is_rejected_before_state_classification(self):
-        with tempfile.TemporaryDirectory() as directory:
-            classifier = RecordingStateClassifier()
-            store = AnalysisStore(path=Path(directory) / "analysis.sqlite3", seed_demo=False)
-            store.initialize()
-            pipeline = AnalysisPipeline(classifier, CandidateBinLocalizer(), ObjectAwareFloorAnalyzer(), store)
+        classifier = RecordingStateClassifier()
+        pipeline = AnalysisPipeline(classifier, CandidateBinLocalizer(), ObjectAwareFloorAnalyzer())
 
-            result = pipeline.analyze(
-                Image.new("RGB", (100, 100)), "person.jpg", SimpleNamespace(
-                    focusRegion=[], localizerConfidence=0.7, floorConfidence=0.25,
-                    cameraId="camera-1", confirmationFrames=2,
-                ), persist=False,
-            )
+        result = pipeline.analyze(
+            Image.new("RGB", (100, 100)),
+            PipelineOptions(localizerConfidence=0.7, floorConfidence=0.25),
+        )
 
-            self.assertEqual(result.bins, [])
-            self.assertEqual(classifier.calls, 0)
+        self.assertEqual(result.bins, [])
+        self.assertEqual(classifier.calls, 0)
 
     def test_floor_litter_overlapping_a_bottle_is_filtered(self):
         litter = FloorHazard(
@@ -137,20 +132,32 @@ class PipelineRegionTests(unittest.TestCase):
         with self.assertRaises(InvalidFocusRegionError):
             AnalysisPipeline._floor_input(Image.new("RGB", (100, 80)), [Point(x=0, y=0), Point(x=1, y=1)])
 
-    def test_demo_evidence_is_saved_as_a_real_overlay_result(self):
-        with tempfile.TemporaryDirectory() as directory:
-            store = AnalysisStore(path=Path(directory) / "analysis.sqlite3", seed_demo=True)
-            store.initialize()
-            pipeline = AnalysisPipeline(ReadyStateClassifier(), EmptyBinLocalizer(), DemoFloorAnalyzer(), store)
+    def test_combined_result_contains_only_inference_data(self):
+        pipeline = AnalysisPipeline(ReadyStateClassifier(), EmptyBinLocalizer(), DemoFloorAnalyzer())
 
-            self.assertEqual(pipeline.seed_demo_frames(), 6)
+        result = pipeline.analyze(Image.new("RGB", (100, 100)), PipelineOptions())
 
-            dashboard = store.dashboard()
-            latest = [camera["latest"] for camera in dashboard["cameras"]]
-            self.assertTrue(all(result["isDemo"] for result in latest))
-            self.assertTrue(all(result["analysisId"] for result in latest))
-            self.assertTrue(all(result["people"] and result["floorHazards"] for result in latest))
-            self.assertEqual(store.alerts(), [])
+        self.assertEqual(result.peopleCount, 1)
+        self.assertEqual(len(result.floorHazards), 1)
+        self.assertEqual(
+            set(result.model_dump()),
+            {"image", "focusRegion", "peopleCount", "people", "bins", "floorHazards", "modelVersions", "processingTimeMs"},
+        )
+
+    def test_combined_bin_result_has_no_tracking_or_business_fields(self):
+        classifier = RecordingStateClassifier()
+        pipeline = AnalysisPipeline(classifier, CandidateBinLocalizer(), DemoFloorAnalyzer())
+
+        result = pipeline.analyze(Image.new("RGB", (100, 100)), PipelineOptions())
+
+        self.assertEqual(classifier.arguments[0][2:5], (None, None, 1))
+        self.assertEqual(
+            set(result.bins[0].model_dump()),
+            {
+                "binIndex", "localizerConfidence", "bbox", "classificationRegion", "state",
+                "stateConfidence", "signals", "unknownReasons", "processingTimeMs",
+            },
+        )
 
 
 if __name__ == "__main__":

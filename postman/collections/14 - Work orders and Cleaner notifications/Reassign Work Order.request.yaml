@@ -1,0 +1,35 @@
+$kind: http-request
+name: Reassign Work Order
+description: Supervisor-only reassignment after rejection or before acceptance. Set replacementCleanerId to another linked, permitted, freshly online Cleaner and change both idempotency values for every intentional reassignment.
+url: "{{baseUrl}}/api/work-orders/{{workOrderId}}/reassign"
+method: POST
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "assignedCleanerId": "{{replacementCleanerId}}",
+      "instructions": "Take over this cleaning assignment and submit it for review.",
+      "assignmentDecisionId": "postman-reassignment-decision-001",
+      "idempotencyKey": "postman-work-reassign-001",
+      "note": "Reassigned after rejection.",
+      "overrideAvailability": false
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('replacementCleanerId')) throw new Error('Create/provision a second Cleaner, make them online, then set replacementCleanerId.');
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Work order reassigned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const work = pm.response.json().workOrder;
+        pm.expect(work.status).to.eql('assigned');
+        pm.expect(work.assignedCleanerId).to.eql(pm.environment.get('replacementCleanerId'));
+        pm.expect(work.assignmentAttempt).to.be.above(1);
+      }
+    language: text/javascript
+order: 4600

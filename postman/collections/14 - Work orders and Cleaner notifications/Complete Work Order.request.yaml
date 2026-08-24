@@ -1,0 +1,23 @@
+$kind: http-request
+name: Complete Work Order
+description: Supervisor manual completion override for ready_for_review. It releases the Cleaner and active-work key. Phase 14 will normally require a clean automated review before this command.
+url: "{{baseUrl}}/api/work-orders/{{workOrderId}}/status"
+method: PATCH
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "completed",
+      "idempotencyKey": "postman-work-complete-001",
+      "note": "Manual prototype review passed."
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Work order completed', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.expect(pm.response.json().workOrder.status).to.eql('completed');
+    language: text/javascript
+order: 8000

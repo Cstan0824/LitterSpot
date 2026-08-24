@@ -1,0 +1,1 @@
+export const DASHBOARD_FALLBACK_SCAN_LIMIT = 500;

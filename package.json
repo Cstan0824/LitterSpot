@@ -2,14 +2,30 @@
   "name": "litterspot",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev:frontend": "npm --workspace=frontend run dev",
     "dev:backend": "npm --workspace=backend run dev",
     "test:backend": "npm --workspace=backend run test",
+    "test:assignment": "node scripts/test-task-assignment.mjs",
+    "test:assignment:model": "node scripts/test-task-assignment-model.mjs",
+    "demo:assignment": "node scripts/demo-task-assignment.mjs",
+    "test:emulator": "node scripts/run-firestore-emulator-tests.mjs",
+    "validate:postman": "node scripts/validate-postman.mjs",
+    "verify:phase9": "node scripts/verify-phase9.mjs",
+    "verify:phase11": "node scripts/verify-phase11.mjs",
     "start": "node scripts/start-local.mjs",
     "stop": "node scripts/stop-local.mjs",
     "start:local": "node scripts/start-local.mjs",
     "stop:local": "node scripts/stop-local.mjs"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.26.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

@@ -1,0 +1,33 @@
+$kind: http-request
+description: Claim and process one image job. Node stores grouped issue observations and applies temporal alert confirmation after inference, so a completed operational job may create flags without creating an alert yet. Returns a compact result summary; retrieve observations, full analysis, and detection details from their folders. Repeating a completed job is idempotent.
+url: "{{baseUrl}}/api/processing-jobs/{{processingJobId}}/process"
+method: POST
+headers:
+  Authorization: Bearer {{firebaseIdToken}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Image job processed', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const result = pm.response.json();
+        pm.expect(result.job.status).to.eql('completed');
+        pm.environment.set('analysisRunId', result.result.analysisRunId);
+        const detectionIds = Array.isArray(result.result.detectionIds) ? result.result.detectionIds : [];
+        const alertIds = Array.isArray(result.job.summary.alertIds) ? result.job.summary.alertIds : [];
+        if (detectionIds.length) pm.environment.set('detectionId', detectionIds[0]);
+        else pm.environment.unset('detectionId');
+        if (alertIds.length) pm.environment.set('alertId', alertIds[0]);
+        else pm.environment.unset('alertId');
+        pm.environment.unset('issueObservationId');
+        pm.environment.unset('flagId');
+        pm.test('Temporal alert result is valid', () => {
+          pm.expect(result.job.summary.flagCount).to.be.a('number');
+          pm.expect(alertIds).to.be.an('array');
+        });
+        pm.test('Compact response omits detailed records', () => {
+          pm.expect(result).not.to.have.property('analysisRun');
+          pm.expect(result).not.to.have.property('detections');
+        });
+      }
+    language: text/javascript
+order: 7000

@@ -1,0 +1,11 @@
+$kind: http-request
+description: Soft-deactivates the cleaner; no Firebase Authentication identity is involved.
+url: "{{baseUrl}}/api/cleaners/{{cleanerId}}"
+method: DELETE
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+scripts:
+  - type: afterResponse
+    code: pm.test('Cleaner deactivated', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 5000

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiFetch } from "../services/apiClient";
 
 type BinState = "normal" | "full" | "overflow" | "unknown";
 type BoundingBox = { x1: number; y1: number; x2: number; y2: number };
@@ -81,7 +82,7 @@ export function DetectionTestPage() {
       data.append("localizerConfidence", String(settings.localizerConfidence));
       data.append("maxBins", String(settings.maxBins));
       data.append("confirmationFrames", "1");
-      const response = await fetch("/api/detections/bin-state/batch", { method: "POST", body: data });
+      const response = await apiFetch("/api/detections/bin-state/batch", { method: "POST", body: data });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Batch analysis failed");
       setResults(body);

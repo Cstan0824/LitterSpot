@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { spawn, execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createConnection } from "node:net";
 import { get } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -44,7 +44,7 @@ for (const port of [8000, 3000, 5173]) {
   if (await portInUse(port)) throw new Error(`LitterSpot port ${port} is already in use. Close the existing services, then run npm start again.`);
 }
 
-function start(command, args, env, detached = process.platform !== "win32") {
+function start(command, args, env = {}, detached = process.platform !== "win32") {
   const executable = process.platform === "win32" && command === npm ? process.env.ComSpec : command;
   const launchArgs = process.platform === "win32" && command === npm ? ["/d", "/s", "/c", [command, ...args].join(" ")] : args;
   const child = spawn(executable, launchArgs, { cwd: root, env: { ...process.env, ...env }, stdio: "inherit", detached });

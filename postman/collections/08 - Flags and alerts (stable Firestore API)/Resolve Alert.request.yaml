@@ -1,0 +1,17 @@
+$kind: http-request
+description: Resolve an active alert, append history, release its zone/issue active key, and reset temporal confirmation for a later independent dirty episode. Resolved alerts cannot be reopened.
+url: "{{baseUrl}}/api/alerts/{{alertId}}/status"
+method: PATCH
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    { "status": "resolved", "note": "Area cleaned" }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert resolved or already resolved', () => pm.expect([200, 409]).to.include(pm.response.code));
+    language: text/javascript
+order: 11000

@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.DS_Store
 *.py[codz]
 *$py.class
 
@@ -149,6 +150,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -156,6 +159,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Firebase Admin service-account keys
+*firebase-adminsdk*.json
 
 # Spyder project settings
 .spyderproject
@@ -195,9 +201,9 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#   and can be added to the global gitignore or merged into this file. However, if you prefer,
 #   you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 # Temporary file for partial code execution
@@ -301,5 +307,12 @@ backend/dist/
 node_modules/
 .local/
 data/*.sqlite3
+data/media-store/
+data/Test videos/
+.postman/
+postman/exports/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 bun.lock
 bun.lockb

@@ -1,22 +1,21 @@
-"""Deep application service for one complete LitterSpot frame analysis."""
+"""Stateless model orchestration for one LitterSpot frame."""
 from __future__ import annotations
 
-from io import BytesIO
 from time import perf_counter
 
 from PIL import Image, ImageDraw
 
-from .analysis_store import AnalysisStore
 from .bin_localizer import BinLocalizer
+from .config import BIN_LOCALIZER_VERSION, FLOOR_HAZARD_VERSION, PEOPLE_COUNT_VERSION, STATE_CLASSIFIER_VERSION
 from .floor_hazard import FloorHazardAnalyzer
 from .multi_state_classifier import MultiStateClassifier
 from .schemas import (
     BoundingBox,
     FloorHazard,
+    FrameBinInference,
     ImageInfo,
-    LocalizedBinAnalysis,
     PipelineAnalysisResponse,
-    PipelineFlag,
+    PipelineModelVersions,
     PipelineOptions,
     Point,
 )
@@ -31,7 +30,7 @@ class InvalidFocusRegionError(ValueError):
 
 
 class AnalysisPipeline:
-    """Hides model coordination, ROI transforms, flagging, and persistence."""
+    """Coordinates models and ROI transforms without storing business state."""
 
     BIN_BLOCKER_CLASSES = {"person", "bottle", "tv", "cell phone"}
     BIN_BLOCKER_COVERAGE = 0.40
@@ -41,12 +40,10 @@ class AnalysisPipeline:
         state_classifier: MultiStateClassifier,
         bin_localizer: BinLocalizer,
         floor_analyzer: FloorHazardAnalyzer,
-        store: AnalysisStore,
     ) -> None:
         self.state_classifier = state_classifier
         self.bin_localizer = bin_localizer
         self.floor_analyzer = floor_analyzer
-        self.store = store
 
     @property
     def ready(self) -> bool:
@@ -55,12 +52,7 @@ class AnalysisPipeline:
     def analyze(
         self,
         image: Image.Image,
-        image_name: str,
         options: PipelineOptions,
-        evidence_bytes: bytes | None = None,
-        *,
-        is_demo: bool = False,
-        persist: bool = True,
     ) -> PipelineAnalysisResponse:
         if not self.ready:
             raise PipelineNotReadyError("One or more pipeline models are not ready")
@@ -73,30 +65,28 @@ class AnalysisPipeline:
             candidate for candidate in candidates
             if not self._blocked_bin(candidate.bbox, scene.objects)
         ]
-        bins = [self._classify_bin(image, candidate, index, options) for index, candidate in enumerate(candidates, start=1)]
+        bins = [self._classify_bin(image, candidate, index) for index, candidate in enumerate(candidates, start=1)]
 
         floor_result = self.floor_analyzer.analyze(floor_image, options.floorConfidence, detect_people=False)
         hazards = [self._translate_hazard(hazard, offset_x, offset_y) for hazard in floor_result.hazards]
         hazards = FloorHazardAnalyzer.filter_hazards(hazards, scene.objects)
         hazards = self._floor_hazards_for_context(hazards, options.focusRegion)
-        flags = self._flags_for(bins, hazards)
 
-        result = PipelineAnalysisResponse(
-            isDemo=is_demo,
-            imageName=image_name,
-            cameraId=options.cameraId,
+        return PipelineAnalysisResponse(
             image=ImageInfo(width=image.width, height=image.height),
             focusRegion=options.focusRegion,
             peopleCount=len(scene.people),
             people=scene.people,
             bins=bins,
             floorHazards=hazards,
-            flags=flags,
+            modelVersions=PipelineModelVersions(
+                floorHazard=FLOOR_HAZARD_VERSION,
+                people=PEOPLE_COUNT_VERSION,
+                binLocalizer=BIN_LOCALIZER_VERSION,
+                binState=STATE_CLASSIFIER_VERSION,
+            ),
             processingTimeMs=(perf_counter() - started) * 1000,
         )
-        if persist:
-            result.analysisId = self.store.save(result.model_dump(), evidence_bytes, image_name)
-        return result
 
     @classmethod
     def _blocked_bin(cls, bbox: BoundingBox, objects) -> bool:
@@ -111,49 +101,24 @@ class AnalysisPipeline:
         """Keep filtered candidates visible; an optional focus region narrows inference upstream."""
         return hazards
 
-    def seed_demo_frames(self) -> int:
-        """Analyse the persisted demo evidence through the normal production path."""
-        if not self.ready:
-            return 0
-        processed = 0
-        for camera_id, image_name, evidence_path in self.store.pending_demo_frames():
-            try:
-                contents = evidence_path.read_bytes()
-                image = Image.open(BytesIO(contents)).convert("RGB")
-                self.analyze(
-                    image,
-                    image_name,
-                    PipelineOptions(cameraId=camera_id, confirmationFrames=1),
-                    contents,
-                    is_demo=True,
-                )
-                processed += 1
-            except (OSError, ValueError):
-                # A damaged checked-in sample must not prevent the service starting.
-                continue
-        return processed
-
-    def _classify_bin(self, image: Image.Image, candidate, index: int, options: PipelineOptions) -> LocalizedBinAnalysis:
+    def _classify_bin(self, image: Image.Image, candidate, index: int) -> FrameBinInference:
         classification = self.state_classifier.classify(
             image,
             candidate.bbox,
-            options.cameraId,
-            f"frame-bin-{index}" if options.cameraId else None,
-            options.confirmationFrames,
+            None,
+            None,
+            1,
             False,
             True,
         )
-        return LocalizedBinAnalysis(
+        return FrameBinInference(
             binIndex=index,
             localizerConfidence=candidate.confidence,
             bbox=candidate.bbox,
             classificationRegion=classification.region,
             state=classification.state,
-            stableState=classification.stableState,
             stateConfidence=classification.confidence,
             signals=classification.signals,
-            confirmed=classification.confirmed,
-            confirmationFrames=classification.confirmationFrames,
             unknownReasons=classification.unknownReasons,
             processingTimeMs=classification.processingTimeMs,
         )
@@ -188,19 +153,3 @@ class AnalysisPipeline:
             ),
             polygon=[Point(x=point.x + offset_x, y=point.y + offset_y) for point in hazard.polygon],
         )
-
-    @staticmethod
-    def _flags_for(bins: list[LocalizedBinAnalysis], hazards: list[FloorHazard]) -> list[PipelineFlag]:
-        flags = [
-            PipelineFlag(severity="critical", kind="bin_overflow", message=f"Bin {item.binIndex}: confirmed overflow")
-            for item in bins if item.state == "overflow" and item.confirmed
-        ]
-        flags.extend(
-            PipelineFlag(
-                severity="critical" if hazard.className == "floor_spill" else "warning",
-                kind=hazard.className,
-                message=hazard.className.replace("_", " ").title(),
-            )
-            for hazard in hazards
-        )
-        return flags

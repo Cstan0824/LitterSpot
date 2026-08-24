@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/api/cameras/{{cameraId}}"
+method: PATCH
+headers:
+  Authorization: "Bearer {{firebaseIdToken}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Updated Postman camera",
+      "sourceMode": "upload"
+    }
+scripts:
+  - type: afterResponse
+    code: pm.test('Camera updated', () => pm.response.to.have.status(200));
+    language: text/javascript
+order: 4000
