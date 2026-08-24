@@ -1,0 +1,11 @@
+{
+  "scenario": "insufficient-coverage",
+  "description": "Only five observations and two unknown classifier states.",
+  "rows": [
+    {"createdAt": "2026-08-25T14:00:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": [{"className": "floor_litter", "bbox": {"x1": 100, "y1": 600, "x2": 140, "y2": 640}}]}},
+    {"createdAt": "2026-08-25T14:01:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "unknown"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T14:02:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T14:03:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "unknown"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T14:04:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "scenario": "replacement-needed",
+  "description": "Persistently full bin with recurring litter, a spill, and high foot traffic.",
+  "rows": [
+    {"createdAt": "2026-08-25T12:00:00+00:00", "peopleCount": 4, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": [{"className": "floor_litter", "bbox": {"x1": 100, "y1": 600, "x2": 140, "y2": 640}}]}},
+    {"createdAt": "2026-08-25T12:01:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T12:02:00+00:00", "peopleCount": 4, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": [{"className": "floor_spill", "bbox": {"x1": 700, "y1": 600, "x2": 760, "y2": 660}}]}},
+    {"createdAt": "2026-08-25T12:03:00+00:00", "peopleCount": 2, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": [{"className": "floor_litter", "bbox": {"x1": 120, "y1": 600, "x2": 160, "y2": 640}}]}},
+    {"createdAt": "2026-08-25T12:04:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T12:05:00+00:00", "peopleCount": 4, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T12:06:00+00:00", "peopleCount": 1, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": [{"className": "floor_litter", "bbox": {"x1": 800, "y1": 500, "x2": 840, "y2": 540}}]}},
+    {"createdAt": "2026-08-25T12:07:00+00:00", "peopleCount": 3, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T12:08:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T12:09:00+00:00", "peopleCount": 2, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "full"}], "floorHazards": []}}
+  ]
+}
