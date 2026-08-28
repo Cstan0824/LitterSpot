@@ -26,6 +26,23 @@ describe("camera registration bin geometry", () => {
     expect(cameraRegistrationPreviewSourceSchema.safeParse("stream").success).toBe(false);
   });
 
+  it("preserves the original video source needed to restore video behavior", () => {
+    const result = cameraRegistrationDraftSchema.parse({
+      ...draft([]),
+      referenceSource: {
+        type: "video",
+        mediaId: "video-source-1",
+        capturedFrameTimeSeconds: 2.25,
+      },
+    });
+
+    expect(result.referenceSource).toEqual({
+      type: "video",
+      mediaId: "video-source-1",
+      capturedFrameTimeSeconds: 2.25,
+    });
+  });
+
   it("accepts a camera view without registered bins", () => {
     expect(cameraRegistrationDraftSchema.parse(draft([])).bins).toEqual([]);
   });

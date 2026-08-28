@@ -53,6 +53,12 @@ export type CameraRegistrationBin = {
 export type CameraRegistrationDraft = {
   schemaVersion: 2;
   referenceMediaId: string;
+  referenceSource: { type: "image" } | {
+    type: "video";
+    mediaId: string;
+    capturedFrameTimeSeconds: number;
+    durationSeconds?: number;
+  };
   sourceWidth: number;
   sourceHeight: number;
   walkableFloorPolygon: RegistrationPolygon;
@@ -83,6 +89,15 @@ export type CameraRegistrationWorkspace = {
     byteSize: number;
     width: number;
     height: number;
+    available: boolean;
+  } | null;
+  sourceMedia: {
+    id: string;
+    contentUrl: string;
+    originalFileName: string;
+    mimeType: string;
+    byteSize: number;
+    durationSeconds: number | null;
     available: boolean;
   } | null;
 };
@@ -171,6 +186,15 @@ export async function uploadCameraRegistrationReference(cameraId: string, file: 
   form.append("image", file, file.name);
   return (await request<{ media: CameraRegistrationReferenceMedia }>(
     `/api/cameras/${encodeURIComponent(cameraId)}/registration/reference`,
+    { method: "POST", body: form },
+  )).media;
+}
+
+export async function uploadCameraRegistrationVideoSource(cameraId: string, file: File) {
+  const form = new FormData();
+  form.append("video", file, file.name);
+  return (await request<{ media: CameraRegistrationReferenceMedia & { mediaType: "video" } }>(
+    `/api/cameras/${encodeURIComponent(cameraId)}/registration/source-video`,
     { method: "POST", body: form },
   )).media;
 }

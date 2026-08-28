@@ -31,8 +31,19 @@ const qualitySchema = z.object({
 
 const binIdSchema = z.string().trim().regex(/^bin-[A-Za-z0-9_-]{1,32}$/i);
 
+const referenceSourceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("image") }).strict(),
+  z.object({
+    type: z.literal("video"),
+    mediaId: z.string().trim().min(1).max(128),
+    capturedFrameTimeSeconds: z.number().finite().nonnegative(),
+    durationSeconds: z.number().finite().positive().optional(),
+  }).strict(),
+]).default({ type: "image" });
+
 const registrationBaseSchema = z.object({
   referenceMediaId: z.string().trim().min(1).max(128),
+  referenceSource: referenceSourceSchema,
   sourceWidth: z.number().int().positive().max(16_000),
   sourceHeight: z.number().int().positive().max(16_000),
   walkableFloorPolygon: checkedPolygonSchema,
@@ -71,6 +82,7 @@ export type CameraRegistrationDraftV2 = z.infer<typeof cameraRegistrationDraftV2
 export type CameraRegistrationDraft = CameraRegistrationDraftV2;
 export type RegisteredBin = z.infer<typeof registeredBinSchema>;
 export type CameraRegistrationPreviewSource = z.infer<typeof cameraRegistrationPreviewSourceSchema>;
+export type CameraRegistrationReferenceSource = z.infer<typeof referenceSourceSchema>;
 
 export function normalizeCameraRegistrationDraft(draft: CameraRegistrationDraft): CameraRegistrationDraftV2 {
   return draft;

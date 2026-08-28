@@ -22,6 +22,10 @@ export type CameraRegistrationReferenceMedia = {
   byteSize: number;
 };
 
+export type CameraRegistrationVideoSource = CameraRegistrationReferenceMedia & {
+  mediaType: "video";
+};
+
 export type CameraRegistrationAttachment = CameraRegistrationReferenceMedia & {
   mediaType: "image" | "video";
   createdAt: string | null;
@@ -137,6 +141,77 @@ export async function createCameraRegistrationReference(
     originalFileName: cleanOriginalName(file.originalname),
     mimeType: detected.mimeType,
     byteSize: file.size,
+  };
+}
+
+/** Store the original registration video alongside the extracted clean frame.
+ * The draft points at both assets so reopening the editor can restore
+ * continuous video validation instead of silently degrading to image mode. */
+export async function createCameraRegistrationVideoSource(
+  cameraId: string,
+  file: Express.Multer.File,
+  actorUid: string,
+): Promise<CameraRegistrationVideoSource> {
+  if (file.buffer.length < 1) throw new HttpError(400, "The reference video is empty.");
+  const detected = detectSupportedVideo(file.buffer.subarray(0, 16));
+  validateDeclaredVideoType(file.mimetype, detected);
+
+  const mediaId = randomUUID();
+  const mediaReference = firestore.collection("mediaAssets").doc(mediaId);
+  const storageKey = `media/${mediaId}/registration-source.${detected.extension}`;
+  const sha256 = createHash("sha256").update(file.buffer).digest("hex");
+
+  await firestore.runTransaction(async (transaction) => {
+    const cameraReference = firestore.collection("cameras").doc(cameraId);
+    const cameraSnapshot = await transaction.get(cameraReference);
+    const camera = cameraSnapshot.data();
+    if (!cameraSnapshot.exists || camera?.status !== "active") {
+      throw new HttpError(400, "Camera does not exist or is inactive.");
+    }
+    transaction.create(mediaReference, {
+      kind: "original_upload",
+      sourceType: "camera_registration_video",
+      originalFileName: cleanOriginalName(file.originalname),
+      storageKey,
+      storageStatus: "pending",
+      mimeType: detected.mimeType,
+      byteSize: file.size,
+      sha256,
+      width: null,
+      height: null,
+      durationSeconds: null,
+      parentMediaId: null,
+      frameIndex: null,
+      videoOffsetSeconds: null,
+      siteId: String(camera.siteId),
+      siteNameSnapshot: String(camera.siteNameSnapshot),
+      zoneId: String(camera.zoneId),
+      zoneNameSnapshot: String(camera.zoneNameSnapshot),
+      cameraId: cameraSnapshot.id,
+      cameraCodeSnapshot: String(camera.code),
+      cameraNameSnapshot: String(camera.name),
+      capturedAt: FieldValue.serverTimestamp(),
+      isTest: false,
+      createdAt: FieldValue.serverTimestamp(),
+      createdByUid: actorUid,
+    });
+  });
+
+  try {
+    await writeMedia(storageKey, file.buffer);
+    await mediaReference.update({ storageStatus: "available", storageCheckedAt: FieldValue.serverTimestamp() });
+  } catch {
+    await mediaReference.update({ storageStatus: "missing", storageCheckedAt: FieldValue.serverTimestamp() }).catch(() => undefined);
+    throw new HttpError(500, "The registration reference video could not be stored.");
+  }
+
+  return {
+    id: mediaId,
+    contentUrl: `/api/media/${mediaId}/content`,
+    originalFileName: cleanOriginalName(file.originalname),
+    mimeType: detected.mimeType,
+    byteSize: file.size,
+    mediaType: "video",
   };
 }
 

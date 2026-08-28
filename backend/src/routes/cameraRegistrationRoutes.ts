@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { cameraRegistrationDraftSchema, cameraRegistrationPreviewSourceSchema, publishCameraRegistrationSchema } from "../schemas/cameraRegistration.js";
 import { getCameraRegistration, getCameraRegistrationDraft, getCameraRegistrationWorkspace, listCameraRegistrationRevisions, publishCameraRegistration, saveCameraRegistrationDraft, validateCameraRegistration } from "../services/cameraRegistrationService.js";
-import { createCameraRegistrationAttachment, createCameraRegistrationReference, listCameraRegistrationAttachments } from "../services/cameraRegistrationReference.js";
+import { createCameraRegistrationAttachment, createCameraRegistrationReference, createCameraRegistrationVideoSource, listCameraRegistrationAttachments } from "../services/cameraRegistrationReference.js";
 import { previewCameraRegistration } from "../services/cameraRegistrationPreview.js";
 import { HttpError } from "../shared/httpError.js";
 
@@ -46,6 +46,13 @@ cameraRegistrationRoutes.post("/:cameraId/registration/reference", referenceUplo
   if (!req.file) return res.status(400).json({ error: "A clean reference image is required.", requestId: req.requestId });
   return res.status(201).json({
     media: await createCameraRegistrationReference(String(req.params.cameraId), req.file, req.supervisor.uid),
+  });
+});
+
+cameraRegistrationRoutes.post("/:cameraId/registration/source-video", attachmentUpload.single("video"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "A reference video is required.", requestId: req.requestId });
+  return res.status(201).json({
+    media: await createCameraRegistrationVideoSource(String(req.params.cameraId), req.file, req.supervisor.uid),
   });
 });
 

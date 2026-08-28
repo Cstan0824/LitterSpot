@@ -6,6 +6,7 @@ import {
   publishCameraRegistration,
   saveCameraRegistrationDraft,
   uploadCameraRegistrationReference,
+  uploadCameraRegistrationVideoSource,
   validateCameraRegistration,
   type CameraRecord,
   type CameraRegistrationBin,
@@ -14,6 +15,7 @@ import {
   type CameraRegistrationWorkspace,
 } from "../../../services/locationAPI";
 import { createVideoMetadataUpdate } from "./videoReferenceState";
+import { restorableVideoSource } from "./referenceSourcePersistence";
 import {
   buildVideoValidationSamples,
   canPlayValidationFrame,
@@ -38,6 +40,7 @@ type ReferencePreview = {
 type VideoReferenceSource = {
   objectUrl: string;
   file: File;
+  mediaId?: string;
   fileName: string;
   duration: number | null;
   ready: boolean;
@@ -94,6 +97,7 @@ function emptyDraft(): EditorDraft {
   return {
     schemaVersion: 2,
     referenceMediaId: "",
+    referenceSource: { type: "image" },
     sourceWidth: 0,
     sourceHeight: 0,
     walkableFloorPolygon: [],
@@ -123,6 +127,7 @@ function apiDraft(draft: EditorDraft): CameraRegistrationDraft {
   return {
     schemaVersion: 2,
     referenceMediaId: draft.referenceMediaId.trim(),
+    referenceSource: draft.referenceSource,
     sourceWidth: draft.sourceWidth || draft.reference.width,
     sourceHeight: draft.sourceHeight || draft.reference.height,
     walkableFloorPolygon: draft.walkableFloorPolygon,
@@ -408,6 +413,7 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
       const registration = nextWorkspace.registration;
       let reference: ReferencePreview | null = null;
       let referenceUnavailable = Boolean(nextWorkspace.registration && (!nextWorkspace.reference || !nextWorkspace.reference.available));
+      let videoUnavailable = false;
       if (nextWorkspace.reference?.available) {
         try {
           const response = await apiFetch(nextWorkspace.reference.contentUrl);
@@ -427,11 +433,41 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
           referenceUnavailable = true;
         }
       }
+      const persistedVideo = restorableVideoSource(nextWorkspace);
+      if (registration.referenceSource.type === "video") {
+        if (!persistedVideo) {
+          videoUnavailable = true;
+        } else {
+          try {
+            const response = await apiFetch(persistedVideo.contentUrl);
+            if (!response.ok) throw new Error("video-unavailable");
+            const blob = await response.blob();
+            const nextVideoUrl = URL.createObjectURL(blob);
+            replaceVideoObjectUrl(nextVideoUrl);
+            setVideoSource({
+              objectUrl: nextVideoUrl,
+              file: new File([blob], persistedVideo.fileName, { type: blob.type || persistedVideo.mimeType }),
+              mediaId: persistedVideo.mediaId,
+              fileName: persistedVideo.fileName,
+              duration: persistedVideo.duration,
+              ready: false,
+              capturedFrameTime: persistedVideo.capturedFrameTime,
+            });
+            setVideoTime(persistedVideo.capturedFrameTime);
+          } catch {
+            videoUnavailable = true;
+          }
+        }
+      }
       setDraft({ ...registration, quality: registration.quality ?? DEFAULT_QUALITY, reference });
       setSelectedBinId(registration.bins[0]?.binId ?? "");
       setCurrentStep(reference ? "review" : "reference");
       setNote(referenceUnavailable
         ? "Saved geometry loaded, but its reference frame is unavailable. Upload a replacement before validating."
+        : videoUnavailable
+          ? "The saved reference frame loaded, but its original video is unavailable. Upload the video again to restore continuous validation."
+        : persistedVideo
+          ? "Saved video registration restored. You can replay continuous validation or adjust the plotted regions."
         : nextWorkspace.source === "draft"
         ? "Saved draft restored. Review the geometry, validate it, then publish when the benchmark looks correct."
         : reference
@@ -472,12 +508,18 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
     setCurrentStep(step);
   }
 
-  async function storeReferenceImage(file: File, dimensions: { width: number; height: number }, nextUrl = URL.createObjectURL(file)) {
+  async function storeReferenceImage(
+    file: File,
+    dimensions: { width: number; height: number },
+    nextUrl = URL.createObjectURL(file),
+    referenceSource: CameraRegistrationDraft["referenceSource"] = { type: "image" },
+  ) {
     replaceObjectUrl(nextUrl);
     setReferenceFile(file);
     mutateDraft((current) => ({
       ...current,
       referenceMediaId: "",
+      referenceSource,
       sourceWidth: dimensions.width,
       sourceHeight: dimensions.height,
       reference: { objectUrl: nextUrl, fileName: file.name, width: dimensions.width, height: dimensions.height, capturedAt: new Date().toISOString() },
@@ -556,9 +598,18 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
       const capturedFrameTime = video.currentTime;
       const frameName = `${stem}-frame-${Math.round(capturedFrameTime * 1000)}ms.jpg`;
       const frame = new File([blob], frameName, { type: "image/jpeg", lastModified: Date.now() });
-      const stored = await storeReferenceImage(frame, { width: canvas.width, height: canvas.height });
+      const sourceMedia = videoSource.mediaId
+        ? { id: videoSource.mediaId }
+        : await uploadCameraRegistrationVideoSource(camera.id, videoSource.file);
+      const referenceSource: CameraRegistrationDraft["referenceSource"] = {
+        type: "video",
+        mediaId: sourceMedia.id,
+        capturedFrameTimeSeconds: capturedFrameTime,
+        ...(videoSource.duration != null && videoSource.duration > 0 ? { durationSeconds: videoSource.duration } : {}),
+      };
+      const stored = await storeReferenceImage(frame, { width: canvas.width, height: canvas.height }, undefined, referenceSource);
       if (stored) {
-        setVideoSource((current) => current ? { ...current, capturedFrameTime } : current);
+        setVideoSource((current) => current ? { ...current, mediaId: sourceMedia.id, capturedFrameTime } : current);
         setNote("Video reference frame stored. Validation will analyze one frame per video second with synchronized playback.");
       }
     } catch (reason) {
@@ -761,7 +812,7 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
         {currentStep === "reference" && <section className="registration-step-panel-v2">
           <div className="registration-step-heading-v2"><div><span className="step">01</span><div><span className="eyebrow">REFERENCE FRAME</span><h2>Set the camera baseline</h2><p>Upload a clean image, or pause a camera video on a representative frame. The saved still frame is used for plotting, while the video remains available for continuous validation.</p></div></div><span className="registration-status-chip-v2">{videoSource ? videoSource.capturedFrameTime == null ? "Select frame" : "Frame stored" : referenceReady ? "Stored" : "Required"}</span></div>
           <div className="registration-reference-layout-v2"><div className={`registration-reference-drop-v2 ${videoSource ? "has-video" : ""}`}>{videoSource ? <div className="registration-reference-video-v2">
-            <video ref={videoElement} src={videoSource.objectUrl} controls playsInline preload="metadata" onLoadedMetadata={(event) => setVideoSource(createVideoMetadataUpdate(event))} onLoadedData={() => setVideoSource((current) => current ? { ...current, ready: true } : current)} onTimeUpdate={(event) => setVideoTime(event.currentTarget.currentTime)} onError={() => { setVideoSource((current) => current ? { ...current, ready: false } : current); setNote("This video codec cannot be decoded by the browser. Try an MP4 using H.264 video."); }} />
+            <video ref={videoElement} src={videoSource.objectUrl} controls playsInline preload="metadata" onLoadedMetadata={(event) => setVideoSource(createVideoMetadataUpdate(event))} onLoadedData={(event) => setVideoSource((current) => { if (current?.capturedFrameTime != null) event.currentTarget.currentTime = current.capturedFrameTime; return current ? { ...current, ready: true } : current; })} onTimeUpdate={(event) => setVideoTime(event.currentTarget.currentTime)} onError={() => { setVideoSource((current) => current ? { ...current, ready: false } : current); setNote("This video codec cannot be decoded by the browser. Try an MP4 using H.264 video."); }} />
             <div className="registration-video-frame-controls-v2"><div><strong>{videoSource.fileName}</strong><small>Current frame {formatVideoTime(videoTime)}{videoSource.duration == null ? "" : ` / ${formatVideoTime(videoSource.duration)}`}{videoSource.capturedFrameTime == null ? "" : ` · reference @ ${formatVideoTime(videoSource.capturedFrameTime)}`}</small></div><button type="button" className="primary" disabled={capturingVideo || !videoSource.ready} onClick={() => void captureVideoFrame()}>{capturingVideo ? "Capturing…" : videoSource.ready ? videoSource.capturedFrameTime == null ? "Use current frame" : "Update current frame" : "Loading video…"}</button></div>
           </div> : draft.reference ? <img src={draft.reference.objectUrl} alt="Selected camera reference" /> : <div><span>NO REFERENCE FRAME</span><small>Choose a clean image, or select a video and capture the best frame.</small></div>}<label className="registration-upload-button-v2">{videoSource ? "Choose another file" : draft.reference ? "Replace source" : "Choose image or video"}<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" onChange={(event) => void setReferenceSource(event)} /></label></div><aside className="registration-info-card-v2"><span className="eyebrow">CAMERA</span><strong>{camera.name}</strong><dl><div><dt>Camera ID</dt><dd>{camera.code}</dd></div><div><dt>Zone</dt><dd>{camera.zoneName}</dd></div><div><dt>Source</dt><dd>{camera.sourceMode}</dd></div><div><dt>Frame</dt><dd>{videoSource ? `Video · ${formatVideoTime(videoTime)}` : draft.reference ? `${draft.sourceWidth} × ${draft.sourceHeight}` : "—"}</dd></div></dl><p>{note}</p></aside></div>
           <div className="registration-step-footer-v2"><span>Images validate once. Videos are sampled once per second and displayed with a two-second result buffer.</span><button type="button" className="primary" disabled={!referenceReady} onClick={() => navigateStep("floor")}>Continue to walkable floor <span>→</span></button></div>

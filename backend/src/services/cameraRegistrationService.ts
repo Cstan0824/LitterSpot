@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp, type DocumentData, type DocumentSnapshot } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
-import { normalizeCameraRegistrationDraft, type CameraRegistrationDraft, type CameraRegistrationDraftV2 } from "../schemas/cameraRegistration.js";
+import { normalizeCameraRegistrationDraft, type CameraRegistrationDraft, type CameraRegistrationDraftV2, type CameraRegistrationReferenceSource } from "../schemas/cameraRegistration.js";
 import { HttpError } from "../shared/httpError.js";
 import { getMedia } from "./mediaService.js";
 import { getCamera } from "./locationService.js";
@@ -26,10 +26,34 @@ export type CameraRegistrationWorkspace = {
     height: number;
     available: boolean;
   } | null;
+  sourceMedia: {
+    id: string;
+    contentUrl: string;
+    originalFileName: string;
+    mimeType: string;
+    byteSize: number;
+    durationSeconds: number | null;
+    available: boolean;
+  } | null;
 };
 
 function timestamp(value: unknown) {
   return value instanceof Timestamp ? value.toDate().toISOString() : null;
+}
+
+function referenceSource(value: unknown): CameraRegistrationReferenceSource {
+  if (!value || typeof value !== "object") return { type: "image" };
+  const source = value as Record<string, unknown>;
+  if (source.type !== "video" || typeof source.mediaId !== "string" || !source.mediaId.trim()) return { type: "image" };
+  const capturedFrameTimeSeconds = Number(source.capturedFrameTimeSeconds);
+  if (!Number.isFinite(capturedFrameTimeSeconds) || capturedFrameTimeSeconds < 0) return { type: "image" };
+  const durationSeconds = Number(source.durationSeconds);
+  return {
+    type: "video",
+    mediaId: source.mediaId,
+    capturedFrameTimeSeconds,
+    ...(Number.isFinite(durationSeconds) && durationSeconds > 0 ? { durationSeconds } : {}),
+  };
 }
 
 function serialize(snapshot: DocumentSnapshot) {
@@ -52,6 +76,7 @@ function serialize(snapshot: DocumentSnapshot) {
     status: String(data.status ?? "ready") as "ready" | "stale" | "invalid",
     schemaVersion: 2,
     referenceMediaId: String(data.referenceMediaId),
+    referenceSource: referenceSource(data.referenceSource),
     sourceWidth: Number(data.sourceWidth),
     sourceHeight: Number(data.sourceHeight),
     walkableFloorPolygon: data.walkableFloorPolygon ?? [],
@@ -69,6 +94,7 @@ function registrationDraftFromPublished(value: ReturnType<typeof serialize>): Ca
   return {
     schemaVersion: 2 as const,
     referenceMediaId: value.referenceMediaId,
+    referenceSource: value.referenceSource,
     sourceWidth: value.sourceWidth,
     sourceHeight: value.sourceHeight,
     walkableFloorPolygon: value.walkableFloorPolygon as CameraRegistrationDraftV2["walkableFloorPolygon"],
@@ -106,6 +132,33 @@ async function referenceDescriptor(draft: CameraRegistrationDraftV2 | null) {
   }
 }
 
+async function sourceMediaDescriptor(draft: CameraRegistrationDraftV2 | null) {
+  if (!draft || draft.referenceSource.type !== "video") return null;
+  const fallback = {
+    id: draft.referenceSource.mediaId,
+    contentUrl: `/api/media/${encodeURIComponent(draft.referenceSource.mediaId)}/content`,
+    originalFileName: "Reference video",
+    mimeType: "video/*",
+    byteSize: 0,
+    durationSeconds: draft.referenceSource.durationSeconds ?? null,
+    available: false,
+  };
+  try {
+    const media = await getMedia(draft.referenceSource.mediaId);
+    return {
+      id: media.id,
+      contentUrl: media.contentUrl,
+      originalFileName: media.originalFileName,
+      mimeType: media.mimeType,
+      byteSize: media.byteSize,
+      durationSeconds: media.durationSeconds ?? draft.referenceSource.durationSeconds ?? null,
+      available: media.storageStatus === "available",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function assertCameraId(cameraId: string) {
   if (!cameraId.trim() || cameraId.length > 128) throw new HttpError(400, "A valid cameraId is required.");
 }
@@ -133,6 +186,18 @@ async function assertReferenceMedia(cameraId: string, mediaId: string, sourceWid
   }
 }
 
+async function assertReferenceSourceMedia(cameraId: string, source: CameraRegistrationReferenceSource) {
+  if (source.type !== "video") return;
+  const media = await getMedia(source.mediaId);
+  if (media.cameraId !== cameraId) throw new HttpError(409, "Reference video belongs to a different camera.");
+  if (media.storageStatus !== "available") throw new HttpError(409, "Reference video is not available.");
+  if (!media.mimeType.startsWith("video/")) throw new HttpError(409, "Reference source media must be a video.");
+  const duration = media.durationSeconds ?? source.durationSeconds;
+  if (duration != null && source.capturedFrameTimeSeconds > duration + 0.1) {
+    throw new HttpError(409, "Captured reference-frame time exceeds the stored video duration.");
+  }
+}
+
 export async function getCameraRegistration(cameraId: string) {
   assertCameraId(cameraId);
   return serialize(await firestore.collection(ACTIVE_COLLECTION).doc(cameraId).get());
@@ -149,6 +214,7 @@ export async function getCameraRegistrationDraft(cameraId: string) {
     draft: {
       schemaVersion: 2 as const,
       referenceMediaId: String(data.referenceMediaId),
+      referenceSource: referenceSource(data.referenceSource),
       sourceWidth: Number(data.sourceWidth),
       sourceHeight: Number(data.sourceHeight),
       walkableFloorPolygon: data.walkableFloorPolygon ?? [],
@@ -182,6 +248,7 @@ export async function getCameraRegistrationWorkspace(cameraId: string): Promise<
     draftUpdatedAt: savedDraft?.updatedAt ?? null,
     registration,
     reference: await referenceDescriptor(registration),
+    sourceMedia: await sourceMediaDescriptor(registration),
   };
 }
 
@@ -189,6 +256,7 @@ export async function saveCameraRegistrationDraft(cameraId: string, draft: Camer
   assertCameraId(cameraId);
   const normalized = normalizeCameraRegistrationDraft(draft);
   await assertReferenceMedia(cameraId, normalized.referenceMediaId, normalized.sourceWidth, normalized.sourceHeight);
+  await assertReferenceSourceMedia(cameraId, normalized.referenceSource);
   await firestore.collection(DRAFT_COLLECTION).doc(cameraId).set({
     cameraId,
     ...normalized,
@@ -214,6 +282,7 @@ export async function validateCameraRegistration(cameraId: string, draft: Camera
   assertCameraId(cameraId);
   const normalized = normalizeCameraRegistrationDraft(draft);
   await assertReferenceMedia(cameraId, normalized.referenceMediaId, normalized.sourceWidth, normalized.sourceHeight);
+  await assertReferenceSourceMedia(cameraId, normalized.referenceSource);
   const checks = geometryChecks(normalized);
   const errors = checks.filter((check) => !check.passed).map((check) => ({ code: check.code, message: check.message }));
   return {
