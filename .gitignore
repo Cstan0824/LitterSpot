@@ -308,6 +308,7 @@ node_modules/
 .local/
 data/*.sqlite3
 data/media-store/
+data/heldout-evaluation/
 data/Test videos/
 .postman/
 postman/exports/
@@ -316,3 +317,21 @@ firestore-debug.log
 ui-debug.log
 bun.lock
 bun.lockb
+
+# Local ML corpora and generated evaluation output. Keep acquisition/training
+# scripts, manifests, reports, configs, and explicitly allowlisted production
+# weights in Git; the large or reproducible payloads remain local.
+/artifacts/
+/data/evidence/
+/data/qualification/
+/dataset/floor_hazards/
+/dataset/floor_rubbish/prepared_specialist_dataset_v2/
+/dataset/floor_spill/
+/ml-training/data/
+/ml-training/floor_rubbish/runs/
+/models/huggingface/
+
+# Mock-suite metadata is reproducible and belongs in Git, but downloaded and
+# generated media does not.
+/mock-data/**/images/
+/mock-data/**/videos/
