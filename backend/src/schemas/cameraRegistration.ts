@@ -73,6 +73,19 @@ export const validateCameraRegistrationSchema = cameraRegistrationDraftSchema;
 
 export const cameraRegistrationPreviewSourceSchema = z.enum(["image", "video"]);
 
+export const cameraRegistrationPreviewTemporalStateSchema = z.object({
+  version: z.literal("video-bin-tracking-v1"),
+  nextId: z.number().int().positive(),
+  tracks: z.record(z.string(), z.unknown()),
+  stateHistories: z.record(z.string(), z.object({
+    registrationRevision: z.number().int().nonnegative(),
+    samples: z.array(z.object({
+      state: z.enum(["normal", "full", "overflow", "review", "unknown"]),
+      capturedAtMs: z.number().finite().nonnegative(),
+    }).strict()).max(3),
+  }).strict()).optional(),
+}).strict();
+
 export const publishCameraRegistrationSchema = z.object({
   draft: cameraRegistrationDraftSchema,
   expectedRevision: z.number().int().nonnegative().default(0),

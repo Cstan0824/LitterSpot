@@ -8,6 +8,17 @@ export type VideoValidationSample = {
 
 export type VideoValidationPhase = "running" | "complete" | "failed";
 
+type VideoBinState = "normal" | "full" | "overflow" | "review" | "unknown";
+
+export function displayedVideoBinState(bin: {
+  state: VideoBinState;
+  confirmed?: boolean;
+  stableState?: VideoBinState | null;
+}): VideoBinState {
+  if (bin.state === "unknown" || bin.state === "review") return bin.state;
+  return bin.confirmed && bin.stableState ? bin.stableState : "review";
+}
+
 export function canPlayValidationFrame(delayReleased: boolean, phase: string | undefined) {
   return delayReleased && phase === "complete";
 }

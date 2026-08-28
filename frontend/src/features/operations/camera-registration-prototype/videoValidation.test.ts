@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildVideoValidationSamples, canPlayValidationFrame, runSequentialVideoValidation, sampleForPlaybackTime, VIDEO_PLAYBACK_DELAY_MS } from "./videoValidation";
+import { buildVideoValidationSamples, canPlayValidationFrame, displayedVideoBinState, runSequentialVideoValidation, sampleForPlaybackTime, VIDEO_PLAYBACK_DELAY_MS } from "./videoValidation";
 
 describe("video registration validation schedule", () => {
   it("samples the supplied 3.918 second mock video once per displayed second", () => {
@@ -42,6 +42,12 @@ describe("video registration validation schedule", () => {
     expect(completed).toEqual(calls);
     expect(maximumConcurrency).toBe(1);
     expect(latest).toEqual({ second: 3 });
+  });
+
+  it("shows pending video evidence as review and a confirmed stable state as final", () => {
+    expect(displayedVideoBinState({ state: "overflow", confirmed: false, stableState: null })).toBe("review");
+    expect(displayedVideoBinState({ state: "overflow", confirmed: true, stableState: "overflow" })).toBe("overflow");
+    expect(displayedVideoBinState({ state: "unknown", confirmed: false, stableState: null })).toBe("unknown");
   });
 
 });

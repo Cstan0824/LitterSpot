@@ -164,6 +164,33 @@ class PipelineRegionTests(unittest.TestCase):
         self.assertEqual(result.bins, [])
         self.assertEqual(classifier.calls, 0)
 
+    def test_person_covered_registered_bin_keeps_identity_and_fails_closed(self):
+        classifier = RecordingStateClassifier()
+        result = AnalysisPipeline(
+            classifier, EmptyBinLocalizer(), ObjectAwareFloorAnalyzer(),
+        ).analyze(
+            Image.new("RGB", (100, 100)),
+            PipelineOptions(registration=self.registered_bin_context(), binReviewEnabled=True),
+            reference_image=Image.new("RGB", (100, 100)),
+        )
+
+        self.assertEqual(len(result.bins), 1)
+        self.assertEqual(result.bins[0].binId, "bin-1")
+        self.assertEqual(result.bins[0].state, "unknown")
+        self.assertEqual(result.bins[0].unknownReasons, ["registered_bin_occluded"])
+        self.assertEqual(classifier.calls, 0)
+
+    def test_registered_video_bin_without_reference_fails_closed(self):
+        result = AnalysisPipeline(
+            RecordingStateClassifier(), EmptyBinLocalizer(), DemoFloorAnalyzer(),
+        ).analyze(
+            Image.new("RGB", (100, 100)),
+            PipelineOptions(registration=self.registered_bin_context(), binReviewEnabled=True),
+        )
+
+        self.assertEqual(result.bins[0].state, "unknown")
+        self.assertIn("reference_evidence_unavailable", result.bins[0].unknownReasons)
+
     def test_registered_camera_surfaces_unregistered_shadow_candidate_as_unknown(self):
         registration = RegistrationContext(
             status="ready",

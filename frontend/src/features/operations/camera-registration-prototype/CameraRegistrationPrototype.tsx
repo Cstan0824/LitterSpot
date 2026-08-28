@@ -12,6 +12,7 @@ import {
   type CameraRegistrationBin,
   type CameraRegistrationDraft,
   type CameraRegistrationPreview,
+  type CameraRegistrationPreviewTemporalState,
   type CameraRegistrationWorkspace,
 } from "../../../services/locationAPI";
 import { createVideoMetadataUpdate } from "./videoReferenceState";
@@ -19,6 +20,7 @@ import { restorableVideoSource } from "./referenceSourcePersistence";
 import {
   buildVideoValidationSamples,
   canPlayValidationFrame,
+  displayedVideoBinState,
   runSequentialVideoValidation,
   sampleForPlaybackTime,
   VIDEO_PLAYBACK_DELAY_MS,
@@ -286,7 +288,10 @@ function ValidationModal({
   const [waitingForResult, setWaitingForResult] = useState(Boolean(videoSession));
   const activeFrame = videoSession ? sampleForPlaybackTime(videoSession.frames, videoTime) : undefined;
   const preview = videoSession ? activeFrame?.preview : state.preview;
-  const flags = preview ? preview.bins.filter((bin) => bin.state === "overflow" || bin.state === "full").length + preview.floorHazards.length : 0;
+  const flags = preview ? preview.bins.filter((bin) => {
+    const state = videoSession ? displayedVideoBinState(bin) : bin.state;
+    return state === "overflow" || state === "full";
+  }).length + preview.floorHazards.length : 0;
   const completedFrames = videoSession?.frames.filter((frame) => frame.phase === "complete").length ?? 0;
 
   useEffect(() => {
@@ -321,7 +326,7 @@ function ValidationModal({
       {videoSession && draft.reference && <>
         <div className="registration-result-frame-v2 registration-result-video-v2" style={{ aspectRatio: `${resultFrame.width} / ${resultFrame.height}` }}>
           <video ref={playbackVideo} src={videoSession.objectUrl} muted controls playsInline preload="auto" onPlay={(event) => { if (!canPlayValidationFrame(playbackReleased, activeFrame?.phase)) { event.currentTarget.pause(); setWaitingForResult(true); } }} onTimeUpdate={(event) => setVideoTime(event.currentTarget.currentTime)} onSeeked={(event) => setVideoTime(event.currentTarget.currentTime)} />
-          {preview?.bins.map((bin) => <span className={`registration-result-box-v2 bin ${bin.state}`} style={boxStyle(bin.bbox, preview.image)} key={`${activeFrame?.second ?? 0}-${bin.binId ?? "bin"}-${bin.binIndex}`}><i>{`Bin · ${bin.state}`}</i></span>)}
+          {preview?.bins.map((bin) => { const state = displayedVideoBinState(bin); return <span className={`registration-result-box-v2 bin ${state}`} style={boxStyle(bin.bbox, preview.image)} key={`${activeFrame?.second ?? 0}-${bin.binId ?? "bin"}-${bin.binIndex}`}><i>{`Bin · ${state}`}</i></span>; })}
           {preview?.people.map((person, index) => <span className="registration-result-box-v2 person" style={boxStyle(person.bbox, preview.image)} key={`${activeFrame?.second ?? 0}-person-${index}`}><i>People</i></span>)}
           {preview?.floorHazards.map((hazard, index) => <span className={`registration-result-box-v2 ${hazard.className}`} style={boxStyle(hazard.bbox, preview.image)} key={`${activeFrame?.second ?? 0}-${hazard.className}-${index}`}><i>{hazard.className === "floor_spill" ? "spill" : "litter"}</i></span>)}
           <span className={`registration-video-sync-v2 ${activeFrame?.phase ?? "queued"}`}>{!playbackReleased ? "Buffering 2-second delay" : activeFrame?.phase === "complete" ? `Synced · second ${activeFrame.second}` : activeFrame?.phase === "failed" ? `Second ${activeFrame.second} failed` : `Analyzing second ${activeFrame?.second ?? 0}`}</span>
@@ -740,10 +745,17 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
         });
         extractor = await prepareVideoExtractor(videoSource.objectUrl, controller.signal);
         const videoExtractor = extractor;
+        let temporalState: CameraRegistrationPreviewTemporalState | undefined;
         const latestPreview = await runSequentialVideoValidation(samples, async (sample) => {
           if (controller.signal.aborted) throw videoAbortError();
           const frame = await extractValidationFrame(videoExtractor, sample, videoSource.fileName, controller.signal);
-          return previewCameraRegistration(camera.id, frame, payload, "video", controller.signal);
+          const result = await previewCameraRegistration(camera.id, frame, payload, "video", controller.signal, {
+            state: temporalState,
+            capturedAtMs: Math.round(sample.timestamp * 1_000),
+            registrationRevision: workspace?.publishedRevision ?? 0,
+          });
+          temporalState = result.temporalState;
+          return result.preview;
         }, (sample, phase, preview, reason) => {
           const message = reason instanceof Error ? reason.message : reason ? `Second ${sample.second} could not be analyzed.` : undefined;
           if (preview) {
@@ -754,8 +766,8 @@ export function CameraRegistrationPrototype({ camera, onClose, onPublished }: Pr
         });
         setValidation({ phase: "complete", structural, preview: latestPreview });
       } else {
-        const preview = await previewCameraRegistration(camera.id, referenceFile, payload, "image", controller.signal);
-        setValidation({ phase: "complete", structural, preview });
+        const result = await previewCameraRegistration(camera.id, referenceFile, payload, "image", controller.signal);
+        setValidation({ phase: "complete", structural, preview: result.preview });
       }
       setValidatedFingerprint(draftFingerprint(draft));
       setNote(videoSource?.capturedFrameTime != null

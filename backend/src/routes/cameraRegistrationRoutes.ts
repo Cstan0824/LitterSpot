@@ -1,10 +1,11 @@
 import { Router } from "express";
 import multer from "multer";
-import { cameraRegistrationDraftSchema, cameraRegistrationPreviewSourceSchema, publishCameraRegistrationSchema } from "../schemas/cameraRegistration.js";
+import { cameraRegistrationDraftSchema, cameraRegistrationPreviewSourceSchema, cameraRegistrationPreviewTemporalStateSchema, publishCameraRegistrationSchema } from "../schemas/cameraRegistration.js";
 import { getCameraRegistration, getCameraRegistrationDraft, getCameraRegistrationWorkspace, listCameraRegistrationRevisions, publishCameraRegistration, saveCameraRegistrationDraft, validateCameraRegistration } from "../services/cameraRegistrationService.js";
 import { createCameraRegistrationReference, createCameraRegistrationVideoSource } from "../services/cameraRegistrationReference.js";
 import { previewCameraRegistration } from "../services/cameraRegistrationPreview.js";
 import { HttpError } from "../shared/httpError.js";
+import { VIDEO_BIN_TRACKING_VERSION, type VideoBinTrackingState } from "../services/videoBinTracking.js";
 
 export const cameraRegistrationRoutes = Router();
 const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -59,7 +60,27 @@ cameraRegistrationRoutes.post("/:cameraId/registration/preview", referenceUpload
     throw new HttpError(400, "The registration draft is not valid JSON.");
   }
   const sourceType = cameraRegistrationPreviewSourceSchema.parse(req.body.sourceType ?? "image");
-  return res.json({ preview: await previewCameraRegistration(String(req.params.cameraId), req.file, draft, sourceType) });
+  let temporalState: VideoBinTrackingState = { version: VIDEO_BIN_TRACKING_VERSION, nextId: 1, tracks: {} };
+  if (sourceType === "video" && typeof req.body.temporalState === "string" && req.body.temporalState.trim()) {
+    try {
+      const parsed = cameraRegistrationPreviewTemporalStateSchema.parse(JSON.parse(req.body.temporalState));
+      temporalState = { version: VIDEO_BIN_TRACKING_VERSION, nextId: 1, tracks: {}, stateHistories: parsed.stateHistories };
+    } catch {
+      throw new HttpError(400, "The video temporal state is not valid JSON.");
+    }
+  }
+  const capturedAtMs = Number(req.body.capturedAtMs ?? 0);
+  const registrationRevision = Number(req.body.registrationRevision ?? 0);
+  if (sourceType === "video" && (!Number.isFinite(capturedAtMs) || capturedAtMs < 0 || !Number.isInteger(registrationRevision) || registrationRevision < 0)) {
+    throw new HttpError(400, "The video preview timing context is invalid.");
+  }
+  return res.json(await previewCameraRegistration(
+    String(req.params.cameraId),
+    req.file,
+    draft,
+    sourceType,
+    sourceType === "video" ? { state: temporalState, capturedAtMs, registrationRevision } : undefined,
+  ));
 });
 
 cameraRegistrationRoutes.put("/:cameraId/registration", async (req, res) => {

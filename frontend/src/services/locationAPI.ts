@@ -105,7 +105,7 @@ export type CameraRegistrationPreview = {
   image: { width: number; height: number };
   peopleCount: number;
   people: Array<{ confidence: number; bbox: { x1: number; y1: number; x2: number; y2: number } }>;
-  bins: Array<{ binIndex: number; binId?: string; state: "normal" | "full" | "overflow" | "review" | "unknown"; stateConfidence: number; bbox: { x1: number; y1: number; x2: number; y2: number }; unknownReasons: string[] }>;
+  bins: Array<{ binIndex: number; binId?: string; state: "normal" | "full" | "overflow" | "review" | "unknown"; stableState?: "normal" | "full" | "overflow" | "review" | "unknown" | null; confirmed?: boolean; confirmationFrames?: number; stateConfidence: number; bbox: { x1: number; y1: number; x2: number; y2: number }; unknownReasons: string[] }>;
   floorHazards: Array<{ className: "floor_litter" | "floor_spill"; confidence: number; bbox: { x1: number; y1: number; x2: number; y2: number } }>;
   processingTimeMs: number;
   modelVersions?: { floorHazard?: string; people?: string; binLocalizer?: string; binState?: string };
@@ -206,15 +206,34 @@ export async function validateCameraRegistration(cameraId: string, draft: Camera
   )).validation;
 }
 
-export async function previewCameraRegistration(cameraId: string, file: File, draft: CameraRegistrationDraft, sourceType: "image" | "video", signal?: AbortSignal) {
+export type CameraRegistrationPreviewTemporalState = {
+  version: "video-bin-tracking-v1";
+  nextId: number;
+  tracks: Record<string, unknown>;
+  stateHistories?: Record<string, unknown>;
+};
+
+export async function previewCameraRegistration(
+  cameraId: string,
+  file: File,
+  draft: CameraRegistrationDraft,
+  sourceType: "image" | "video",
+  signal?: AbortSignal,
+  temporal?: { state?: CameraRegistrationPreviewTemporalState; capturedAtMs: number; registrationRevision: number },
+) {
   const form = new FormData();
   form.append("image", file, file.name);
   form.append("draft", JSON.stringify(draft));
   form.append("sourceType", sourceType);
-  return (await request<{ preview: CameraRegistrationPreview }>(
+  if (sourceType === "video" && temporal) {
+    if (temporal.state) form.append("temporalState", JSON.stringify(temporal.state));
+    form.append("capturedAtMs", String(temporal.capturedAtMs));
+    form.append("registrationRevision", String(temporal.registrationRevision));
+  }
+  return await request<{ preview: CameraRegistrationPreview; temporalState?: CameraRegistrationPreviewTemporalState }>(
     `/api/cameras/${encodeURIComponent(cameraId)}/registration/preview`,
     { method: "POST", body: form, signal },
-  )).preview;
+  );
 }
 
 export async function publishCameraRegistration(cameraId: string, draft: CameraRegistrationDraft, expectedRevision: number) {

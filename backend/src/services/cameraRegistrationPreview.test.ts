@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PipelineAnalysisResponse } from "../schemas/detection.js";
-import { finalizeRegistrationPreview } from "./cameraRegistrationPreview.js";
+import { finalizeRegistrationPreview, finalizeVideoRegistrationPreview } from "./cameraRegistrationPreview.js";
+import { VIDEO_BIN_TRACKING_VERSION } from "./videoBinTracking.js";
 
 function previewBin(overrides: Record<string, unknown> = {}): PipelineAnalysisResponse {
   return {
@@ -51,5 +52,14 @@ describe("registration preview final bin state", () => {
     }));
 
     expect(result.bins[0]).toMatchObject({ state: "unknown", unknownReasons: ["uncertain_overflow"] });
+  });
+
+  it("returns the confirmed two-frame state for sequential video previews", () => {
+    const initial = { version: VIDEO_BIN_TRACKING_VERSION, nextId: 1, tracks: {} } as const;
+    const first = finalizeVideoRegistrationPreview(previewBin({ state: "overflow", unknownReasons: [] }), initial, 1_000, 0);
+    expect(first.preview.bins[0]).toMatchObject({ confirmed: false, stableState: null, confirmationFrames: 1 });
+
+    const second = finalizeVideoRegistrationPreview(previewBin({ state: "overflow", unknownReasons: [] }), first.temporalState, 2_000, 0);
+    expect(second.preview.bins[0]).toMatchObject({ confirmed: true, stableState: "overflow", confirmationFrames: 2 });
   });
 });

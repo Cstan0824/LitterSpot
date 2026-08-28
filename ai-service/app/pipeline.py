@@ -73,20 +73,20 @@ class AnalysisPipeline:
         floor_image, offset_x, offset_y = self._floor_input(image, floor_points)
         if registration:
             candidates = [] if registration_blocked else self._registered_candidates(image, registration)
-            candidates = [
-                candidate for candidate in candidates
-                if not self._blocked_bin(candidate.bbox, scene.objects)
+            bins = [
+                self._unknown_registered_candidate(candidate, index, "registered_bin_occluded")
+                if self._blocked_bin(candidate.bbox, scene.objects)
+                else self._classify_bin(
+                    image,
+                    candidate,
+                    index,
+                    candidate.bin_id,
+                    reference_image,
+                    candidate.bin_type,
+                    options.binReviewEnabled,
+                )
+                for index, candidate in enumerate(candidates, start=1)
             ]
-            bins = [self._classify_bin(
-                image,
-                candidate,
-                index,
-                candidate.bin_id,
-                reference_image,
-                candidate.bin_type,
-                options.binReviewEnabled,
-            )
-                    for index, candidate in enumerate(candidates, start=1)]
             # Keep the generic detector in shadow mode for enrolled cameras.
             # Its boxes never become alerts or state decisions; they are only
             # surfaced as explicit unknown candidates when they do not overlap
@@ -242,8 +242,11 @@ class AnalysisPipeline:
             bin_type,
             classification.state,
         ) if bin_id and bin_review_enabled else None
-        state = evidence.state if evidence else classification.state
+        evidence_unavailable = bool(bin_id and bin_review_enabled and evidence is None)
+        state = "unknown" if evidence_unavailable else evidence.state if evidence else classification.state
         reasons = list(classification.unknownReasons)
+        if evidence_unavailable:
+            reasons.append("reference_evidence_unavailable")
         if evidence and evidence.reason:
             reasons.append(evidence.reason)
         return FrameBinInference(
@@ -253,11 +256,26 @@ class AnalysisPipeline:
             bbox=candidate.bbox,
             classificationRegion=classification.region,
             state=state,
-            stateConfidence=classification.confidence,
+            stateConfidence=0.0 if evidence_unavailable else classification.confidence,
             signals=classification.signals,
             unknownReasons=reasons,
             evidence=evidence.as_dict() if evidence else None,
             processingTimeMs=classification.processingTimeMs,
+        )
+
+    @staticmethod
+    def _unknown_registered_candidate(candidate, index: int, reason: str) -> FrameBinInference:
+        return FrameBinInference(
+            binIndex=index,
+            binId=candidate.bin_id,
+            localizerConfidence=candidate.confidence,
+            bbox=candidate.bbox,
+            classificationRegion=candidate.bbox,
+            state="unknown",
+            stateConfidence=0.0,
+            signals={"binPresence": 1.0, "fullness": 0.0, "overflow": 0.0},
+            unknownReasons=[reason],
+            processingTimeMs=0,
         )
 
     @staticmethod
