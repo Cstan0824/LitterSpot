@@ -1,0 +1,16 @@
+{
+  "scenario": "temporary-crowd",
+  "description": "A crowded minute burst around a normal bin, with no hazard recurrence.",
+  "rows": [
+    {"createdAt": "2026-08-25T15:00:00+00:00", "peopleCount": 8, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:01:00+00:00", "peopleCount": 8, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:02:00+00:00", "peopleCount": 8, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:03:00+00:00", "peopleCount": 8, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:04:00+00:00", "peopleCount": 8, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:05:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:06:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:07:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:08:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T15:09:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}}
+  ]
+}

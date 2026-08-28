@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "smokeTargetPerScenario": 3,
+    "prototypeTargetPerScenario": 10,
+    "countDerivedVariantsAsIndependentScenes": false,
+    "notes": "Smoke targets catch regressions. Prototype targets require distinct real scenes; transforms only measure robustness."
+  },
+  "scenarios": [
+    {"id": "bin.normal", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.full_not_overflow", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.overflow_above_rim", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.overflow_around_bin", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.staged_bags_negative", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.occluded", "pipeline": "bin_state", "priority": "must"},
+    {"id": "bin.multiple", "pipeline": "bin_state", "priority": "should"},
+    {"id": "bin.no_bin_negative", "pipeline": "bin_state", "priority": "must"},
+    {"id": "floor.clean_negative", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.litter_small", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.litter_large", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.spill_beverage", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.spill_food", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.reflection_negative", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.shadow_negative", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "floor.drain_or_panel_negative", "pipeline": "floor_hazard", "priority": "must"},
+    {"id": "occupancy.count_0", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.count_1", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.count_2_3", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.count_4_8", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.partial_person", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.occlusion", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.reflection_negative", "pipeline": "occupancy", "priority": "must"},
+    {"id": "occupancy.dense_over_8", "pipeline": "occupancy", "priority": "should"},
+    {"id": "robustness.low_light", "pipeline": "cross_cutting", "priority": "must"},
+    {"id": "robustness.overexposed", "pipeline": "cross_cutting", "priority": "must"},
+    {"id": "robustness.motion_blur", "pipeline": "cross_cutting", "priority": "must"},
+    {"id": "robustness.jpeg_compression", "pipeline": "cross_cutting", "priority": "must"},
+    {"id": "robustness.camera_shift", "pipeline": "cross_cutting", "priority": "must"},
+    {"id": "robustness.partial_occlusion", "pipeline": "cross_cutting", "priority": "must"}
+  ]
+}

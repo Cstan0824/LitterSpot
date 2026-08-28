@@ -13,6 +13,7 @@
     "smoke:analytics": "tsx src/scripts/smokeAnalytics.ts",
     "smoke:system-events": "tsx src/scripts/smokeSystemEvents.ts",
     "smoke:video": "tsx src/scripts/smokeVideoWorkflow.ts",
+    "smoke:bin-replacement": "tsx src/scripts/smokeBinReplacement.ts",
     "media:retention": "tsx src/scripts/mediaRetention.ts",
     "migrate:cleaner-accounts": "tsx src/scripts/migrateCleanerAccounts.ts",
     "location:retention": "tsx src/scripts/locationRetention.ts",

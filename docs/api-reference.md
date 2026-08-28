@@ -1,6 +1,6 @@
 # LitterSpot Node API reference
 
-Last updated: 2026-08-17
+Last updated: 2026-08-25
 
 This document is the integration contract for the public Node/Express API. The
 React application and external API clients must call Node at `/api`; they must
@@ -1105,6 +1105,24 @@ not train or invoke an additional analytics model.
 | `GET` | `/api/analytics/reports/{reportId}/csv` | Download the same zone results as UTF-8 CSV |
 
 All routes require the Firebase Supervisor bearer token.
+
+### Short-window bin replacement evaluation
+
+The placement decision is a narrow, provisional zone-level recommendation. It
+reads eligible `analysisRuns` from Firestore, ignores test runs, and persists
+the current decision plus an immutable evaluation history under
+`binReplacementRecommendations/{zoneId}`.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/bin-replacement/{zoneId}/evaluate?windowMinutes=10` | Evaluate the latest 5–30 minute window and advance the Firestore hysteresis state |
+| `GET` | `/api/bin-replacement/{zoneId}` | Read the last persisted recommendation |
+
+The response includes score, bin/litter/spill/popularity signals, coverage,
+unknown-state ratio, and raise/clear streaks. Raw one-frame overflow is not a
+capacity trigger; stable/confirmed overflow is required. Insufficient coverage
+preserves the previous recommendation. This endpoint does not claim a
+rim-crossing overflow ground truth or dispatch a cleaner automatically.
 
 ### Analytics aggregation and idempotency
 

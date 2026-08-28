@@ -9,6 +9,7 @@ import { requireSupervisor } from "./middleware/requireRole.js";
 import { requireCleaner } from "./middleware/requireRole.js";
 import { alertRoutes } from "./routes/alertRoutes.js";
 import { cameraRoutes } from "./routes/cameraRoutes.js";
+import { cameraRegistrationRoutes } from "./routes/cameraRegistrationRoutes.js";
 import { cleanerRoutes } from "./routes/cleanerRoutes.js";
 import { detectionRoutes } from "./routes/detectionRoutes.js";
 import { mediaRoutes } from "./routes/mediaRoutes.js";
@@ -30,6 +31,7 @@ import { env } from "./config/env.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { rateLimit } from "./middleware/rateLimit.js";
 import { orchestratorInternalRoutes, orchestratorSupervisorRoutes } from "./routes/orchestratorRoutes.js";
+import { binReplacementRoutes } from "./routes/binReplacementRoutes.js";
 
 export const app = express();
 
@@ -70,9 +72,11 @@ app.use("/api", rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMi
 app.use("/api/me", supervisorRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
+app.use("/api/bin-replacement", binReplacementRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
 app.use("/api/alerts", alertRoutes);
+app.use("/api/cameras", cameraRegistrationRoutes);
 app.use("/api/cameras", cameraRoutes);
 app.use("/api/cleaners", cleanerRoutes);
 app.use("/api/detections", detectionRoutes);

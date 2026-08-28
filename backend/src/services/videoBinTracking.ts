@@ -21,10 +21,21 @@ export type VideoBinTrack = {
   confirmed: boolean;
 };
 
+export type BinStateHistorySample = {
+  state: "normal" | "full" | "overflow" | "review" | "unknown";
+  capturedAtMs: number;
+};
+
+export type BinStateHistory = {
+  registrationRevision: number;
+  samples: BinStateHistorySample[];
+};
+
 export type VideoBinTrackingState = {
   version: typeof VIDEO_BIN_TRACKING_VERSION;
   nextId: number;
   tracks: Record<string, VideoBinTrack>;
+  stateHistories?: Record<string, BinStateHistory>;
 };
 
 export type TrackedVideoBin<T extends VideoBinDetection> = Omit<T, "trackingId" | "confirmed" | "stale"> & {
@@ -97,6 +108,9 @@ function cloneState(input?: VideoBinTrackingState | null): VideoBinTrackingState
     version: VIDEO_BIN_TRACKING_VERSION,
     nextId: positiveInteger(input?.nextId, 1),
     tracks,
+    stateHistories: input?.stateHistories && typeof input.stateHistories === "object"
+      ? input.stateHistories
+      : {},
   };
 }
 

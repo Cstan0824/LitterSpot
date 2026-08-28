@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "status": "provisional-assistant-visual-review-needs-operator-approval",
+  "trainingUse": false,
+  "thresholdSelectionUse": false,
+  "sampleFractions": [0.25, 0.5, 0.75],
+  "statePolicy": "overflow means waste is visibly stacked above or crossing the bin rim, or waste connected to the bin has fallen around it; contained waste below the rim is full or normal",
+  "videos": [
+    {
+      "caseId": "video-basket-topped-waste",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.12.35 AM.mp4",
+      "bins": [
+        {
+          "binId": "basket-1",
+          "expectedState": "overflow",
+          "regionNormalized": {"x1": 0.35, "y1": 0.0, "x2": 0.66, "y2": 0.82},
+          "notes": "Waste and a bag are visibly stacked above the basket rim; this is overflow under the supplied policy."
+        }
+      ]
+    },
+    {
+      "caseId": "video-people-no-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.14.58 AM.mp4",
+      "bins": [],
+      "notes": "No registered bin is present; no bin-state crop should be evaluated."
+    },
+    {
+      "caseId": "video-green-closed-lid-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.33 AM.mp4",
+      "bins": [
+        {
+          "binId": "green-wheelie-1",
+          "expectedState": "normal",
+          "regionNormalized": {"x1": 0.31, "y1": 0.34, "x2": 0.58, "y2": 0.94},
+          "notes": "The lid is closed and there is no waste crossing the rim or connected surrounding waste."
+        }
+      ]
+    },
+    {
+      "caseId": "video-crowd-no-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM (1).mp4",
+      "bins": [],
+      "notes": "No registered bin is present; the storage case and furniture are hard negatives, not bins."
+    },
+    {
+      "caseId": "video-black-bin-topped-waste",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM.mp4",
+      "bins": [
+        {
+          "binId": "black-open-bin-1",
+          "expectedState": "overflow",
+          "regionNormalized": {"x1": 0.30, "y1": 0.33, "x2": 0.57, "y2": 0.94},
+          "notes": "Waste protrudes above the open rim; this is overflow under the supplied policy."
+        }
+      ]
+    }
+  ]
+}

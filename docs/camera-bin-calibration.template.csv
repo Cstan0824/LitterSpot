@@ -1,0 +1,3 @@
+camera_id,bin_id,split,label,overflow_score,notes
+camera-1,bin-1,validation,normal,0.18,closed lid with visible liner
+camera-1,bin-1,validation,overflow,0.72,waste visibly crosses rim

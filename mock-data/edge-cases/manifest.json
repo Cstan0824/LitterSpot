@@ -1,0 +1,873 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "low-light",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--low-light.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "occupancy.count_2_3",
+        "robustness.low_light"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 119765,
+      "sha256": "960b5cb6a9032fcbe20cb83998b7ab3cc5879d9b6d8fe6f1b1f112215c9c2f8f"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "overexposed",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--overexposed.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "occupancy.count_2_3",
+        "robustness.overexposed"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 183079,
+      "sha256": "494fd0d0fcc3a7cc1a3f86a27d48c8c9dad0ffdfbb5e1ca87a415eddf014dc85"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "motion-blur",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--motion-blur.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "occupancy.count_2_3",
+        "robustness.motion_blur"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 124893,
+      "sha256": "5748e8db35df66896993b2e3b204f7e5071377e3928c6d747642110ca807c006"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "camera-shift",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--camera-shift.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "occupancy.count_2_3",
+        "robustness.camera_shift"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 198713,
+      "sha256": "a9f75af0b573372aca4b7d7121bc66cf0cf0e9c313520db682b881dc31969594"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "jpeg-compression",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--jpeg-compression.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "occupancy.count_2_3",
+        "robustness.jpeg_compression"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 36891,
+      "sha256": "34e343c36d768d6e6f84ca2c6707cb0adb69c3c643d80f364f286df712481227"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "partial-occlusion",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--partial-occlusion.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "robustness.partial_occlusion"
+      ],
+      "expectationPolicy": "review_required",
+      "expected": {
+        "reviewRequired": true
+      },
+      "bytes": 169634,
+      "sha256": "6550a9937c8ad77aec372dea972daa80566955fa09771571e7c46e6eebc8d623"
+    },
+    {
+      "sceneId": "local-recycling-bins-two-people",
+      "variantId": "synthetic-beverage-spill",
+      "path": "mock-data/edge-cases/images/local-recycling-bins-two-people--synthetic-beverage-spill.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.58 PM (3).jpeg",
+      "scenarios": [
+        "bin.multiple",
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.spill_beverage",
+        "occupancy.count_2_3"
+      ],
+      "expectationPolicy": "synthetic_positive",
+      "expected": {
+        "peopleMin": 2,
+        "peopleMax": 2,
+        "binCount": 3,
+        "binStates": [
+          "normal",
+          "normal",
+          "normal"
+        ],
+        "floorHazards": [
+          "floor_spill"
+        ]
+      },
+      "bytes": 176899,
+      "sha256": "662af69db37cc20973934384be5ab8c121abdb4af3feb97b3cea14533d1129d6"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "low-light",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--low-light.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "occupancy.partial_person",
+        "robustness.low_light"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 98972,
+      "sha256": "d2afb7a2c4204505876230ad81b2cebf53faf053fc5382a0ab2a689781b554e2"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "overexposed",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--overexposed.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "occupancy.partial_person",
+        "robustness.overexposed"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 113892,
+      "sha256": "563a2d905239cbde24e0c91c1c1fc52ff8d6f5b7bb1456d375e15949873993f9"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "motion-blur",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--motion-blur.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "occupancy.partial_person",
+        "robustness.motion_blur"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 109371,
+      "sha256": "a3c51bdb7bc827a0221837cb81b876bfb757f1e33fe01e0436596670ad7c0707"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "camera-shift",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--camera-shift.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "occupancy.partial_person",
+        "robustness.camera_shift"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 155841,
+      "sha256": "3a64d716fc7e5a7e6eee14ad30bbcc35464cd678637600dc4456735131d199e1"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "jpeg-compression",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--jpeg-compression.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "occupancy.partial_person",
+        "robustness.jpeg_compression"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "bytes": 32718,
+      "sha256": "dc72f872dfbae494ff7525a23e8b42aaaba9713955b80a459f6cd25cc1163698"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "partial-occlusion",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--partial-occlusion.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "robustness.partial_occlusion"
+      ],
+      "expectationPolicy": "review_required",
+      "expected": {
+        "reviewRequired": true
+      },
+      "bytes": 137070,
+      "sha256": "98243f119196b083112df814a1d0d0c8bab199323acc147f610484e5104f7098"
+    },
+    {
+      "sceneId": "local-office-basket-floor-panel",
+      "variantId": "synthetic-beverage-spill",
+      "path": "mock-data/edge-cases/images/local-office-basket-floor-panel--synthetic-beverage-spill.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 6.00.00 PM.jpeg",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.drain_or_panel_negative",
+        "floor.spill_beverage",
+        "occupancy.partial_person"
+      ],
+      "expectationPolicy": "synthetic_positive",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": [
+          "floor_spill"
+        ]
+      },
+      "bytes": 147940,
+      "sha256": "f17e0d8b434cd4d777710b4ae56a8c85040185e702f85d350071e56af1fc0a17"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "low-light",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--low-light.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "occupancy.count_0",
+        "robustness.low_light"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 250956,
+      "sha256": "9017580159c9b50fb17fd8509dd4205025b72784861f46b69d846c72dd980c9c"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "overexposed",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--overexposed.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "occupancy.count_0",
+        "robustness.overexposed"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 356566,
+      "sha256": "c7cf2aa1fe95c943cbc0f9846a865265c110cb93a904cda02c2dcc68eaa7275e"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "motion-blur",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--motion-blur.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "occupancy.count_0",
+        "robustness.motion_blur"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 231850,
+      "sha256": "fd337bf046e885e0d5a837e6b23a4bebe913513085a98739ecae96208ca6a674"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "camera-shift",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--camera-shift.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "occupancy.count_0",
+        "robustness.camera_shift"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 394557,
+      "sha256": "8cae351226b76fab416fe8603d8155a58ba6fdce2e13e0a007c4e1e7d8880462"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "jpeg-compression",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--jpeg-compression.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "occupancy.count_0",
+        "robustness.jpeg_compression"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 78416,
+      "sha256": "8de2712913e1cb575ec5d3ab8405e7567c8d12ff5a375d96f41fc141193f6d5e"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "partial-occlusion",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--partial-occlusion.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "robustness.partial_occlusion"
+      ],
+      "expectationPolicy": "review_required",
+      "expected": {
+        "reviewRequired": true
+      },
+      "bytes": 370136,
+      "sha256": "d6a15d57af5e5a6709a485500c2b1f71a5b9c756fa9f0f16369f379adf9cdaf3"
+    },
+    {
+      "sceneId": "local-black-bin-bags-outside",
+      "variantId": "synthetic-beverage-spill",
+      "path": "mock-data/edge-cases/images/local-black-bin-bags-outside--synthetic-beverage-spill.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (2).jpeg",
+      "scenarios": [
+        "bin.overflow_around_bin",
+        "bin.staged_bags_negative",
+        "floor.litter_large",
+        "floor.spill_beverage",
+        "occupancy.count_0"
+      ],
+      "expectationPolicy": "synthetic_positive",
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "review_overflow_vs_staged"
+        ],
+        "floorHazards": [
+          "floor_spill",
+          "review_litter_vs_staged"
+        ]
+      },
+      "bytes": 378494,
+      "sha256": "fba89dab80288ade26b5b484c638e02a8bcf137a0f4cdf248d6e47e6b4781cbb"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "low-light",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--low-light.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative",
+        "robustness.low_light"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 135008,
+      "sha256": "cce56fa89c1ed36acc83dd44e3911ba1742129481705d557239aa5527b922173"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "overexposed",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--overexposed.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative",
+        "robustness.overexposed"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 212487,
+      "sha256": "5cae40752e19a95123ba6879483511af5e6aae680ab9de7af1ec7a0024877348"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "motion-blur",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--motion-blur.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative",
+        "robustness.motion_blur"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 144538,
+      "sha256": "534a23e7ca105837ccf4df32fef27b9a74164c677062087033b4490d6a9ce631"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "camera-shift",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--camera-shift.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative",
+        "robustness.camera_shift"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 223223,
+      "sha256": "fa1fa6230acf37d5a090023426be2c26185be69ddddd99ea330dcb26ffe3700f"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "jpeg-compression",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--jpeg-compression.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative",
+        "robustness.jpeg_compression"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 38927,
+      "sha256": "e1fef285e18f9b4fdb90e79831f29b5e8d4debedca4b799e47d92285e8133d73"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "partial-occlusion",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--partial-occlusion.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "robustness.partial_occlusion"
+      ],
+      "expectationPolicy": "review_required",
+      "expected": {
+        "reviewRequired": true
+      },
+      "bytes": 197236,
+      "sha256": "5a668ad00ec25a40ef7f7011b6720f177b73dcf2896575acdb4b7dea4e18d999"
+    },
+    {
+      "sceneId": "local-green-bin-overflow",
+      "variantId": "synthetic-beverage-spill",
+      "path": "mock-data/edge-cases/images/local-green-bin-overflow--synthetic-beverage-spill.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM (1).jpeg",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_large",
+        "floor.spill_beverage",
+        "occupancy.partial_person",
+        "occupancy.reflection_negative"
+      ],
+      "expectationPolicy": "synthetic_positive",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "floor_spill",
+          "review_floor_litter"
+        ]
+      },
+      "bytes": 204368,
+      "sha256": "0b8e4fcc018dadc8ad55e6bce11bae1970fc8b0669b159ac128d3a025e6c8d2a"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "low-light",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--low-light.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "occupancy.count_1",
+        "robustness.low_light"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "bytes": 160619,
+      "sha256": "db6ed54ff58133fd291d4b130ffc987ff323a097408d8ac66dface5fb66356bd"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "overexposed",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--overexposed.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "occupancy.count_1",
+        "robustness.overexposed"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "bytes": 226741,
+      "sha256": "11e911e8038c18fabd1e623b7ee22d9ed6df142d5089b054f3c0e2f55276d847"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "motion-blur",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--motion-blur.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "occupancy.count_1",
+        "robustness.motion_blur"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "bytes": 167711,
+      "sha256": "1762a38b9e15e6a61a2d9bd38ae728987251a563d0558ccd90b313151de769a7"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "camera-shift",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--camera-shift.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "occupancy.count_1",
+        "robustness.camera_shift"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "bytes": 261310,
+      "sha256": "9490906e3225a6908f360e7e97591c82c5e88630625512302be444d518749367"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "jpeg-compression",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--jpeg-compression.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "occupancy.count_1",
+        "robustness.jpeg_compression"
+      ],
+      "expectationPolicy": "inherit",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "bytes": 46140,
+      "sha256": "208acb4daac9b98fc0b6ed2351016bf3d05662e95e4776fc9a946059f5b84a64"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "partial-occlusion",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--partial-occlusion.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "robustness.partial_occlusion"
+      ],
+      "expectationPolicy": "review_required",
+      "expected": {
+        "reviewRequired": true
+      },
+      "bytes": 233096,
+      "sha256": "4af45d4b195731b069c42c5ebbb55c414b18a72735667cd69a868156f120a1c7"
+    },
+    {
+      "sceneId": "local-bags-loose-foam",
+      "variantId": "synthetic-beverage-spill",
+      "path": "mock-data/edge-cases/images/local-bags-loose-foam--synthetic-beverage-spill.jpg",
+      "derivedFrom": "mock-data/internvl-evaluation/images/WhatsApp Image 2026-07-27 at 5.59.59 PM.jpeg",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.litter_large",
+        "floor.spill_beverage",
+        "occupancy.count_1"
+      ],
+      "expectationPolicy": "synthetic_positive",
+      "expected": {
+        "peopleMin": 1,
+        "peopleMax": 1,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": [
+          "floor_litter",
+          "floor_spill"
+        ]
+      },
+      "bytes": 242830,
+      "sha256": "ca618ef2891fcf05c7b2735f039f8c4c230f9a7b2d7364b0d5095eb1703f52c4"
+    }
+  ]
+}

@@ -9,16 +9,17 @@ import { DetectionTestPage } from "./pages/DetectionTestPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
+import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { firebaseAuth } from "./config/firebase";
 import { apiFetch, readApiError } from "./services/apiClient";
 
 type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
-type Route = OperationsPage | "pipeline" | "playground" | "status";
+type Route = OperationsPage | "pipeline" | "playground" | "status" | "camera-registration";
 type Supervisor = { uid: string; email: string; displayName: string };
 
 function routeFromHash(): Route {
-  const route = location.hash.replace(/^#\/?/, "");
-  if (["alerts", "history", "placement", "cameras", "admin", "pipeline", "playground", "status"].includes(route)) return route as Route;
+  const route = location.hash.replace(/^#\/?/, "").split("?")[0];
+  if (["alerts", "history", "placement", "cameras", "admin", "pipeline", "playground", "status", "camera-registration"].includes(route)) return route as Route;
   return "dashboard";
 }
 
@@ -58,6 +59,7 @@ function App() {
   if (!supervisor) return <LoginPage onLogin={async (email, password) => { await signInWithEmailAndPassword(firebaseAuth, email, password); }} />;
   if (route === "playground") return <DetectionTestPage />;
   if (route === "pipeline") return <PipelinePage />;
+  if (route === "camera-registration") return <CameraRegistrationPage />;
   if (route === "status") return <DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} />;
   return <OperationsConsole supervisor={supervisor} page={route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void signOut(firebaseAuth); }} />;
 }

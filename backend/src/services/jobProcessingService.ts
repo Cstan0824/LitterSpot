@@ -13,6 +13,8 @@ import { buildProcessResponse, presentAnalysisRun, presentDetection } from "./an
 import { ALERT_WORKFLOW_VERSION, evaluateAnalysisRunDetections } from "./alertWorkflowService.js";
 import { applyCompletedAnalysisAnalytics } from "./analyticsService.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
+import { getCameraRegistration } from "./cameraRegistrationService.js";
+import { loadRegistrationReference } from "./cameraRegistrationReference.js";
 
 type ClaimResult = { completedRunId: string } | { claimToken: string; job: DocumentData };
 
@@ -247,6 +249,8 @@ export async function processImageJob(jobId: string) {
     const floorConfidence = typeof options.floorConfidence === "number" ? options.floorConfidence : 0.25;
     const binLocalizerConfidence = typeof options.binLocalizerConfidence === "number" ? options.binLocalizerConfidence : 0.80;
     const focusRegion = Array.isArray(options.focusRegionNormalized) ? options.focusRegionNormalized as Array<{ x: number; y: number }> : [];
+    const registration = await getCameraRegistration(String(job.cameraId));
+    const reference = await loadRegistrationReference(registration);
     const result = await inferFrame({
       contents,
       fileName: String(media.originalFileName),
@@ -254,8 +258,13 @@ export async function processImageJob(jobId: string) {
       floorConfidence,
       binLocalizerConfidence,
       focusRegion,
+      registration,
+      reference,
+      binReviewEnabled: false,
     });
-    const normalized = normalizeAnalysis(result, analysisRunId, floorConfidence);
+    const normalized = normalizeAnalysis(result, analysisRunId, floorConfidence, {
+      requireConfirmedOverflow: Boolean(registration),
+    });
     const capturedAt = media.capturedAt instanceof Timestamp ? media.capturedAt : Timestamp.now();
 
     await firestore.runTransaction(async (transaction) => {

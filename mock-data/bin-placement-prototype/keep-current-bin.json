@@ -1,0 +1,16 @@
+{
+  "scenario": "keep-current-bin",
+  "description": "Normal bin with one isolated litter observation and low traffic.",
+  "rows": [
+    {"createdAt": "2026-08-25T13:00:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:01:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:02:00+00:00", "peopleCount": 1, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": [{"className": "floor_litter", "bbox": {"x1": 200, "y1": 600, "x2": 240, "y2": 640}}]}},
+    {"createdAt": "2026-08-25T13:03:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:04:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:05:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:06:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:07:00+00:00", "peopleCount": 1, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:08:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}},
+    {"createdAt": "2026-08-25T13:09:00+00:00", "peopleCount": 0, "payload": {"image": {"width": 1000, "height": 800}, "bins": [{"state": "normal"}], "floorHazards": []}}
+  ]
+}

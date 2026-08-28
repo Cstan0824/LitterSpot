@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "status": "provisional-assistant-visual-review-needs-operator-approval",
+  "samplePolicy": "three frames at 25%, 50%, and 75% of video duration",
+  "countPolicy": "Count visible people in the full frame; ignore isolated hands, reflections, posters, and screen images.",
+  "videos": [
+    {
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.12.35 AM.mp4",
+      "samples": [
+        {"fraction": 0.25, "peopleMin": 0, "peopleMax": 0, "notes": "No complete person visible; ignore the partial hand at the upper edge."},
+        {"fraction": 0.50, "peopleMin": 0, "peopleMax": 0, "notes": "No person visible."},
+        {"fraction": 0.75, "peopleMin": 0, "peopleMax": 0, "notes": "No complete person visible; ignore the partial hand at the upper edge."}
+      ]
+    },
+    {
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.14.58 AM.mp4",
+      "samples": [
+        {"fraction": 0.25, "peopleMin": 2, "peopleMax": 2, "notes": "Two foreground people."},
+        {"fraction": 0.50, "peopleMin": 2, "peopleMax": 2, "notes": "Two foreground people."},
+        {"fraction": 0.75, "peopleMin": 2, "peopleMax": 2, "notes": "Two foreground people, one partially cropped."}
+      ]
+    },
+    {
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.33 AM.mp4",
+      "samples": [
+        {"fraction": 0.25, "peopleMin": 0, "peopleMax": 0, "notes": "Empty bin scene."},
+        {"fraction": 0.50, "peopleMin": 0, "peopleMax": 0, "notes": "Empty bin scene."},
+        {"fraction": 0.75, "peopleMin": 0, "peopleMax": 0, "notes": "Empty bin scene."}
+      ]
+    },
+    {
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM (1).mp4",
+      "samples": [
+        {"fraction": 0.25, "peopleMin": 9, "peopleMax": 12, "notes": "Crowded stall with substantial occlusion; use a reviewed range."},
+        {"fraction": 0.50, "peopleMin": 8, "peopleMax": 11, "notes": "Crowded stall with substantial occlusion; use a reviewed range."},
+        {"fraction": 0.75, "peopleMin": 7, "peopleMax": 10, "notes": "Crowded stall with substantial occlusion; use a reviewed range."}
+      ]
+    },
+    {
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM.mp4",
+      "samples": [
+        {"fraction": 0.25, "peopleMin": 3, "peopleMax": 4, "notes": "Three clear people; a distant partial person may be visible."},
+        {"fraction": 0.50, "peopleMin": 3, "peopleMax": 4, "notes": "Three clear people; a distant partial person may be visible."},
+        {"fraction": 0.75, "peopleMin": 3, "peopleMax": 4, "notes": "Three clear people; a distant partial person may be visible."}
+      ]
+    }
+  ]
+}
