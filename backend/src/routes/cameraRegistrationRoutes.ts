@@ -2,13 +2,13 @@ import { Router } from "express";
 import multer from "multer";
 import { cameraRegistrationDraftSchema, cameraRegistrationPreviewSourceSchema, publishCameraRegistrationSchema } from "../schemas/cameraRegistration.js";
 import { getCameraRegistration, getCameraRegistrationDraft, getCameraRegistrationWorkspace, listCameraRegistrationRevisions, publishCameraRegistration, saveCameraRegistrationDraft, validateCameraRegistration } from "../services/cameraRegistrationService.js";
-import { createCameraRegistrationAttachment, createCameraRegistrationReference, createCameraRegistrationVideoSource, listCameraRegistrationAttachments } from "../services/cameraRegistrationReference.js";
+import { createCameraRegistrationReference, createCameraRegistrationVideoSource } from "../services/cameraRegistrationReference.js";
 import { previewCameraRegistration } from "../services/cameraRegistrationPreview.js";
 import { HttpError } from "../shared/httpError.js";
 
 export const cameraRegistrationRoutes = Router();
 const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
-const attachmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
 
 cameraRegistrationRoutes.get("/:cameraId/registration", async (req, res) => {
   return res.json({ registration: await getCameraRegistration(req.params.cameraId) });
@@ -31,17 +31,6 @@ cameraRegistrationRoutes.get("/:cameraId/registration/revisions", async (req, re
   return res.json({ revisions: await listCameraRegistrationRevisions(req.params.cameraId) });
 });
 
-cameraRegistrationRoutes.get("/:cameraId/registration/attachments", async (req, res) => {
-  return res.json({ attachments: await listCameraRegistrationAttachments(String(req.params.cameraId)) });
-});
-
-cameraRegistrationRoutes.post("/:cameraId/registration/attachments", attachmentUpload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Select an image or video attachment.", requestId: req.requestId });
-  return res.status(201).json({
-    attachment: await createCameraRegistrationAttachment(String(req.params.cameraId), req.file, req.supervisor.uid),
-  });
-});
-
 cameraRegistrationRoutes.post("/:cameraId/registration/reference", referenceUpload.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "A clean reference image is required.", requestId: req.requestId });
   return res.status(201).json({
@@ -49,7 +38,7 @@ cameraRegistrationRoutes.post("/:cameraId/registration/reference", referenceUplo
   });
 });
 
-cameraRegistrationRoutes.post("/:cameraId/registration/source-video", attachmentUpload.single("video"), async (req, res) => {
+cameraRegistrationRoutes.post("/:cameraId/registration/source-video", videoUpload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "A reference video is required.", requestId: req.requestId });
   return res.status(201).json({
     media: await createCameraRegistrationVideoSource(String(req.params.cameraId), req.file, req.supervisor.uid),

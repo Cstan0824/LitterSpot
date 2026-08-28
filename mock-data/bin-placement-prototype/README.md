@@ -7,7 +7,7 @@ for a ten-minute window (or fewer rows for the coverage-failure case).
 Run the benchmark from the repository root:
 
 ```powershell
-python scripts/evaluate_bin_replacement_mocks.py
+npm --workspace=backend test -- src/services/binReplacementMockParity.test.ts
 ```
 
 The rule is intentionally conservative: at least 8 valid minutes, no more than
