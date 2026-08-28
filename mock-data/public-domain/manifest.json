@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-08-18T01:55:34.845775+00:00",
+  "labelStatus": "provisional-human-review-needed",
+  "items": [
+    {
+      "title": "File:Overflowing Hamburg street garbage bin.jpg",
+      "fileName": "commons-overflowing-hamburg-bin.jpg",
+      "sceneId": "commons-overflowing-hamburg-bin",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "floor.litter_small",
+        "occupancy.count_2_3",
+        "occupancy.partial_person"
+      ],
+      "expected": {
+        "peopleMin": 3,
+        "peopleMax": 3,
+        "binCount": 1,
+        "binStates": [
+          "overflow"
+        ],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "path": "mock-data/public-domain/images/commons-overflowing-hamburg-bin.jpg",
+      "bytes": 471911,
+      "sha256": "43a9e4f3fbec2d670ca4b5213884ec9ce9eb89f4333bdd1f80a6bac93c605037",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Overflowing_Hamburg_street_garbage_bin.jpg/1280px-Overflowing_Hamburg_street_garbage_bin.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Overflowing_Hamburg_street_garbage_bin.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:Overflowing_Hamburg_street_garbage_bin.jpg",
+      "license": "Public domain",
+      "artist": "",
+      "credit": "",
+      "description": "",
+      "dateTimeOriginal": ""
+    },
+    {
+      "title": "File:Overflowing paper bin.jpg",
+      "fileName": "commons-overflowing-paper-bin.jpg",
+      "sceneId": "commons-overflowing-paper-bin",
+      "scenarios": [
+        "bin.overflow_above_rim",
+        "bin.overflow_around_bin",
+        "bin.multiple",
+        "floor.litter_large",
+        "occupancy.count_0"
+      ],
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 3,
+        "binStates": [
+          "overflow",
+          "overflow",
+          "normal"
+        ],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "path": "mock-data/public-domain/images/commons-overflowing-paper-bin.jpg",
+      "bytes": 246608,
+      "sha256": "24676ce97832156aa9d8f6127b2390549087982b94b97573ed76d66e8d643b75",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/Overflowing_paper_bin.jpg/1280px-Overflowing_paper_bin.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/5/59/Overflowing_paper_bin.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:Overflowing_paper_bin.jpg",
+      "license": "CC0",
+      "artist": "Mateusz Konieczny",
+      "credit": "Own work",
+      "description": "blok zarządzany przez Kontur Nieruchomości, typowy stan przeładowanego śmietnika w bloku 53D na Wrocławskiej w Krakowie. Problem był wielokrotnie zgłaszany przez mieszkańców",
+      "dateTimeOriginal": "22 November 2021 (according to Exif data)"
+    },
+    {
+      "title": "File:Garbage-bin-001.jpg",
+      "fileName": "commons-normal-garbage-bin.jpg",
+      "sceneId": "commons-normal-garbage-bin",
+      "scenarios": [
+        "bin.normal",
+        "floor.clean_negative",
+        "floor.shadow_negative",
+        "occupancy.count_0"
+      ],
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "normal"
+        ],
+        "floorHazards": []
+      },
+      "path": "mock-data/public-domain/images/commons-normal-garbage-bin.jpg",
+      "bytes": 863073,
+      "sha256": "f905452348b3fa7886eb2c3e6c573b24019004bdb7dbe37a6783e9d06a0b0ed7",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Garbage-bin-001.jpg/1280px-Garbage-bin-001.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/3/35/Garbage-bin-001.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:Garbage-bin-001.jpg",
+      "license": "CC0",
+      "artist": "Kent Madsen",
+      "credit": "Own work",
+      "description": "garbage bin",
+      "dateTimeOriginal": "Taken on 22 September 2020, 10:38:43"
+    },
+    {
+      "title": "File:2003-09-30 Trash can.jpg",
+      "fileName": "commons-normal-trash-can.jpg",
+      "sceneId": "commons-normal-trash-can",
+      "scenarios": [
+        "bin.full_not_overflow",
+        "floor.litter_small",
+        "occupancy.count_0"
+      ],
+      "expected": {
+        "peopleMin": 0,
+        "peopleMax": 0,
+        "binCount": 1,
+        "binStates": [
+          "contained_full"
+        ],
+        "floorHazards": [
+          "floor_litter"
+        ]
+      },
+      "path": "mock-data/public-domain/images/commons-normal-trash-can.jpg",
+      "bytes": 337275,
+      "sha256": "8cfc2e812138672af52abb2a90d71d02318c66f5bfbbeca069f9d4f178c2b93a",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/d/da/2003-09-30_Trash_can.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/d/da/2003-09-30_Trash_can.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:2003-09-30_Trash_can.jpg",
+      "license": "Public domain",
+      "artist": "Ildar Sagdejev (Specious)",
+      "credit": "Own work",
+      "description": "A garbage bin in Chapel Hill, North Carolina.",
+      "dateTimeOriginal": "2003-09-30"
+    },
+    {
+      "title": "File:Walking in a shopping mall.jpg",
+      "fileName": "commons-shopping-mall-people.jpg",
+      "sceneId": "commons-shopping-mall-people",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "occupancy.dense_over_8",
+        "occupancy.occlusion"
+      ],
+      "expected": {
+        "peopleMin": 9,
+        "peopleMax": 15,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": []
+      },
+      "path": "mock-data/public-domain/images/commons-shopping-mall-people.jpg",
+      "bytes": 285342,
+      "sha256": "d545ff7e0e79a479b7ebd601e7a793d6f75f7ec15f98b51915fa3f3554af0ed4",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/Walking_in_a_shopping_mall.jpg/1280px-Walking_in_a_shopping_mall.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Walking_in_a_shopping_mall.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:Walking_in_a_shopping_mall.jpg",
+      "license": "Public domain",
+      "artist": "Michael Anderson (Photographer)",
+      "credit": "This image was released by the National Cancer Institute, an agency part of the National Institutes of Health, with the ID 2201 (image) (next).",
+      "description": "Title Walking in a Shopping Mall\nDescription Various shots of people walking around in a shopping mall.\nTopics/Categories  People -- Adult People -- Group People -- Recreation\nType Color, Photo\nSource National Cancer Institute",
+      "dateTimeOriginal": "1985-04"
+    },
+    {
+      "title": "File:Air pollution indoor renovation demolition Hong Kong dust particulates.webm",
+      "fileName": "commons-crowded-mall-video-thumbnail.jpg",
+      "sceneId": "commons-crowded-mall-video",
+      "scenarios": [
+        "bin.no_bin_negative",
+        "floor.reflection_negative",
+        "occupancy.count_2_3",
+        "occupancy.partial_person"
+      ],
+      "expected": {
+        "peopleMin": 3,
+        "peopleMax": 4,
+        "binCount": 0,
+        "binStates": [],
+        "floorHazards": []
+      },
+      "path": "mock-data/public-domain/images/commons-crowded-mall-video-thumbnail.jpg",
+      "bytes": 110762,
+      "sha256": "3e700440c950fe58b12f0d18a13acbd40b7880d3c71ee487b129b3224b89712d",
+      "downloadUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Air_pollution_indoor_renovation_demolition_Hong_Kong_dust_particulates.webm/960px--Air_pollution_indoor_renovation_demolition_Hong_Kong_dust_particulates.webm.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo",
+      "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/7/7a/Air_pollution_indoor_renovation_demolition_Hong_Kong_dust_particulates.webm?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionPage": "https://commons.wikimedia.org/wiki/File:Air_pollution_indoor_renovation_demolition_Hong_Kong_dust_particulates.webm",
+      "license": "CC0",
+      "artist": "Waydwaid",
+      "credit": "Own work",
+      "description": "Shop under renovation with power tools in use. Construction dust is a type of particulates and is very harmful to health. Particulates like wood dust cause cancer. It is possible that people bring the dust back to their home or to other places when they walk pass. This is a busy shppping mall crowded with people. There are also many other shops under renovation in that mall. The person found breathing difficult when taking this video.",
+      "dateTimeOriginal": "2025-05-30"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { createConnection } from "node:net";
@@ -13,6 +13,19 @@ const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_gco_gbs_v2", "production.pt");
 const token = "local-playground-token";
 const children = [];
+
+function backendPortFromEnv() {
+  const backendEnv = join(root, "backend", ".env");
+  if (!existsSync(backendEnv)) return 3000;
+  const entry = readFileSync(backendEnv, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("PORT="));
+  const value = Number(entry?.slice("PORT=".length).trim().replace(/^['"]|['"]$/g, ""));
+  return Number.isInteger(value) && value > 0 && value <= 65_535 ? value : 3000;
+}
+
+const backendPort = backendPortFromEnv();
 
 if (!existsSync(python)) throw new Error(`Python environment missing: ${python}`);
 if (!existsSync(classifier)) console.warn("No bin-state classifier found; FastAPI will start degraded until STATE_CLASSIFIER_PATH is provided.");
@@ -40,7 +53,7 @@ async function cleanup() {
   try { unlinkSync(pidFile); } catch {}
 }
 
-for (const port of [8000, 3000, 5173]) {
+for (const port of [8000, backendPort, 5173]) {
   if (await portInUse(port)) throw new Error(`LitterSpot port ${port} is already in use. Close the existing services, then run npm start again.`);
 }
 
@@ -58,8 +71,8 @@ process.once("SIGINT", async () => { shuttingDown = true; await cleanup(); proce
 process.once("SIGTERM", async () => { shuttingDown = true; await cleanup(); process.exit(0); });
 
 const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2", ENABLE_LEGACY_DETECTOR: "false", DEVICE: "0", INTERNAL_API_TOKEN: token });
-const backend = start(npm, ["--workspace=backend", "run", "dev"], { AI_SERVICE_URL: "http://127.0.0.1:8000", AI_SERVICE_TOKEN: token });
-const frontend = start(npm, ["--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1"]);
+const backend = start(npm, ["--workspace=backend", "run", "dev"], { PORT: String(backendPort), AI_SERVICE_URL: "http://127.0.0.1:8000", AI_SERVICE_TOKEN: token });
+const frontend = start(npm, ["--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1"], { VITE_BACKEND_PROXY_TARGET: `http://127.0.0.1:${backendPort}` });
 writeFileSync(pidFile, JSON.stringify({ fastapi: fastapi.pid, node: backend.pid, react: frontend.pid }, null, 2));
 
 const dashboard = "http://127.0.0.1:5173/";

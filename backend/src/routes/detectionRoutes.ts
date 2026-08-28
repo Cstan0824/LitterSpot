@@ -6,6 +6,7 @@ import { detectionListQuerySchema } from "../schemas/media.js";
 import { getDetection, listDetections } from "../services/jobProcessingService.js";
 import { env } from "../config/env.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { getCameraRegistration } from "../services/cameraRegistrationService.js";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -16,7 +17,8 @@ detectionRoutes.post("/bin-state", upload.single("image"), async (req, res, next
     if (!req.file) return res.status(400).json({ error: "A bin crop image is required.", requestId: req.requestId });
     if (!allowedImageTypes.has(req.file.mimetype)) return res.status(415).json({ error: "Use JPEG, PNG, or WebP.", requestId: req.requestId });
     const options = stateClassificationOptionsSchema.parse(req.body);
-    return res.json(await classifyBinState(req.file, options));
+    const registrationContext = options.cameraId ? await getCameraRegistration(options.cameraId) : null;
+    return res.json(await classifyBinState(req.file, { ...options, registrationContext }));
   } catch (error) { next(error); }
 });
 

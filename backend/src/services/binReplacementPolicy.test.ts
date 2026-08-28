@@ -83,4 +83,20 @@ describe("evaluateBinReplacement", () => {
     expect(result.decision).toBe("insufficient_evidence");
     expect(result.policyVersion).toBe(DEFAULT_BIN_REPLACEMENT_POLICY.version);
   });
+
+  it("allows one confirmed prototype event to create a provisional recommendation", () => {
+    const result = evaluateBinReplacement("zone-a", [row(0, {
+      confirmedEvent: true,
+      bins: [{ state: "overflow", stableState: "overflow", confirmed: true, stale: false }],
+      floorHazards: [],
+    })], null, { evaluatedAt: new Date("2026-08-25T12:00:30.000Z") });
+
+    expect(result).toMatchObject({
+      decision: "replacement_recommended",
+      recommended: true,
+      provisional: true,
+      automaticAction: false,
+      triggerReason: "single_confirmed_event",
+    });
+  });
 });

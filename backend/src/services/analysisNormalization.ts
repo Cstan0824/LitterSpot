@@ -33,7 +33,21 @@ export function deterministicDetectionId(runId: string, issueType: string, entit
   return createHash("sha256").update(runId).update("\0").update(issueType).update("\0").update(entityId).digest("hex");
 }
 
-export function normalizeAnalysis(result: PipelineAnalysisResponse, runId: string, floorThreshold: number) {
+export type NormalizeAnalysisOptions = {
+  /**
+   * Video and registered-camera runs must not create an overflow detection
+   * until the temporal gate has confirmed the same stable bin identity.
+   * Legacy callers omit this option to retain the old raw-replay contract.
+   */
+  requireConfirmedOverflow?: boolean;
+};
+
+export function normalizeAnalysis(
+  result: PipelineAnalysisResponse,
+  runId: string,
+  floorThreshold: number,
+  options: NormalizeAnalysisOptions = {},
+) {
   const { width, height } = result.image;
   const people = result.people.map((person) => ({
     confidence: person.confidence,
@@ -44,10 +58,13 @@ export function normalizeAnalysis(result: PipelineAnalysisResponse, runId: strin
       trackingId?: string | null;
       confirmed?: boolean;
       stale?: boolean;
-      stableState?: "normal" | "full" | "overflow" | "unknown" | null;
+      stableState?: "normal" | "full" | "overflow" | "review" | "unknown" | null;
+      binId?: string | null;
+      evidence?: Record<string, unknown> | null;
     };
     return ({
-    entityId: tracking.trackingId ?? `bin-${bin.binIndex}`,
+    entityId: tracking.binId ?? tracking.trackingId ?? `bin-${bin.binIndex}`,
+    binId: tracking.binId ?? null,
     state: bin.state,
     stableState: tracking.stableState ?? null,
     confidence: bin.stateConfidence,
@@ -57,6 +74,7 @@ export function normalizeAnalysis(result: PipelineAnalysisResponse, runId: strin
     signals: bin.signals,
     confirmed: tracking.confirmed ?? null,
     stale: tracking.stale ?? false,
+    evidence: tracking.evidence ?? null,
   });
   });
   const floorDetections = result.floorHazards.map((hazard, index) => {
@@ -75,10 +93,12 @@ export function normalizeAnalysis(result: PipelineAnalysisResponse, runId: strin
   });
   const overflowDetections = result.bins.filter((bin) => {
     const tracking = bin as typeof bin & { stale?: boolean };
-    return bin.state === "overflow" && !tracking.stale;
+    return bin.state === "overflow"
+      && !tracking.stale
+      && (!options.requireConfirmedOverflow || tracking.confirmed === true);
   }).map((bin) => {
     const tracking = bin as typeof bin & { trackingId?: string | null; confirmed?: boolean; stale?: boolean };
-    const entityId = tracking.trackingId ?? `bin-${bin.binIndex}`;
+    const entityId = tracking.binId ?? tracking.trackingId ?? `bin-${bin.binIndex}`;
     return {
       id: deterministicDetectionId(runId, "bin_overflow", entityId),
       issueType: "bin_overflow" as const,

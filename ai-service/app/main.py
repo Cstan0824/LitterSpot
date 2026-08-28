@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from io import BytesIO
+import base64
 import json
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
@@ -10,7 +11,7 @@ from .bin_localizer import BinLocalizer
 from .multi_state_classifier import MultiStateClassifier
 from .floor_hazard import FloorHazardAnalyzer
 from .pipeline import AnalysisPipeline, InvalidFocusRegionError, PipelineNotReadyError
-from .schemas import BoundingBox, ImageBinAnalysisResponse, ImageInfo, LocalizedBinAnalysis, PipelineAnalysisResponse, PipelineOptions, Point
+from .schemas import BoundingBox, ImageBinAnalysisResponse, ImageInfo, LocalizedBinAnalysis, PipelineAnalysisResponse, PipelineOptions, Point, RegistrationContext, StateClassificationResponse, StateSignals
 
 state_classifier = MultiStateClassifier()
 bin_localizer = BinLocalizer()
@@ -66,6 +67,7 @@ async def classify_bin(
     bin_id: str | None = Form(None),
     confirmation_frames: int = Form(ALERT_CONFIRMATION_FRAMES),
     auto_locate: bool = Form(False),
+    registration: str | None = Form(None),
     x_internal_token: str | None = Header(default=None),
 ):
     require_token(x_internal_token)
@@ -83,6 +85,45 @@ async def classify_bin(
     if confirmation_frames not in range(1, 21):
         raise HTTPException(status_code=422, detail="confirmation_frames must be between 1 and 20")
     coordinates = (x1, y1, x2, y2)
+    registration_context: RegistrationContext | None = None
+    if registration:
+        try:
+            registration_context = RegistrationContext.model_validate(json.loads(registration))
+        except (ValueError, TypeError) as error:
+            raise HTTPException(status_code=422, detail="registration must be a valid registration context JSON object") from error
+        registration_ready = registration_context.runtime_safe()
+        dimensions_match = registration_context.frame_dimensions_match(image.width, image.height)
+        if not registration_ready or not dimensions_match:
+            return StateClassificationResponse(
+                modelVersion=STATE_CLASSIFIER_VERSION,
+                decisionPolicy=state_classifier.overflow_policy,
+                state="unknown",
+                stableState=None,
+                confidence=0,
+                signals=StateSignals(binPresence=0, fullness=0, overflow=0),
+                confirmed=False,
+                confirmationFrames=0,
+                distinctFrameAccepted=False,
+                transitionPending=False,
+                unknownReasons=["registration_not_ready" if not registration_ready else "registration_frame_dimensions_mismatch"],
+                cameraId=camera_id,
+                binId=bin_id,
+                image=ImageInfo(width=image.width, height=image.height),
+                region=BoundingBox(x1=0, y1=0, x2=image.width, y2=image.height),
+                profileUsed=False,
+                localizerUsed=False,
+                processingTimeMs=0,
+            )
+        if not bin_id:
+            raise HTTPException(status_code=422, detail="bin_id is required when registration is supplied")
+        registered = next((item for item in registration_context.bins if item.binId == bin_id), None)
+        if registered is None:
+            raise HTTPException(status_code=422, detail="bin_id is not enrolled for this camera")
+        body_pixels = [(point.x * image.width, point.y * image.height) for point in registered.binPolygon]
+        x_values, y_values = zip(*body_pixels)
+        x1, x2 = max(0.0, min(x_values)), min(float(image.width), max(x_values))
+        y1, y2 = max(0.0, min(y_values)), min(float(image.height), max(y_values))
+        coordinates = (x1, y1, x2, y2)
     if all(value is None for value in coordinates):
         profile_region, profile_used = state_classifier.profile_region(image, camera_id, bin_id)
         if profile_region:
@@ -97,11 +138,19 @@ async def classify_bin(
     elif any(value is None for value in coordinates):
         raise HTTPException(status_code=422, detail="Provide all four region coordinates or none")
     else:
-        profile_used, localizer_used = False, False
+        profile_used, localizer_used = bool(registration_context), False
         region = BoundingBox(x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2))
     if not (0 <= region.x1 < region.x2 <= image.width and 0 <= region.y1 < region.y2 <= image.height):
         raise HTTPException(status_code=422, detail="Region coordinates must be inside the image")
-    return state_classifier.classify(image, region, camera_id, bin_id, confirmation_frames, profile_used, localizer_used)
+    return state_classifier.classify(
+        image,
+        region,
+        camera_id,
+        bin_id,
+        confirmation_frames,
+        profile_used,
+        localizer_used,
+    )
 
 
 @app.post("/classify/image-bins", response_model=ImageBinAnalysisResponse)
@@ -195,18 +244,38 @@ async def analyze_frame(
     except UnidentifiedImageError as error:
         raise HTTPException(status_code=400, detail="Invalid image") from error
     focus_points: list[Point] = []
+    registration_context: RegistrationContext | None = None
+    reference_image: Image.Image | None = None
+    bin_review_enabled = False
     if focus_region:
         try:
-            focus_points = [Point(**point) for point in json.loads(focus_region)]
-        except (ValueError, TypeError) as error:
+            focus_payload = json.loads(focus_region)
+            if isinstance(focus_payload, dict):
+                registration_payload = focus_payload.get("registration")
+                if registration_payload is not None:
+                    registration_context = RegistrationContext.model_validate(registration_payload)
+                reference_base64 = focus_payload.get("referenceImageBase64")
+                if reference_base64:
+                    if not isinstance(reference_base64, str):
+                        raise ValueError("referenceImageBase64 must be a string")
+                    reference_contents = base64.b64decode(reference_base64, validate=True)
+                    if len(reference_contents) > MAX_IMAGE_BYTES:
+                        raise ValueError("reference image is too large")
+                    reference_image = Image.open(BytesIO(reference_contents)).convert("RGB")
+                bin_review_enabled = focus_payload.get("binReviewEnabled") is True
+                focus_payload = focus_payload.get("points", [])
+            focus_points = [Point(**point) for point in focus_payload]
+        except (ValueError, TypeError, UnidentifiedImageError) as error:
             raise HTTPException(status_code=422, detail="focus_region must be a JSON array of normalized points") from error
     try:
         options = PipelineOptions(
             floorConfidence=floor_confidence,
             localizerConfidence=localizer_confidence,
             focusRegion=focus_points,
+            registration=registration_context,
+            binReviewEnabled=bin_review_enabled,
         )
-        return pipeline.analyze(image, options)
+        return pipeline.analyze(image, options, reference_image=reference_image)
     except InvalidFocusRegionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except PipelineNotReadyError as error:

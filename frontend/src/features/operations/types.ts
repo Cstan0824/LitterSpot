@@ -8,7 +8,7 @@ export type FrameResult = {
   peopleCount: number;
   image: { width: number; height: number };
   people: Array<{ confidence: number; bbox: Box }>;
-  bins: Array<{ binIndex: number; state: string; bbox: Box }>;
+  bins: Array<{ binIndex: number; binId?: string | null; state: string; bbox: Box }>;
   floorHazards: Array<{ className: "floor_litter" | "floor_spill"; confidence: number; bbox: Box; polygon: Point[] }>;
   flags: Array<{ severity: "critical" | "warning"; kind: string; message: string }>;
   evidenceAvailable: boolean;

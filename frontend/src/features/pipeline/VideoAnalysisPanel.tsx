@@ -248,7 +248,11 @@ export function VideoAnalysisPanel({ cameraId, onCameraIdChange, onPersisted }: 
         {videoUrl && <div className={started ? "video-live-stage" : "video-engine"}>
           <video ref={videoRef} className="video-player" src={videoUrl} playsInline muted={muted} onLoadedMetadata={prepareVideo} onSeeked={capturePoster} onPlay={() => { setPlaying(true); setEnded(false); }} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setEnded(true); }} />
           {started && result?.people.map((person, index) => <span className="box person" key={`person-${index}`} style={percentBox(person.bbox, result.image)}><b>Person</b></span>)}
-          {started && result?.bins.map((bin) => <span className={`box bin ${bin.state} ${bin.stale ? "stale" : !bin.confirmed ? "candidate" : "confirmed"}`} key={bin.trackingId ?? bin.binIndex} style={percentBox(bin.bbox, result.image)}><b>{bin.trackingId ?? `Bin ${bin.binIndex}`} · {bin.stale ? "stale" : !bin.confirmed ? "candidate" : bin.state}</b></span>)}
+          {started && result?.bins.map((bin) => {
+            const unknownCandidate = bin.unknownReasons?.includes("unregistered_candidate");
+            const label = unknownCandidate ? "Unregistered candidate" : bin.binId ?? bin.trackingId ?? `Bin ${bin.binIndex}`;
+            return <span className={`box bin ${bin.state} ${bin.stale ? "stale" : !bin.confirmed ? "candidate" : "confirmed"}`} key={bin.binId ?? bin.trackingId ?? bin.binIndex} style={percentBox(bin.bbox, result.image)}><b>{label} · {bin.stale ? "stale" : !bin.confirmed ? "pending" : bin.state}</b></span>;
+          })}
           {started && result?.floorHazards.map((hazard, index) => <span className={`box hazard ${hazard.className}`} key={`${hazard.className}-${index}`} style={percentBox(hazard.bbox, result.image)}><b>{hazard.className.replace("floor_", "")}</b></span>)}
         </div>}
         {!started && poster && <FocusRegionEditor preview={poster} points={focusPoints} drawing={drawing} onPointsChange={setFocusPoints} onDrawingChange={setDrawing} />}

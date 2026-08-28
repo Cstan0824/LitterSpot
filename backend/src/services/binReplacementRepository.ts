@@ -99,12 +99,17 @@ function observationFromRun(
   for (let index = 0; index < Math.min(100, Math.floor(numberValue(issueCounts.floorSpill))); index += 1) {
     floorHazards.push({ className: "floor_spill", bboxNormalized: null });
   }
+  const confirmedBinEvent = bins.some((bin) => (
+    bin.confirmed === true
+    && (bin.state === "overflow" || bin.state === "full" || bin.stableState === "overflow" || bin.stableState === "full")
+  ));
   return {
     createdAt: capturedAt.toISOString(),
     peopleCount: Math.floor(numberValue(data.peopleCount)),
     isTest: Boolean(data.isTest),
     bins,
     floorHazards,
+    confirmedEvent: confirmedBinEvent || floorHazards.length > 0,
   };
 }
 

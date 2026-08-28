@@ -14,7 +14,7 @@ export const binReplacementQuerySchema = z.object({
   }, z.boolean()).default(false),
 }).strict();
 
-export const binReplacementStateSchema = z.enum(["normal", "full", "overflow", "unknown"]);
+export const binReplacementStateSchema = z.enum(["normal", "full", "overflow", "review", "unknown"]);
 
 export const binReplacementPolicySchema = z.object({
   version: z.string().trim().min(1).max(128),
@@ -72,6 +72,7 @@ export const binReplacementRecommendationSchema = z.object({
   decision: z.enum(["replacement_recommended", "keep_current_bin", "insufficient_evidence"]),
   recommended: z.boolean(),
   provisional: z.literal(true),
+  automaticAction: z.literal(false).default(false),
   policyVersion: z.string().trim().min(1).max(128),
   windowMinutes: z.number().int().min(5).max(30),
   sampleIntervalSeconds: z.number().int().positive(),

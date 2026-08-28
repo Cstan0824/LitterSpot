@@ -47,4 +47,18 @@ describe("overflow normalization semantics", () => {
     const normalized = normalizeAnalysis(overflowResult(), "run-raw", 0.25);
     expect(normalized.bins[0]).toMatchObject({ state: "overflow", confirmed: null, stale: false });
   });
+
+  it("suppresses overflow alerts until the temporal gate confirms the registered bin", () => {
+    const pending = normalizeAnalysis(overflowResult(), "run-pending", 0.25, { requireConfirmedOverflow: true });
+    expect(pending.detections).toHaveLength(0);
+
+    const confirmedBin = {
+      ...overflowResult().bins[0],
+      binId: "bin-1",
+      confirmed: true,
+      stableState: "overflow" as const,
+    } as PipelineAnalysisResponse["bins"][number] & { confirmed: boolean; stableState: "overflow" };
+    const confirmed = normalizeAnalysis({ ...overflowResult(), bins: [confirmedBin] }, "run-confirmed", 0.25, { requireConfirmedOverflow: true });
+    expect(confirmed.detections).toHaveLength(1);
+  });
 });

@@ -8,6 +8,7 @@ export type BinReplacementRecommendation = {
   decision: "replacement_recommended" | "keep_current_bin" | "insufficient_evidence";
   recommended: boolean;
   provisional: true;
+  automaticAction: false;
   policyVersion: string;
   windowMinutes: number;
   sampleIntervalSeconds: number;

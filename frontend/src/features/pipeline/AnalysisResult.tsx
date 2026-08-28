@@ -14,7 +14,11 @@ export function AnalysisResult({ result, imageUrl }: { result: PipelineResult; i
     <div className="annotated pipeline-annotated">
       <img src={imageUrl} alt="Annotated analysis result" />
       {result.people.map((person, index) => <span className="box person" key={`person-${index}`} style={percentBox(person.bbox, result.image)}><b>Person</b></span>)}
-      {result.bins.map((bin) => <span className="box bin" key={`bin-${bin.binIndex}`} style={percentBox(bin.bbox, result.image)}><b>Bin {bin.binIndex}</b></span>)}
+      {result.bins.map((bin) => {
+        const unknownCandidate = bin.unknownReasons?.includes("unregistered_candidate");
+        const label = unknownCandidate ? "Unregistered candidate" : bin.binId ?? `Bin ${bin.binIndex}`;
+        return <span className={`box bin ${bin.state}`} key={`bin-${bin.binId ?? bin.binIndex}`} style={percentBox(bin.bbox, result.image)}><b>{label} · {bin.state}</b></span>;
+      })}
       {result.floorHazards.map((hazard, index) => <span className={`box hazard ${hazard.className}`} key={`hazard-${index}`} style={percentBox(hazard.bbox, result.image)}><b>{hazard.className === "floor_spill" ? "Spill" : "Litter"}</b></span>)}
       <svg className="spill-masks" viewBox={`0 0 ${result.image.width} ${result.image.height}`} preserveAspectRatio="none">
         {result.floorHazards.filter((hazard) => hazard.className === "floor_spill").map((hazard, index) => <polygon key={index} points={hazard.polygon.map((point) => `${point.x},${point.y}`).join(" ")} />)}

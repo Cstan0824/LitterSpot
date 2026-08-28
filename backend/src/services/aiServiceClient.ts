@@ -1,14 +1,14 @@
 import axios from "axios";
 import FormData from "form-data";
 import { env } from "../config/env.js";
-import { imageBinAnalysisResponseSchema, stateClassificationResponseSchema, type BatchAnalysisOptions, type ImageBinAnalysisResponse, type StateClassificationOptions, type StateClassificationResponse } from "../schemas/detection.js";
+import { imageBinAnalysisResponseSchema, pipelineAnalysisResponseSchema, stateClassificationResponseSchema, type BatchAnalysisOptions, type ImageBinAnalysisResponse, type PipelineAnalysisResponse, type StateClassificationOptions, type StateClassificationResponse } from "../schemas/detection.js";
 
 export async function checkAiHealth() {
   const response = await axios.get(`${env.aiServiceUrl}/health`, { timeout: 3_000 });
   return response.data;
 }
 
-export async function classifyBinState(file: Express.Multer.File, options: StateClassificationOptions): Promise<StateClassificationResponse> {
+export async function classifyBinState(file: Express.Multer.File, options: StateClassificationOptions & { registrationContext?: Record<string, unknown> | null }): Promise<StateClassificationResponse> {
   const body = new FormData();
   body.append("file", file.buffer, { filename: file.originalname, contentType: file.mimetype });
   if (options.cameraId) body.append("camera_id", options.cameraId);
@@ -16,6 +16,7 @@ export async function classifyBinState(file: Express.Multer.File, options: State
   body.append("auto_locate", String(options.autoLocate));
   for (const coordinate of ["x1", "y1", "x2", "y2"] as const) if (options[coordinate] !== undefined) body.append(coordinate, String(options[coordinate]));
   body.append("confirmation_frames", String(options.confirmationFrames));
+  if (options.registrationContext) body.append("registration", JSON.stringify(options.registrationContext));
   const response = await axios.post(`${env.aiServiceUrl}/classify/bin`, body, {
     headers: { ...body.getHeaders(), ...(env.aiServiceToken ? { "x-internal-token": env.aiServiceToken } : {}) },
     maxBodyLength: 10 * 1024 * 1024,
@@ -41,4 +42,28 @@ export async function analyzeImageBins(
     timeout: 30_000,
   });
   return imageBinAnalysisResponseSchema.parse(response.data);
+}
+
+export async function analyzeRegistrationPreview(
+  file: Express.Multer.File,
+  registration: Record<string, unknown>,
+  referenceImage: Buffer,
+  binReviewEnabled: boolean,
+): Promise<PipelineAnalysisResponse> {
+  const body = new FormData();
+  body.append("file", file.buffer, { filename: file.originalname, contentType: file.mimetype });
+  body.append("floor_confidence", "0.25");
+  body.append("localizer_confidence", "0.80");
+  body.append("focus_region", JSON.stringify({
+    points: registration.walkableFloorPolygon ?? [],
+    registration: { ...registration, status: "ready", alignmentStatus: "valid" },
+    referenceImageBase64: referenceImage.toString("base64"),
+    binReviewEnabled,
+  }));
+  const response = await axios.post(`${env.aiServiceUrl}/analyze/frame`, body, {
+    headers: { ...body.getHeaders(), ...(env.aiServiceToken ? { "x-internal-token": env.aiServiceToken } : {}) },
+    maxBodyLength: 20 * 1024 * 1024,
+    timeout: 45_000,
+  });
+  return pipelineAnalysisResponseSchema.parse(response.data);
 }

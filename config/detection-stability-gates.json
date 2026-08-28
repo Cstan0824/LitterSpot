@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "gates": [
+    {"id": "bin.overflow_precision", "module": "bin_state", "metric": "bin_state.overflow.precision", "operator": "min_lower_bound", "threshold": 0.95, "minEvidence": 100},
+    {"id": "bin.overflow_recall", "module": "bin_state", "metric": "bin_state.overflow.recall", "operator": "min_lower_bound", "threshold": 0.90, "minEvidence": 100},
+    {"id": "bin.contained_full_recall", "module": "bin_state", "metric": "bin_state.containedFullRecall", "operator": "min_lower_bound", "threshold": 0.85, "minEvidence": 75},
+    {"id": "bin.normal_false_overflow", "module": "bin_state", "metric": "bin_state.normalFalseOverflow", "operator": "max_upper_bound", "threshold": 0.02, "minEvidence": 200},
+    {"id": "bin.hard_negative_false_overflow", "module": "bin_state", "metric": "bin_state.hardNegativeFalseOverflow", "operator": "max_upper_bound", "threshold": 0.03, "minEvidence": 150},
+    {"id": "bin.unknown_safety", "module": "bin_state", "metric": "bin_state.unknownSafety", "operator": "min_lower_bound", "threshold": 0.95, "minEvidence": 100},
+    {"id": "bin.per_camera_overflow_recall", "module": "bin_state", "metric": "bin_state.overflow.perCameraRecall", "operator": "min_each_lower_bound", "threshold": 0.85, "minEvidence": 30},
+    {"id": "bin.confirmation_delay", "module": "bin_state", "metric": "bin_state.confirmationDelayMedianSeconds", "operator": "max", "threshold": 30.0, "minEvidence": 100},
+    {"id": "bin.duplicate_incidents", "module": "bin_state", "metric": "bin_state.duplicateIncidentRate", "operator": "max_upper_bound", "threshold": 0.01, "minEvidence": 300},
+    {"id": "bin.latency", "module": "bin_state", "metric": "bin_state.latencyP95Ms", "operator": "max", "threshold": 50.0, "minEvidence": 300},
+
+    {"id": "floor.spill_precision", "module": "floor_hazard", "metric": "floor_hazard.spill.precision", "operator": "min_lower_bound", "threshold": 0.90, "minEvidence": 100},
+    {"id": "floor.spill_recall", "module": "floor_hazard", "metric": "floor_hazard.spill.recall", "operator": "min_lower_bound", "threshold": 0.95, "minEvidence": 100},
+    {"id": "floor.litter_precision", "module": "floor_hazard", "metric": "floor_hazard.litter.precision", "operator": "min_lower_bound", "threshold": 0.90, "minEvidence": 100},
+    {"id": "floor.litter_recall", "module": "floor_hazard", "metric": "floor_hazard.litter.recall", "operator": "min_lower_bound", "threshold": 0.90, "minEvidence": 100},
+    {"id": "floor.clean_false_event", "module": "floor_hazard", "metric": "floor_hazard.cleanFalseEvent", "operator": "max_upper_bound", "threshold": 0.03, "minEvidence": 150},
+    {"id": "floor.clean_false_events_per_hour", "module": "floor_hazard", "metric": "floor_hazard.cleanFalseEventsPerCameraHour", "operator": "max_conservative_rate", "threshold": 0.05, "minEvidence": 100},
+    {"id": "floor.small_object_recall", "module": "floor_hazard", "metric": "floor_hazard.smallObjectRecall", "operator": "min_lower_bound", "threshold": 0.80, "minEvidence": 100},
+    {"id": "floor.per_camera_spill_recall", "module": "floor_hazard", "metric": "floor_hazard.perCameraRecall.floor_spill", "operator": "min_each_lower_bound", "threshold": 0.85, "minEvidence": 30},
+    {"id": "floor.per_camera_litter_recall", "module": "floor_hazard", "metric": "floor_hazard.perCameraRecall.floor_litter", "operator": "min_each_lower_bound", "threshold": 0.85, "minEvidence": 30},
+    {"id": "floor.hard_negative_slices", "module": "floor_hazard", "metric": "floor_hazard.hardNegativeFalseEvent", "operator": "max_each_upper_bound", "threshold": 0.05, "minEvidence": 100},
+    {"id": "floor.confirmation_delay", "module": "floor_hazard", "metric": "floor_hazard.confirmationDelayMedianSeconds", "operator": "max", "threshold": 30.0, "minEvidence": 100},
+    {"id": "floor.duplicate_incidents", "module": "floor_hazard", "metric": "floor_hazard.duplicateIncidentRate", "operator": "max_upper_bound", "threshold": 0.01, "minEvidence": 300},
+    {"id": "floor.latency", "module": "floor_hazard", "metric": "floor_hazard.latencyP95Ms", "operator": "max", "threshold": 250.0, "minEvidence": 300},
+
+    {"id": "occupancy.within_one", "module": "occupancy", "metric": "occupancy.withinOne", "operator": "min_lower_bound", "threshold": 0.95, "minEvidence": 450},
+    {"id": "occupancy.mean_absolute_error", "module": "occupancy", "metric": "occupancy.meanAbsoluteError", "operator": "max", "threshold": 0.50, "minEvidence": 450},
+    {"id": "occupancy.empty_false_count", "module": "occupancy", "metric": "occupancy.emptyFalseCount", "operator": "max_upper_bound", "threshold": 0.02, "minEvidence": 200},
+    {"id": "occupancy.per_camera_within_one", "module": "occupancy", "metric": "occupancy.perCameraWithinOne", "operator": "min_each_lower_bound", "threshold": 0.90, "minEvidence": 50},
+    {"id": "occupancy.stable_scene_jitter", "module": "occupancy", "metric": "occupancy.stableSceneJitterMax", "operator": "max", "threshold": 0.50, "minEvidence": 20},
+    {"id": "occupancy.latency", "module": "occupancy", "metric": "occupancy.latencyP95Ms", "operator": "max", "threshold": 100.0, "minEvidence": 450},
+
+    {"id": "integrated.prediction_coverage", "module": "integrated", "metric": "integrated.predictionCoverage", "operator": "min_lower_bound", "threshold": 0.99, "minEvidence": 1000},
+    {"id": "integrated.cycle_latency", "module": "integrated", "metric": "integrated.completeCycleP95Ms", "operator": "max", "threshold": 500.0, "minEvidence": 1000},
+    {"id": "integrated.gpu_memory", "module": "integrated", "metric": "integrated.peakGpuMemoryGiB", "operator": "max", "threshold": 5.0, "minEvidence": 1000},
+    {"id": "integrated.cuda_crashes", "module": "integrated", "metric": "integrated.cudaCrashes", "operator": "equals", "threshold": 0, "minEvidence": 1000},
+    {"id": "integrated.schema_invalid", "module": "integrated", "metric": "integrated.schemaInvalidObservations", "operator": "equals", "threshold": 0, "minEvidence": 1000},
+    {"id": "integrated.unsafe_eligible", "module": "integrated", "metric": "integrated.unsafeEligibleEvents", "operator": "equals", "threshold": 0, "minEvidence": 1000},
+    {"id": "integrated.cross_target_mixes", "module": "integrated", "metric": "integrated.crossTargetMixes", "operator": "equals", "threshold": 0, "minEvidence": 1000},
+    {"id": "integrated.shadow.false_eligible_rate", "module": "integrated", "metric": "integrated.shadow.falseEligibleEventsPerCameraHour", "operator": "max_conservative_rate", "threshold": 0.05, "minEvidence": 100},
+    {"id": "integrated.shadow.consecutive_days", "module": "integrated", "metric": "integrated.shadow.consecutiveDays", "operator": "min", "threshold": 14, "minEvidence": 1},
+    {"id": "integrated.shadow.per_camera_hours", "module": "integrated", "metric": "integrated.shadow.minimumPerCameraHours", "operator": "min", "threshold": 20, "minEvidence": 1},
+    {"id": "integrated.consecutive_releases", "module": "integrated", "metric": "integrated.consecutivePassingReleases", "operator": "min", "threshold": 3, "minEvidence": 1}
+  ]
+}

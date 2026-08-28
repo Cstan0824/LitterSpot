@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "module": "registered_scene_evidence",
+  "zones": {
+    "topFraction": 0.30,
+    "sideExpansionFraction": 0.12,
+    "bottomExpansionFraction": 0.15
+  },
+  "thresholds": {
+    "topChangeRatio": 0.08,
+    "sideChangeRatio": 0.04,
+    "bottomChangeRatio": 0.03,
+    "exteriorNoiseCeiling": 0.02,
+    "differenceThreshold": 0.12,
+    "floorMaskOverlap": 0.60
+  },
+  "notes": "Prototype calibration for stable mock replays; do not treat as production site-wide thresholds."
+}

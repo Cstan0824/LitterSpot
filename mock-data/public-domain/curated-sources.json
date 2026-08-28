@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "source": "Wikimedia Commons API",
+  "licenseAllowlist": ["Public domain", "CC0", "CC0 1.0"],
+  "items": [
+    {
+      "title": "File:Overflowing Hamburg street garbage bin.jpg",
+      "fileName": "commons-overflowing-hamburg-bin.jpg",
+      "sceneId": "commons-overflowing-hamburg-bin",
+      "scenarios": ["bin.overflow_above_rim", "bin.overflow_around_bin", "floor.litter_small", "occupancy.count_2_3", "occupancy.partial_person"],
+      "expected": {"peopleMin": 3, "peopleMax": 3, "binCount": 1, "binStates": ["overflow"], "floorHazards": ["floor_litter"]}
+    },
+    {
+      "title": "File:Overflowing paper bin.jpg",
+      "fileName": "commons-overflowing-paper-bin.jpg",
+      "sceneId": "commons-overflowing-paper-bin",
+      "scenarios": ["bin.overflow_above_rim", "bin.overflow_around_bin", "bin.multiple", "floor.litter_large", "occupancy.count_0"],
+      "expected": {"peopleMin": 0, "peopleMax": 0, "binCount": 3, "binStates": ["overflow", "overflow", "normal"], "floorHazards": ["floor_litter"]}
+    },
+    {
+      "title": "File:Garbage-bin-001.jpg",
+      "fileName": "commons-normal-garbage-bin.jpg",
+      "sceneId": "commons-normal-garbage-bin",
+      "scenarios": ["bin.normal", "floor.clean_negative", "floor.shadow_negative", "occupancy.count_0"],
+      "expected": {"peopleMin": 0, "peopleMax": 0, "binCount": 1, "binStates": ["normal"], "floorHazards": []}
+    },
+    {
+      "title": "File:2003-09-30 Trash can.jpg",
+      "fileName": "commons-normal-trash-can.jpg",
+      "sceneId": "commons-normal-trash-can",
+      "scenarios": ["bin.full_not_overflow", "floor.litter_small", "occupancy.count_0"],
+      "expected": {"peopleMin": 0, "peopleMax": 0, "binCount": 1, "binStates": ["contained_full"], "floorHazards": ["floor_litter"]}
+    },
+    {
+      "title": "File:Walking in a shopping mall.jpg",
+      "fileName": "commons-shopping-mall-people.jpg",
+      "sceneId": "commons-shopping-mall-people",
+      "scenarios": ["bin.no_bin_negative", "occupancy.dense_over_8", "occupancy.occlusion"],
+      "expected": {"peopleMin": 9, "peopleMax": 15, "binCount": 0, "binStates": [], "floorHazards": []}
+    },
+    {
+      "title": "File:Air pollution indoor renovation demolition Hong Kong dust particulates.webm",
+      "fileName": "commons-crowded-mall-video-thumbnail.jpg",
+      "sceneId": "commons-crowded-mall-video",
+      "scenarios": ["bin.no_bin_negative", "floor.reflection_negative", "occupancy.count_2_3", "occupancy.partial_person"],
+      "expected": {"peopleMin": 3, "peopleMax": 4, "binCount": 0, "binStates": [], "floorHazards": []}
+    }
+  ]
+}

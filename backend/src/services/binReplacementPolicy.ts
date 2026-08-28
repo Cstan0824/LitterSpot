@@ -24,6 +24,8 @@ export type BinReplacementObservation = {
     className: "floor_litter" | "floor_spill";
     bboxNormalized?: NormalizedBox | null;
   }>;
+  /** A completed, downstream-eligible event may trigger the short prototype recommendation. */
+  confirmedEvent?: boolean;
 };
 
 export type PreviousBinReplacementDecision = {
@@ -215,6 +217,11 @@ export function evaluateBinReplacement(
   // emulator data use exactly the same path as production observations.
   const samples = minuteSamples(observations, windowMinutes);
   const coverage = coverageFor(samples, policy);
+  const latestEvent = observations
+    .filter((observation) => observation.confirmedEvent === true)
+    .map((observation) => parseInstant(observation.createdAt).getTime())
+    .filter((timestamp) => timestamp >= (options.evaluatedAt ?? new Date()).getTime() - windowMinutes * 60_000)
+    .length > 0;
   const fullMinutes = samples.filter((sample) => sample.full).length;
   const litterEpisodes = countHazardEpisodes(samples, "floor_litter", policy);
   const spillEpisodes = countHazardEpisodes(samples, "floor_spill", policy);
@@ -253,7 +260,18 @@ export function evaluateBinReplacement(
   let raiseStreak = current.raiseStreak;
   let clearStreak = current.clearStreak;
   let decision: BinReplacementRecommendation["decision"];
-  if (!coverage.coverageReady) {
+  // A single confirmed event is sufficient for the short prototype demo. It
+  // remains explicitly provisional and never performs an automatic action.
+  // Longer windows retain the existing ranking/hysteresis policy so the old
+  // benchmark fixtures remain comparable.
+  const singleConfirmedEvent = latestEvent && observations.length <= 3;
+  if (singleConfirmedEvent) {
+    recommended = true;
+    trigger = "single_confirmed_event";
+    raiseStreak = 0;
+    clearStreak = 0;
+    decision = "replacement_recommended";
+  } else if (!coverage.coverageReady) {
     raiseStreak = 0;
     clearStreak = 0;
     decision = "insufficient_evidence";
@@ -294,6 +312,7 @@ export function evaluateBinReplacement(
     decision,
     recommended,
     provisional: true,
+    automaticAction: false,
     policyVersion: policy.version,
     windowMinutes,
     sampleIntervalSeconds: policy.sampleIntervalSeconds,

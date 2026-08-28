@@ -22,9 +22,13 @@ import {
 import { getProcessingJob } from "./mediaService.js";
 import { SerialJobQueue } from "./serialJobQueue.js";
 import { trackVideoBins, type VideoBinTrackingState } from "./videoBinTracking.js";
+import { confirmTemporalBinStates } from "./binTemporalDecision.js";
 import { extractVideoFrame, VideoFrameExtractionError, videoFrameOffset } from "./videoFrameExtraction.js";
 import { decideVideoJobClaim } from "./videoJobState.js";
 import { recordOperationalFailure, recoverOperationalEvent } from "./dependencyEventMonitor.js";
+import { getCameraRegistration } from "./cameraRegistrationService.js";
+import { loadRegistrationReference, type RegistrationReferencePayload } from "./cameraRegistrationReference.js";
+import type { PipelineAnalysisResponse } from "../schemas/detection.js";
 
 type VideoClaim = { completed: true } | { completed: false; claimToken: string; job: DocumentData };
 
@@ -214,6 +218,8 @@ async function processVideoFrame(options: {
   frameIndex: number;
   offsetSeconds: number;
   currentTrackingState: VideoBinTrackingState | null;
+  registration?: Record<string, unknown> | null;
+  reference?: RegistrationReferencePayload | null;
 }) {
   const runId = deterministicVideoAnalysisRunId(options.jobId, options.frameIndex);
   if (await resumePersistedFrame({ jobId: options.jobId, claimToken: options.claimToken, runId, frameIndex: options.frameIndex })) {
@@ -235,10 +241,10 @@ async function processVideoFrame(options: {
     floorConfidence,
     binLocalizerConfidence,
     focusRegion,
+    registration: options.registration,
+    reference: options.reference,
+    binReviewEnabled: true,
   });
-  const tracked = trackVideoBins({ bins: inferred.bins, image: inferred.image, state: options.currentTrackingState });
-  const result = { ...inferred, bins: tracked.bins };
-  const normalized = normalizeAnalysis(result, runId, floorConfidence);
   const frameMediaId = deterministicVideoFrameMediaId(options.jobId, options.frameIndex);
   const frameMediaReference = firestore.collection("mediaAssets").doc(frameMediaId);
   const frameStorageKey = `media/${frameMediaId}/frame-${options.claimToken}.jpg`;
@@ -248,6 +254,15 @@ async function processVideoFrame(options: {
   await writeMedia(frameStorageKey, contents);
   const sourceCapturedAt = options.media.capturedAt instanceof Timestamp ? options.media.capturedAt : Timestamp.now();
   const capturedAt = Timestamp.fromMillis(sourceCapturedAt.toMillis() + Math.round(options.offsetSeconds * 1_000));
+  const tracked = trackVideoBins<PipelineAnalysisResponse["bins"][number]>({ bins: inferred.bins, image: inferred.image, state: options.currentTrackingState });
+  const temporal = confirmTemporalBinStates(
+    tracked.bins as unknown as PipelineAnalysisResponse["bins"],
+    tracked.state,
+    capturedAt.toMillis(),
+    Number(options.registration?.revision ?? 0),
+  );
+  const result: PipelineAnalysisResponse = { ...inferred, bins: temporal.bins as unknown as PipelineAnalysisResponse["bins"] };
+  const normalized = normalizeAnalysis(result, runId, floorConfidence, { requireConfirmedOverflow: true });
   const runReference = firestore.collection("analysisRuns").doc(runId);
   const jobReference = firestore.collection("processingJobs").doc(options.jobId);
   const cameraReference = firestore.collection("cameras").doc(String(options.job.cameraId));
@@ -327,7 +342,7 @@ async function processVideoFrame(options: {
       alertEvaluationStatus: "pending",
       alertEvaluationPolicyVersion: null,
       alertEvaluationAt: null,
-      videoTrackingStateAfter: tracked.state,
+      videoTrackingStateAfter: temporal.state,
       videoJobAppliedAt: null,
       createdAt: FieldValue.serverTimestamp(),
       });
@@ -422,9 +437,9 @@ async function processVideoFrame(options: {
     detectionCount: normalized.detections.length,
     flagIds: alertEvaluation.flagIds,
     alertIds: alertEvaluation.alertIds,
-    trackingStateAfter: tracked.state,
+    trackingStateAfter: temporal.state,
   });
-  return tracked.state;
+  return temporal.state;
 }
 
 export async function processVideoJob(jobId: string) {
@@ -443,6 +458,8 @@ export async function processVideoJob(jobId: string) {
     const plannedFrames = Number(job.progress?.plannedFrames);
     if (!Number.isInteger(plannedFrames) || plannedFrames < 1) throw new HttpError(422, "Video job has an invalid frame plan.");
     let currentTrackingState = trackingState(job.videoTrackingState);
+    const registration = await getCameraRegistration(String(job.cameraId));
+    const reference = await loadRegistrationReference(registration);
     const lastFrameIndex = Number.isInteger(job.progress?.lastFrameIndex) ? Number(job.progress.lastFrameIndex) : -1;
     for (let frameIndex = lastFrameIndex + 1; frameIndex < plannedFrames; frameIndex += 1) {
       await renewVideoLease(jobId, claimToken);
@@ -458,6 +475,8 @@ export async function processVideoJob(jobId: string) {
           frameIndex,
           offsetSeconds,
           currentTrackingState,
+          registration,
+          reference,
         });
       } catch (error) {
         // Only an explicitly identified, non-persisted ffmpeg frame decode error

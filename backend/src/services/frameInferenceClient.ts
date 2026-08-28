@@ -4,6 +4,7 @@ import FormData from "form-data";
 import { env } from "../config/env.js";
 import { pipelineAnalysisResponseSchema, type PipelineAnalysisResponse } from "../schemas/detection.js";
 import { recordOperationalFailure, recoverOperationalEvent } from "./dependencyEventMonitor.js";
+import type { RegistrationReferencePayload } from "./cameraRegistrationReference.js";
 
 export type FrameInferenceInput = {
   contents: Buffer;
@@ -12,6 +13,9 @@ export type FrameInferenceInput = {
   floorConfidence: number;
   binLocalizerConfidence: number;
   focusRegion: Array<{ x: number; y: number }>;
+  registration?: Record<string, unknown> | null;
+  reference?: RegistrationReferencePayload | null;
+  binReviewEnabled?: boolean;
 };
 
 export async function inferFrame(input: FrameInferenceInput): Promise<PipelineAnalysisResponse> {
@@ -25,14 +29,24 @@ export async function inferFrame(input: FrameInferenceInput): Promise<PipelineAn
   body.append("file", input.contents, { filename: input.fileName, contentType: input.mimeType });
   body.append("floor_confidence", String(input.floorConfidence));
   body.append("localizer_confidence", String(input.binLocalizerConfidence));
-  body.append("focus_region", JSON.stringify(input.focusRegion));
+  const focusPayload = input.registration
+    ? {
+      points: input.focusRegion,
+      registration: input.registration,
+      ...(input.reference ? { referenceImageBase64: input.reference.referenceImageBase64 } : {}),
+      binReviewEnabled: input.binReviewEnabled === true,
+    }
+    : input.focusRegion;
+  body.append("focus_region", JSON.stringify(focusPayload));
   try {
     const response = await axios.post(`${env.aiServiceUrl}/analyze/frame`, body, {
       headers: {
         ...body.getHeaders(),
         ...(env.aiServiceToken ? { "x-internal-token": env.aiServiceToken } : {}),
       },
-      maxBodyLength: 10 * 1024 * 1024,
+      // A registered frame envelope may include one validated reference image
+      // as base64 while the stateless AI adapter remains file-based.
+      maxBodyLength: 25 * 1024 * 1024,
       timeout: 60_000,
     });
     const result = pipelineAnalysisResponseSchema.parse(response.data);

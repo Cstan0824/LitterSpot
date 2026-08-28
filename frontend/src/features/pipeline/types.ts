@@ -8,7 +8,17 @@ export type PipelineResult = {
   focusRegion: Point[];
   peopleCount: number;
   people: Array<{ confidence: number; bbox: Box }>;
-  bins: Array<{ binIndex: number; trackingId?: string | null; state: string; confirmed: boolean; stale?: boolean; bbox: Box }>;
+  bins: Array<{
+    binIndex: number;
+    binId?: string | null;
+    trackingId?: string | null;
+    state: string;
+    stableState?: string | null;
+    confirmed: boolean;
+    stale?: boolean;
+    unknownReasons?: string[];
+    bbox: Box;
+  }>;
   floorHazards: Array<{ className: "floor_litter" | "floor_spill"; confidence: number; bbox: Box; polygon: Point[] }>;
   flags: Flag[];
   processingTimeMs: number;

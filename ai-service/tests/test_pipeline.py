@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.bin_localizer import LocalizedBin
 from app.floor_hazard import FloorAnalysis, FloorHazardAnalyzer
 from app.pipeline import AnalysisPipeline, InvalidFocusRegionError
-from app.schemas import BoundingBox, FloorHazard, PersonDetection, PipelineOptions, Point, StateSignals
+from app.schemas import BoundingBox, FloorHazard, PersonDetection, PipelineOptions, Point, RegisteredBinContext, RegistrationContext, StateSignals
 
 
 class ReadyStateClassifier:
@@ -45,6 +45,17 @@ class CandidateBinLocalizer:
         return [LocalizedBin(BoundingBox(x1=10, y1=10, x2=50, y2=90), 0.9)], 1
 
 
+class ShadowCandidateLocalizer:
+    ready = True
+
+    @staticmethod
+    def locate_all(*_args):
+        return [
+            LocalizedBin(BoundingBox(x1=10, y1=10, x2=50, y2=90), 0.9),
+            LocalizedBin(BoundingBox(x1=60, y1=20, x2=90, y2=80), 0.85),
+        ], 1
+
+
 class RecordingStateClassifier:
     ready = True
 
@@ -77,6 +88,70 @@ class ObjectAwareFloorAnalyzer:
 
 
 class PipelineRegionTests(unittest.TestCase):
+    @staticmethod
+    def registered_bin_context():
+        return RegistrationContext(
+            status="ready",
+            alignmentStatus="valid",
+            sourceWidth=100,
+            sourceHeight=100,
+            walkableFloorPolygon=[Point(x=0, y=0), Point(x=1, y=0), Point(x=1, y=1)],
+            bins=[RegisteredBinContext(
+                binId="bin-1",
+                binType="lidded",
+                binPolygon=[Point(x=.1, y=.1), Point(x=.5, y=.1), Point(x=.5, y=.9), Point(x=.1, y=.9)],
+            )],
+        )
+
+    def test_registered_still_image_uses_direct_bin_state_without_review(self):
+        image = Image.new("RGB", (100, 100), "gray")
+        result = AnalysisPipeline(
+            RecordingStateClassifier(), EmptyBinLocalizer(), DemoFloorAnalyzer(),
+        ).analyze(
+            image,
+            PipelineOptions(registration=self.registered_bin_context(), binReviewEnabled=False),
+            reference_image=image.copy(),
+        )
+
+        self.assertEqual(result.bins[0].state, "overflow")
+        self.assertEqual(result.bins[0].unknownReasons, [])
+        self.assertIsNone(result.bins[0].evidence)
+
+    def test_registered_video_frame_applies_review_gate(self):
+        image = Image.new("RGB", (100, 100), "gray")
+        result = AnalysisPipeline(
+            RecordingStateClassifier(), EmptyBinLocalizer(), DemoFloorAnalyzer(),
+        ).analyze(
+            image,
+            PipelineOptions(registration=self.registered_bin_context(), binReviewEnabled=True),
+            reference_image=image.copy(),
+        )
+
+        self.assertEqual(result.bins[0].state, "review")
+        self.assertEqual(result.bins[0].unknownReasons, ["overflow_without_exterior_evidence"])
+        self.assertIsNotNone(result.bins[0].evidence)
+
+    def test_registered_context_fails_closed_when_frame_dimensions_change(self):
+        registration = RegistrationContext(
+            status="ready",
+            alignmentStatus="valid",
+            sourceWidth=200,
+            sourceHeight=100,
+            walkableFloorPolygon=[Point(x=0, y=0), Point(x=1, y=0), Point(x=1, y=1)],
+            bins=[RegisteredBinContext(
+                binId="bin-1",
+                bodyPolygon=[Point(x=.1, y=.4), Point(x=.3, y=.4), Point(x=.3, y=.9), Point(x=.1, y=.9)],
+                rimPolygon=[Point(x=.1, y=.4), Point(x=.3, y=.4), Point(x=.3, y=.5), Point(x=.1, y=.5)],
+                groundRingPolygon=[Point(x=.1, y=.85), Point(x=.3, y=.85), Point(x=.3, y=.9), Point(x=.1, y=.9)],
+            )],
+        )
+        pipeline = AnalysisPipeline(RecordingStateClassifier(), CandidateBinLocalizer(), DemoFloorAnalyzer())
+
+        result = pipeline.analyze(Image.new("RGB", (100, 100)), PipelineOptions(registration=registration))
+
+        self.assertEqual(result.bins, [])
+        self.assertEqual(result.floorHazards, [])
+
     def test_person_covered_bin_candidate_is_rejected_before_state_classification(self):
         classifier = RecordingStateClassifier()
         pipeline = AnalysisPipeline(classifier, CandidateBinLocalizer(), ObjectAwareFloorAnalyzer())
@@ -85,6 +160,45 @@ class PipelineRegionTests(unittest.TestCase):
             Image.new("RGB", (100, 100)),
             PipelineOptions(localizerConfidence=0.7, floorConfidence=0.25),
         )
+
+        self.assertEqual(result.bins, [])
+        self.assertEqual(classifier.calls, 0)
+
+    def test_registered_camera_surfaces_unregistered_shadow_candidate_as_unknown(self):
+        registration = RegistrationContext(
+            status="ready",
+            alignmentStatus="valid",
+            sourceWidth=100,
+            sourceHeight=100,
+            walkableFloorPolygon=[Point(x=0, y=0), Point(x=1, y=0), Point(x=1, y=1)],
+            bins=[RegisteredBinContext(
+                binId="bin-1",
+                binPolygon=[Point(x=.1, y=.1), Point(x=.5, y=.1), Point(x=.5, y=.9), Point(x=.1, y=.9)],
+            )],
+        )
+        result = AnalysisPipeline(
+            RecordingStateClassifier(), ShadowCandidateLocalizer(), DemoFloorAnalyzer(),
+        ).analyze(Image.new("RGB", (100, 100)), PipelineOptions(registration=registration))
+
+        self.assertEqual(len(result.bins), 2)
+        self.assertEqual(result.bins[0].binId, "bin-1")
+        self.assertEqual(result.bins[1].state, "unknown")
+        self.assertEqual(result.bins[1].unknownReasons, ["unregistered_candidate"])
+
+    def test_registered_camera_without_bins_skips_bin_detection(self):
+        registration = RegistrationContext(
+            status="ready",
+            alignmentStatus="valid",
+            sourceWidth=100,
+            sourceHeight=100,
+            walkableFloorPolygon=[Point(x=0, y=0), Point(x=1, y=0), Point(x=1, y=1)],
+            bins=[],
+        )
+        classifier = RecordingStateClassifier()
+
+        result = AnalysisPipeline(
+            classifier, ShadowCandidateLocalizer(), DemoFloorAnalyzer(),
+        ).analyze(Image.new("RGB", (100, 100)), PipelineOptions(registration=registration))
 
         self.assertEqual(result.bins, [])
         self.assertEqual(classifier.calls, 0)
@@ -115,6 +229,34 @@ class PipelineRegionTests(unittest.TestCase):
         self.assertEqual(
             AnalysisPipeline._floor_hazards_for_context([litter, spill], []),
             [litter, spill],
+        )
+
+    def test_floor_context_rejects_hazard_outside_polygon(self):
+        hazard = FloorHazard(
+            className="floor_litter", confidence=0.8,
+            bbox=BoundingBox(x1=70, y1=70, x2=90, y2=90),
+            polygon=[Point(x=70, y=70), Point(x=90, y=70), Point(x=90, y=90), Point(x=70, y=90)],
+        )
+        floor = [Point(x=0, y=0), Point(x=0.5, y=0), Point(x=0.5, y=0.5), Point(x=0, y=0.5)]
+
+        self.assertEqual(
+            AnalysisPipeline._floor_hazards_for_context([hazard], floor, (100, 100)),
+            [],
+        )
+
+    def test_floor_context_rejects_hazard_over_registered_bin(self):
+        hazard = FloorHazard(
+            className="floor_spill", confidence=0.8,
+            bbox=BoundingBox(x1=20, y1=20, x2=40, y2=40),
+            polygon=[Point(x=20, y=20), Point(x=40, y=20), Point(x=40, y=40), Point(x=20, y=40)],
+        )
+        floor = [Point(x=0, y=0), Point(x=1, y=0), Point(x=1, y=1), Point(x=0, y=1)]
+
+        self.assertEqual(
+            AnalysisPipeline._floor_hazards_for_context(
+                [hazard], floor, (100, 100), registered_bins=[hazard.bbox],
+            ),
+            [],
         )
 
     def test_partial_bin_candidate_touching_frame_edge_is_not_rejected_on_position_alone(self):
