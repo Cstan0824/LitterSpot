@@ -318,6 +318,10 @@ ui-debug.log
 bun.lock
 bun.lockb
 
+# Local UI reference projects; keep these available locally but out of Git.
+/ltterspot-ui-reference/
+/litterspot-ui-reference/
+
 # Local ML corpora and generated evaluation output. Keep acquisition/training
 # scripts, manifests, reports, configs, and explicitly allowlisted production
 # weights in Git; the large or reproducible payloads remain local.
