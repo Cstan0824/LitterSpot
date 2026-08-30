@@ -20,7 +20,7 @@ export function LoginPage({ onLogin }: { onLogin: (email: string, password: stri
   }
 
   return <main className="login-page"><section className="login-panel">
-    <div className="login-brand"><b>♲</b><div><strong>LITTERSPOT</strong><span>AI WASTE MONITOR</span></div></div>
+    <div className="login-brand"><b>LS</b><div><strong>LitterSpot</strong><span>Field Station</span></div></div>
     <div className="login-copy"><p className="eyebrow">OPERATIONS ACCESS</p><h1>Welcome back.</h1><p>Sign in to monitor camera feeds, review detection flags, and manage waste operations.</p></div>
     <form onSubmit={submit}><label>Email address<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label><button className="primary" type="submit" disabled={pending}>{pending ? "Signing in…" : "Sign in to dashboard"} <span>→</span></button></form>
     {error && <p className="login-demo" role="alert">{error}</p>}
