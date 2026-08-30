@@ -14,14 +14,15 @@ import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { firebaseAuth } from "./config/firebase";
 import { apiFetch, readApiError } from "./services/apiClient";
 import { FieldStationShell } from "./components/FieldStationShell";
+import { CleanerMobileApp } from "./features/cleaner/CleanerMobileApp";
 
 type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
-type Route = OperationsPage | "pipeline" | "playground" | "status" | "camera-registration";
+type Route = OperationsPage | "pipeline" | "playground" | "status" | "camera-registration" | "cleaner";
 type Supervisor = { uid: string; email: string; displayName: string };
 
 function routeFromHash(): Route {
   const route = location.hash.replace(/^#\/?/, "").split("?")[0];
-  if (["alerts", "history", "placement", "cameras", "admin", "pipeline", "playground", "status", "camera-registration"].includes(route)) return route as Route;
+  if (["alerts", "history", "placement", "cameras", "admin", "pipeline", "playground", "status", "camera-registration", "cleaner"].includes(route)) return route as Route;
   return "dashboard";
 }
 
@@ -30,6 +31,7 @@ function App() {
   const [supervisor, setSupervisor] = useState<Supervisor | null>(null);
   const [profileError, setProfileError] = useState<string>();
   const [route, setRoute] = useState<Route>(routeFromHash);
+  const [demoCleanerSession, setDemoCleanerSession] = useState(false);
   useEffect(() => {
     const syncRoute = () => setRoute(routeFromHash());
     addEventListener("hashchange", syncRoute);
@@ -56,14 +58,15 @@ function App() {
     }
   }), []);
 
+  if (demoCleanerSession) return <CleanerMobileApp onLogout={() => { setDemoCleanerSession(false); location.hash = "/"; }} />;
   if (!authReady) return <main className="ops-loading">Checking Supervisor session…</main>;
   if (profileError && firebaseAuth.currentUser) return <main className="ops-loading"><p>{profileError}</p><button className="outline-button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></main>;
-  if (!supervisor) return <LoginPage onLogin={async (email, password) => { await signInWithEmailAndPassword(firebaseAuth, email, password); }} />;
+  if (!supervisor) return <LoginPage onLogin={async (email, password) => { await signInWithEmailAndPassword(firebaseAuth, email, password); }} onDemoCleaner={() => { setDemoCleanerSession(true); location.hash = "/cleaner"; }} />;
   if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DetectionTestPage /></FieldStationShell>;
   if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><PipelinePage /></FieldStationShell>;
   if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><CameraRegistrationPage /></FieldStationShell>;
   if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
-  return <OperationsConsole supervisor={supervisor} page={route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void signOut(firebaseAuth); }} />;
+  return <OperationsConsole supervisor={supervisor} page={route === "cleaner" ? "dashboard" : route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void signOut(firebaseAuth); }} />;
 }
 
 

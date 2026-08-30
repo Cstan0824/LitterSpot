@@ -9,6 +9,7 @@ import { GeographicOperationsDashboard } from "./GeographicOperationsDashboard";
 import { CameraOperationsPage } from "./CameraOperationsPage";
 import { AlertManagementPage } from "./AlertManagementPage";
 import { WorkManagementPage } from "./WorkManagementPage";
+import { TeamManagementPage } from "./TeamManagementPage";
 
 type Page = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
 type AdminProfile = { displayName: string; email: string };
@@ -224,7 +225,7 @@ export function OperationsConsole({ supervisor, page, onNavigate, onLogout }: { 
 
   const content = useMemo(() => {
     if (page === "dashboard") return <GeographicOperationsDashboard zones={zones} cameras={cameraRecords} alerts={allAlerts} cleaners={staff} recommendations={placementRecommendations} />;
-    if (page === "admin") return <AdminManagementPage profile={supervisor} staff={staff} zones={zones.filter((zone) => zone.status === "active")} dataError={staffError} onRegister={async (input) => { const cleaner = await createCleaner(input); setStaff((items) => [...items, cleaner].sort((left, right) => left.fullName.localeCompare(right.fullName))); setStaffError(undefined); }} onToggle={async (person) => { try { const cleaner = await updateCleanerStatus(person.id, person.status === "active" ? "inactive" : "active"); setStaff((items) => items.map((item) => item.id === cleaner.id ? cleaner : item)); setStaffError(undefined); } catch (error) { setStaffError(error instanceof Error ? error.message : "Cleaner status could not be updated."); } }} />;
+    if (page === "admin") return <TeamManagementPage staff={staff} zones={zones} />;
     if (page === "cameras") return <CameraOperationsPage sites={sites} zones={zones} cameras={cameraRecords} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onCreateZone={async (siteId, name) => { const zone = await createZone({ siteId, name }); setZones((items) => [...items, zone].sort((left, right) => left.name.localeCompare(right.name))); setLocationError(undefined); return zone; }} onCreateCamera={async (zoneId, code, name, sourceMode) => { const camera = await createCamera({ zoneId, code, name, sourceMode }); setCameraRecords((items) => [...items, camera].sort((left, right) => left.code.localeCompare(right.code, undefined, { numeric: true }))); setLocationError(undefined); return camera; }} />;
     if (page === "alerts") return <AlertManagementPage alerts={allAlerts} cameras={cameraRecords} cleaners={staff} onStatus={(alert, next) => changeStatus(alert, next)} />;
     if (page === "history") return <WorkManagementPage cleaners={staff} zones={zones} alerts={allAlerts} />;
