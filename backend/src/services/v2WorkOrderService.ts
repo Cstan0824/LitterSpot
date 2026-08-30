@@ -1,0 +1,280 @@
+import { createHash, randomUUID } from "node:crypto";
+import { FieldValue, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
+import { firestore } from "../config/firebase.js";
+import { HttpError } from "../shared/httpError.js";
+import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
+import { canonicalHash, assertExpectedRevision } from "./v2Persistence.js";
+import { v2AuditEventData, type AuditActor } from "./v2AuditService.js";
+import { deriveCleanerAvailability } from "./v2CleanerAvailability.js";
+import { containingPolygon, type MapPoint, type Polygon } from "./v2MapGeometry.js";
+import { applyVerification, canTransitionWork, requiresCompletionEvidence } from "./v2WorkPolicy.js";
+import { getV2LiveIssueState } from "./v2LiveMonitoringService.js";
+import { detectSupportedImage, validateDeclaredImageType } from "./imageUploadValidation.js";
+import { writeMedia } from "./localMediaStorage.js";
+import type { V2LiveObservation } from "./v2LiveMonitoringService.js";
+
+export type V2WorkActor = AuditActor & { type: "supervisor" | "cleaner" | "orchestrator"; cleanerId?: string };
+const ACTIVE = ["assigned", "in_progress", "awaiting_review"] as const;
+const instant = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
+const hash = (namespace: string, ...values: unknown[]) => canonicalHash(namespace, ...values);
+type V2WorkOrder = Record<string, any>;
+const verificationSampleCount = (issueType: string) => issueType === "floor_litter" ? 3 : 2;
+
+function actorMap(actor: V2WorkActor) {
+  return actor.type === "orchestrator"
+    ? { type: "orchestrator", serviceId: actor.uid, displayNameSnapshot: actor.displayName }
+    : { type: "human", uid: actor.uid, role: actor.role, authority: actor.authority ?? null, displayNameSnapshot: actor.displayName };
+}
+
+function present(id: string, data: DocumentData): V2WorkOrder {
+  return {
+    id,
+    ...data,
+    createdAt: instant(data.createdAt), updatedAt: instant(data.updatedAt), assignedAt: instant(data.assignedAt),
+    startedAt: instant(data.startedAt), submittedAt: instant(data.submittedAt), resolvedAt: instant(data.resolvedAt), dismissedAt: instant(data.dismissedAt),
+  };
+}
+
+async function readSite(siteId: string, transaction?: Transaction) {
+  const ref = firestore.collection("sites").doc(siteId);
+  const snapshot = transaction ? await transaction.get(ref) : await ref.get();
+  if (!snapshot.exists || snapshot.data()?.status !== "active") throw new HttpError(404, "Active Site not found.");
+  return { ref, snapshot, data: snapshot.data()! };
+}
+
+async function readCleaner(siteId: string, cleanerId: string, transaction?: Transaction) {
+  const ref = firestore.collection("cleaners").doc(cleanerId);
+  const snapshot = transaction ? await transaction.get(ref) : await ref.get();
+  if (!snapshot.exists || snapshot.data()?.schemaVersion !== 2 || snapshot.data()?.siteId !== siteId) throw new HttpError(404, "Cleaner not found.");
+  return { ref, snapshot, data: snapshot.data()! };
+}
+
+async function readStation(siteId: string, cleanerId: string, mapRevisionId: string, transaction?: Transaction) {
+  const ref = firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("cleanerStations").doc(cleanerId);
+  const snapshot = transaction ? await transaction.get(ref) : await ref.get();
+  return snapshot.exists && snapshot.data()?.siteId === siteId && snapshot.data()?.zoneId ? snapshot.data()! : null;
+}
+
+function assertCleanerAvailable(site: DocumentData, cleaner: DocumentData, station: DocumentData | null) {
+  if (cleaner.status !== "active" || !cleaner.authUid) throw new HttpError(409, "Cleaner is inactive or has no active account.");
+  if (cleaner.activeWorkOrderId) throw new HttpError(409, "Cleaner already has an active Work Order.");
+  const availability = deriveCleanerAvailability({ siteActive: site.status === "active", accountActive: true, cleanerActive: cleaner.status === "active", availabilityOverride: cleaner.availabilityOverride === "unavailable" ? "unavailable" : "none", activeWorkOrderId: null, stationPointValid: Boolean(station), schedule: cleaner.weeklySchedule ?? {}, scheduleTimeZone: String(cleaner.scheduleTimeZone ?? site.timeZone ?? "Asia/Kuala_Lumpur") });
+  if (!availability.available) throw new HttpError(409, `Cleaner is unavailable: ${availability.reasons.join(", ")}.`);
+}
+
+async function cameraTarget(siteId: string, cameraId: string, transaction?: Transaction) {
+  const cameraRef = firestore.collection("cameras").doc(cameraId);
+  const camera = transaction ? await transaction.get(cameraRef) : await cameraRef.get();
+  if (!camera.exists || camera.data()?.schemaVersion !== 2 || camera.data()?.siteId !== siteId || camera.data()?.status !== "active") throw new HttpError(404, "Camera not found.");
+  const site = await readSite(siteId, transaction);
+  const mapRevisionId = String(site.data.activeMapRevisionId ?? "");
+  const placementRef = firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("cameraPlacements").doc(cameraId);
+  const placement = transaction ? await transaction.get(placementRef) : await placementRef.get();
+  if (!placement.exists || placement.data()?.siteId !== siteId || !placement.data()?.zoneId) throw new HttpError(409, "Camera Placement is missing from the Active Map Revision.");
+  return { site, camera, mapRevisionId, placement: placement.data()! };
+}
+
+async function coordinateTarget(siteId: string, point: MapPoint, transaction?: Transaction) {
+  const site = await readSite(siteId, transaction);
+  const mapRevisionId = String(site.data.activeMapRevisionId ?? "");
+  const zonesRef = firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("zoneGeometry");
+  const zones = transaction ? await transaction.get(zonesRef) : await zonesRef.get();
+  const zoneId = containingPolygon(point, zones.docs.map((doc) => ({ id: doc.id, polygon: doc.data().polygon as Polygon })));
+  if (!zoneId) throw new HttpError(400, "Coordinate target must be inside exactly one active Zone.");
+  const zone = zones.docs.find((doc) => doc.id === zoneId)!;
+  return { site, mapRevisionId, zoneId, zoneName: String(zone.data().zoneNameSnapshot ?? zoneId) };
+}
+
+function deterministicInstructions(alert: DocumentData) {
+  const camera = String(alert.cameraNameSnapshot ?? "Camera"); const zone = String(alert.zoneNameSnapshot ?? "Zone");
+  if (alert.issueType === "bin_service") return `Service ${(alert.affectedBinIds ?? []).map(String).join(", ") || "the registered bin"} at ${camera}, ${zone}`;
+  if (alert.issueType === "floor_spill") return `Clean floor spill at ${camera}, ${zone}`;
+  return `Clean floor litter at ${camera}, ${zone}`;
+}
+
+function workTargetFromAlert(alert: DocumentData) {
+  return { type: "camera", mapRevisionId: String(alert.mapRevisionId), zoneId: String(alert.zoneId), zoneNameSnapshot: String(alert.zoneNameSnapshot ?? alert.zoneId), point: alert.cameraPoint ?? null, cameraId: String(alert.cameraId), cameraNameSnapshot: String(alert.cameraNameSnapshot ?? alert.cameraId) };
+}
+
+export async function createV2AlertWorkOrder(input: { siteId: string; alertId: string; assignedCleanerId: string; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
+  const workId = hash("v2-work-order", input.siteId, "alert", input.alertId, input.idempotencyKey);
+  const requestFingerprint = hash("v2-work-request", input);
+  const workRef = firestore.collection("workOrders").doc(workId);
+  const activeKeyRef = firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-work", input.siteId, input.alertId));
+  const auditRef = firestore.collection("auditEvents").doc();
+  await firestore.runTransaction(async (transaction) => {
+    const [site, alert, cleaner, activeKey, existingWork] = await Promise.all([
+      transaction.get(firestore.collection("sites").doc(input.siteId)), transaction.get(firestore.collection("alerts").doc(input.alertId)),
+      transaction.get(firestore.collection("cleaners").doc(input.assignedCleanerId)), transaction.get(activeKeyRef), transaction.get(workRef),
+    ]);
+    if (existingWork.exists) { if (existingWork.data()?.requestFingerprint !== requestFingerprint) throw new HttpError(409, "Work idempotency key conflicts with another assignment."); return; }
+    if (!site.exists || site.data()?.status !== "active") throw new HttpError(404, "Active Site not found.");
+    if (!alert.exists || alert.data()?.siteId !== input.siteId) throw new HttpError(404, "Alert not found.");
+    const alertData = alert.data()!;
+    if (!["waiting_for_cleaner", "assigned"].includes(String(alertData.status)) || alertData.activeWorkOrderId) throw new HttpError(409, "Alert is not waiting for Cleaner assignment.");
+    if (activeKey.exists) throw new HttpError(409, "Alert already has an active Work Order.");
+    if (!cleaner.exists || cleaner.data()?.schemaVersion !== 2 || cleaner.data()?.siteId !== input.siteId) throw new HttpError(404, "Cleaner not found.");
+    const account = await transaction.get(firestore.collection("userAccounts").doc(String(cleaner.data()?.authUid)));
+    const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId));
+    const placement = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cameraPlacements").doc(String(alertData.cameraId)));
+    if (!account.exists || account.data()?.status !== "active" || account.data()?.siteId !== input.siteId) throw new HttpError(409, "Cleaner account is inactive."); assertCleanerAvailable(site.data()!, cleaner.data()!, station.exists ? station.data()! : null);
+    const target = { ...workTargetFromAlert(alertData), point: placement.data()?.point ?? null, zoneNameSnapshot: String(placement.data()?.zoneNameSnapshot ?? alertData.zoneNameSnapshot ?? alertData.zoneId) };
+    const managementMode = actor.type === "orchestrator" ? "orchestrated" : "manual";
+    const data = { schemaVersion: V2_SCHEMA_VERSION, workOrderId: workId, siteId: input.siteId, origin: "alert", alertId: input.alertId, managementMode, status: "assigned", severity: String(alertData.severity ?? "warning"), issueType: String(alertData.issueType), title: deterministicInstructions(alertData), instructions: deterministicInstructions(alertData), target, mapRevisionId: String(alertData.mapRevisionId), zoneId: String(alertData.zoneId), cameraId: String(alertData.cameraId), assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(cleaner.data()!.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), startedAt: null, submittedAt: null, resolvedAt: null, resolvedBy: null, dismissedAt: null, dismissedBy: null, dismissReason: null, creationEvidenceMediaId: null, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: null, reworkCount: 0, isSimulation: Boolean(alertData.isSimulation), idempotencyKey: input.idempotencyKey, requestFingerprint, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.type === "supervisor" ? actor.uid : null, updatedAt: FieldValue.serverTimestamp(), revision: 1 };
+    transaction.create(workRef, data);
+    transaction.create(activeKeyRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: input.alertId, workOrderId: workId, cleanerId: input.assignedCleanerId, createdAt: FieldValue.serverTimestamp() });
+    transaction.update(firestore.collection("cleaners").doc(input.assignedCleanerId), { activeWorkOrderId: workId, activeWorkAssignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    transaction.update(alert.ref, { status: "assigned", managementMode, activeWorkOrderId: workId, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    transaction.set(firestore.collection("cameraRuntimeStates").doc(String(alertData.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: String(alertData.cameraId), cleanlinessState: "cleaning_in_progress", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.create(workRef.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: workId, type: "assigned", fromStatus: "waiting_for_cleaner", toStatus: "assigned", cleanerId: input.assignedCleanerId, previousCleanerId: null, actor: actorMap(actor), reasonCode: "cleaner_assigned", note: null, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    transaction.create(alert.ref.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: input.alertId, type: "assigned", fromStatus: "waiting_for_cleaner", toStatus: "assigned", workOrderId: workId, actor: actorMap(actor), reasonCode: "cleaner_assigned", note: null, requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    transaction.create(firestore.collection("notifications").doc(hash("v2-notification", input.siteId, "work_assigned", workId)), { schemaVersion: V2_SCHEMA_VERSION, notificationId: hash("v2-notification", input.siteId, "work_assigned", workId), siteId: input.siteId, recipientUid: String(cleaner.data()!.authUid), recipientRole: "cleaner", type: "work_assigned", title: "New cleaning assignment", body: deterministicInstructions(alertData), entityType: "work_order", entityId: workId, cameraId: String(alertData.cameraId), alertId: input.alertId, workOrderId: workId, severity: String(alertData.severity ?? "warning"), isSimulation: Boolean(alertData.isSimulation), createdAt: FieldValue.serverTimestamp(), expiresAt: null });
+    transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "work_order_assigned", resourceType: "WorkOrder", resourceId: workId, outcome: "succeeded", after: { alertId: input.alertId, cleanerId: input.assignedCleanerId }, requestId }));
+  });
+  return getV2WorkOrder(input.siteId, workId);
+}
+
+export async function createV2ManualWorkOrder(input: { siteId: string; title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: { type: "camera"; cameraId: string } | { type: "coordinate"; point: MapPoint }; creationEvidenceMediaId?: string | null; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
+  const workId = hash("v2-work-order", input.siteId, "manual", input.idempotencyKey);
+  const requestFingerprint = hash("v2-work-request", input);
+  const workRef = firestore.collection("workOrders").doc(workId);
+  const auditRef = firestore.collection("auditEvents").doc();
+  await firestore.runTransaction(async (transaction) => {
+    const site = await transaction.get(firestore.collection("sites").doc(input.siteId));
+    const existingWork = await transaction.get(workRef);
+    if (existingWork.exists) { if (existingWork.data()?.requestFingerprint !== requestFingerprint) throw new HttpError(409, "Work idempotency key conflicts with another manual request."); return; }
+    if (!site.exists || site.data()?.status !== "active") throw new HttpError(404, "Active Site not found.");
+    const cleaner = await transaction.get(firestore.collection("cleaners").doc(input.assignedCleanerId));
+    if (!cleaner.exists || cleaner.data()?.schemaVersion !== 2 || cleaner.data()?.siteId !== input.siteId) throw new HttpError(404, "Cleaner not found.");
+    const account = await transaction.get(firestore.collection("userAccounts").doc(String(cleaner.data()?.authUid))); const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId));
+    if (!account.exists || account.data()?.status !== "active" || account.data()?.siteId !== input.siteId) throw new HttpError(409, "Cleaner account is inactive."); assertCleanerAvailable(site.data()!, cleaner.data()!, station.exists ? station.data()! : null);
+    let target: DocumentData; let mapRevisionId: string; let zoneId: string; let cameraId: string | null = null;
+    if (input.target.type === "camera") { const result = await cameraTarget(input.siteId, input.target.cameraId, transaction); mapRevisionId = result.mapRevisionId; zoneId = String(result.placement.zoneId); cameraId = input.target.cameraId; target = { type: "camera", mapRevisionId, zoneId, zoneNameSnapshot: String(result.placement.zoneNameSnapshot ?? zoneId), point: result.placement.point, cameraId, cameraNameSnapshot: String(result.camera.data()?.name ?? cameraId) }; }
+    else { const result = await coordinateTarget(input.siteId, input.target.point, transaction); mapRevisionId = result.mapRevisionId; zoneId = result.zoneId; target = { type: "coordinate", mapRevisionId, zoneId, zoneNameSnapshot: result.zoneName, point: input.target.point }; }
+    const data = { schemaVersion: V2_SCHEMA_VERSION, workOrderId: workId, siteId: input.siteId, origin: "manual", alertId: null, managementMode: "manual", status: "assigned", severity: input.severity, issueType: "general_cleaning", title: input.title, instructions: input.instructions, target, mapRevisionId, zoneId, cameraId, assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(cleaner.data()!.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), startedAt: null, submittedAt: null, resolvedAt: null, resolvedBy: null, dismissedAt: null, dismissedBy: null, dismissReason: null, creationEvidenceMediaId: input.creationEvidenceMediaId ?? null, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: null, reworkCount: 0, isSimulation: false, idempotencyKey: input.idempotencyKey, requestFingerprint, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), revision: 1 };
+    transaction.create(workRef, data);
+    transaction.create(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-manual-work", input.siteId, workId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: workId, cleanerId: input.assignedCleanerId, createdAt: FieldValue.serverTimestamp() });
+    transaction.update(cleaner.ref, { activeWorkOrderId: workId, activeWorkAssignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    transaction.create(workRef.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: workId, type: "assigned", fromStatus: null, toStatus: "assigned", cleanerId: input.assignedCleanerId, previousCleanerId: null, actor: actorMap(actor), reasonCode: "manual_work_created", note: null, evidenceMediaIds: input.creationEvidenceMediaId ? [input.creationEvidenceMediaId] : [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    transaction.create(firestore.collection("notifications").doc(hash("v2-notification", input.siteId, "work_assigned", workId)), { schemaVersion: V2_SCHEMA_VERSION, notificationId: hash("v2-notification", input.siteId, "work_assigned", workId), siteId: input.siteId, recipientUid: String(cleaner.data()!.authUid), recipientRole: "cleaner", type: "work_assigned", title: "New cleaning assignment", body: input.title, entityType: "work_order", entityId: workId, cameraId, alertId: null, workOrderId: workId, severity: input.severity, isSimulation: false, createdAt: FieldValue.serverTimestamp(), expiresAt: null });
+    transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "manual_work_created", resourceType: "WorkOrder", resourceId: workId, outcome: "succeeded", after: { targetType: input.target.type, cleanerId: input.assignedCleanerId }, requestId }));
+  });
+  return getV2WorkOrder(input.siteId, workId);
+}
+
+export async function getV2WorkOrder(siteId: string, workOrderId: string): Promise<V2WorkOrder> { const snapshot = await firestore.collection("workOrders").doc(workOrderId).get(); if (!snapshot.exists || snapshot.data()?.schemaVersion !== 2 || snapshot.data()?.siteId !== siteId) throw new HttpError(404, "Work Order not found."); return present(snapshot.id, snapshot.data()!); }
+
+export async function listV2WorkOrders(siteId: string, input: { status: string; cleanerId?: string; alertId?: string; limit: number }) {
+  let query = firestore.collection("workOrders").where("siteId", "==", siteId).where("schemaVersion", "==", 2).limit(Math.min(input.limit, 100));
+  if (input.cleanerId) query = query.where("assignedCleanerId", "==", input.cleanerId) as typeof query;
+  if (input.alertId) query = query.where("alertId", "==", input.alertId) as typeof query;
+  const snapshot = await query.get();
+  return snapshot.docs.map((doc) => present(doc.id, doc.data())).filter((work) => input.status === "all" || input.status === "active" ? (input.status === "active" ? ACTIVE.includes(work.status as any) : true) : work.status === input.status).sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
+}
+
+async function workContext(siteId: string, workOrderId: string, transaction: Transaction) {
+  const workRef = firestore.collection("workOrders").doc(workOrderId); const work = await transaction.get(workRef); if (!work.exists || work.data()?.schemaVersion !== 2 || work.data()?.siteId !== siteId) throw new HttpError(404, "Work Order not found.");
+  const data = work.data()!; const cleanerRef = firestore.collection("cleaners").doc(String(data.assignedCleanerId)); const cleaner = await transaction.get(cleanerRef); const alertRef = data.alertId ? firestore.collection("alerts").doc(String(data.alertId)) : null; const alert = alertRef ? await transaction.get(alertRef) : null; return { workRef, work, data, cleanerRef, cleaner, alertRef, alert };
+}
+
+export async function transitionV2WorkOrder(siteId: string, workOrderId: string, next: "in_progress" | "awaiting_review", actor: V2WorkActor, input: { idempotencyKey: string; completionEvidenceMediaId?: string | null }, requestId: string) {
+  const eventRef = firestore.collection("workOrders").doc(workOrderId).collection("events").doc(hash("v2-work-event", workOrderId, input.idempotencyKey));
+  await firestore.runTransaction(async (transaction) => {
+    const context = await workContext(siteId, workOrderId, transaction); const { data, workRef, cleaner, cleanerRef, alert, alertRef } = context;
+    if (actor.type === "cleaner" && String(data.assignedCleanerId) !== actor.cleanerId) throw new HttpError(404, "Work Order not found.");
+    if (eventRef && (await transaction.get(eventRef)).exists) return;
+    if (!canTransitionWork(String(data.status) as any, next)) throw new HttpError(409, `Work Order cannot move from ${data.status} to ${next}.`);
+    if (next === "awaiting_review" && requiresCompletionEvidence(String(data.target?.type) as "camera" | "coordinate") && !input.completionEvidenceMediaId) throw new HttpError(400, "Coordinate Work requires Completion Evidence before review.");
+    const from = String(data.status); const fields = next === "in_progress" ? { startedAt: FieldValue.serverTimestamp() } : { submittedAt: FieldValue.serverTimestamp(), completionEvidenceMediaId: input.completionEvidenceMediaId ?? null, latestVerificationOutcome: null };
+    const verificationRef = next === "awaiting_review" ? workRef.collection("verifications").doc(hash("v2-verification-request", workOrderId, input.idempotencyKey)) : null;
+    if (verificationRef) transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, alertId: data.alertId ?? null, kind: data.target?.type === "coordinate" ? "coordinate_supervisor" : "camera_deterministic", status: data.target?.type === "coordinate" ? "ready" : "collecting", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: data.target?.type === "coordinate" ? null : verificationSampleCount(String(data.issueType)), acceptedSampleCount: 0, sampleSummaries: [], outcome: null, outcomeReasonCodes: [], completionEvidenceMediaId: input.completionEvidenceMediaId ?? null, decidedAt: null, decidedBy: null, override: null, appliedAt: null, requestId });
+    transaction.update(workRef, { status: next, ...fields, ...(verificationRef ? { latestVerificationId: verificationRef.id } : {}), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    if (next === "in_progress" && alertRef && alert?.exists && ["assigned", "waiting_for_cleaner"].includes(String(alert.data()?.status))) transaction.update(alertRef, { status: "in_progress", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    if (next === "awaiting_review" && alertRef && alert?.exists && String(data.managementMode) === "orchestrated") transaction.update(alertRef, { status: "awaiting_review", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    if (data.cameraId) transaction.set(firestore.collection("cameraRuntimeStates").doc(String(data.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId, cameraId: String(data.cameraId), cleanlinessState: next === "awaiting_review" ? "awaiting_review" : "cleaning_in_progress", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: next === "in_progress" ? "started" : "submitted", fromStatus: from, toStatus: next, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: next, note: null, evidenceMediaIds: input.completionEvidenceMediaId ? [input.completionEvidenceMediaId] : [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    void cleaner; void cleanerRef;
+  });
+  return getV2WorkOrder(siteId, workOrderId);
+}
+
+export async function applyV2Verification(input: { siteId: string; workOrderId: string; outcome: "passed" | "failed" | "inconclusive"; reason?: string | null; expectedRevision: number; idempotencyKey: string; override?: boolean }, actor: V2WorkActor, requestId: string) {
+  const workRef = firestore.collection("workOrders").doc(input.workOrderId);
+  let appliedVerificationId = "";
+  await firestore.runTransaction(async (transaction) => {
+    const context = await workContext(input.siteId, input.workOrderId, transaction); const { data, alert, alertRef, cleanerRef } = context;
+    const verificationRef = workRef.collection("verifications").doc(String(data.latestVerificationId ?? hash("v2-verification", input.workOrderId, input.idempotencyKey)));
+    appliedVerificationId = verificationRef.id;
+    const existing = await transaction.get(verificationRef); if (existing.exists && existing.data()?.status === "applied" && !input.override) return;
+    assertExpectedRevision(data, input.expectedRevision);
+    if (String(data.status) !== "awaiting_review") throw new HttpError(409, "Work Order is not awaiting review.");
+    if (!input.override && String(data.managementMode) === "manual" && actor.type !== "supervisor") throw new HttpError(403, "Manual Work requires Supervisor review.");
+    const result = String(data.managementMode) === "manual" && actor.type === "supervisor"
+      ? { workStatus: input.outcome === "passed" ? "resolved" as const : input.outcome === "failed" ? "in_progress" as const : "awaiting_review" as const, requiresSupervisorDecision: false }
+      : applyVerification({ outcome: input.outcome, managementMode: String(data.managementMode) as any, origin: String(data.origin) as any });
+    const eventType = input.outcome === "passed" ? "verification_passed" : input.outcome === "failed" ? "verification_failed" : "verification_inconclusive";
+    if (existing.exists) transaction.update(verificationRef, { status: "applied", outcome: input.outcome, outcomeReasonCodes: input.reason ? [input.reason] : [], decidedAt: FieldValue.serverTimestamp(), decidedBy: actorMap(actor), override: input.override ? { outcome: input.outcome, reason: input.reason } : null, appliedAt: FieldValue.serverTimestamp(), requestId });
+    else transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, alertId: data.alertId ?? null, kind: data.target?.type === "coordinate" ? "coordinate_supervisor" : "camera_deterministic", status: "applied", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: null, acceptedSampleCount: 0, sampleSummaries: [], outcome: input.outcome, outcomeReasonCodes: input.reason ? [input.reason] : [], completionEvidenceMediaId: data.completionEvidenceMediaId ?? null, decidedAt: FieldValue.serverTimestamp(), decidedBy: actorMap(actor), override: input.override ? { outcome: input.outcome, reason: input.reason } : null, appliedAt: FieldValue.serverTimestamp(), requestId });
+    const updates: Record<string, unknown> = { status: result.workStatus, latestVerificationId: verificationRef.id, latestVerificationOutcome: input.outcome, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1), ...(input.outcome === "failed" ? { reworkCount: FieldValue.increment(1) } : {}) };
+    if (result.workStatus === "resolved") Object.assign(updates, { resolvedAt: FieldValue.serverTimestamp(), resolvedBy: actorMap(actor) });
+    transaction.update(workRef, updates);
+    transaction.create(workRef.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, type: eventType, fromStatus: "awaiting_review", toStatus: result.workStatus, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: input.outcome, note: input.reason ?? null, evidenceMediaIds: data.completionEvidenceMediaId ? [data.completionEvidenceMediaId] : [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    if (alertRef && alert?.exists) {
+      const alertStatus = result.workStatus === "resolved" ? "resolved" : result.workStatus === "in_progress" ? "in_progress" : "awaiting_review";
+      transaction.update(alertRef, { status: alertStatus, ...(alertStatus === "resolved" ? { resolvedAt: FieldValue.serverTimestamp(), resolvedBy: actorMap(actor), activeWorkOrderId: null } : {}), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+      if (alertStatus === "resolved") transaction.delete(firestore.collection("activeAlertKeys").doc(hash("v2-active-alert", input.siteId, data.cameraId, data.issueType)));
+      transaction.create(alertRef.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: data.alertId, type: alertStatus === "resolved" ? "resolved" : "awaiting_review", fromStatus: "awaiting_review", toStatus: alertStatus, workOrderId: input.workOrderId, actor: actorMap(actor), reasonCode: input.outcome, note: input.reason ?? null, requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    }
+    if (result.workStatus === "resolved") { transaction.update(cleanerRef, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-work", input.siteId, data.alertId ?? input.workOrderId))); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-manual-work", input.siteId, input.workOrderId))); }
+    if (data.cameraId) transaction.set(firestore.collection("cameraRuntimeStates").doc(String(data.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: String(data.cameraId), cleanlinessState: result.workStatus === "resolved" ? "clean" : result.workStatus === "in_progress" ? "cleaning_in_progress" : "awaiting_review", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (input.override) transaction.create(firestore.collection("auditEvents").doc(), v2AuditEventData({ auditEventId: randomUUID(), actor, siteId: input.siteId, action: "verification_overridden", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, after: { outcome: input.outcome }, requestId }));
+  });
+  return { workOrder: await getV2WorkOrder(input.siteId, input.workOrderId), verificationId: appliedVerificationId };
+}
+
+export async function dismissV2WorkOrder(input: { siteId: string; workOrderId: string; reason: string; expectedRevision: number; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
+  await firestore.runTransaction(async (transaction) => { const context = await workContext(input.siteId, input.workOrderId, transaction); const { data, workRef, alert, alertRef, cleanerRef } = context; const eventRef = workRef.collection("events").doc(hash("v2-dismiss", input.workOrderId, input.idempotencyKey)); const existingEvent = await transaction.get(eventRef); if (existingEvent.exists) return; assertExpectedRevision(data, input.expectedRevision); if (![...ACTIVE].includes(String(data.status) as any)) throw new HttpError(409, "Work Order is already terminal."); const auditRef = firestore.collection("auditEvents").doc(); transaction.update(workRef, { status: "dismissed", dismissedAt: FieldValue.serverTimestamp(), dismissedBy: actorMap(actor), dismissReason: input.reason, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, type: "dismissed", fromStatus: data.status, toStatus: "dismissed", cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_dismissed", note: input.reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.update(cleanerRef, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-work", input.siteId, data.alertId ?? input.workOrderId))); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-manual-work", input.siteId, input.workOrderId))); if (alertRef && alert?.exists) transaction.update(alertRef, { status: "dismissed", activeWorkOrderId: null, dismissedAt: FieldValue.serverTimestamp(), dismissedBy: actorMap(actor), dismissReason: input.reason, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (data.cameraId) transaction.set(firestore.collection("cameraRuntimeStates").doc(String(data.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: String(data.cameraId), cleanlinessState: "clean", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "work_order_dismissed", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, before: { status: data.status }, after: { status: "dismissed" }, requestId })); });
+  return getV2WorkOrder(input.siteId, input.workOrderId);
+}
+
+export async function reassignV2WorkOrder(input: { siteId: string; workOrderId: string; assignedCleanerId: string; reason: string; expectedRevision: number; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
+  await firestore.runTransaction(async (transaction) => { const context = await workContext(input.siteId, input.workOrderId, transaction); const { data, workRef, cleaner: oldCleaner, cleanerRef: oldRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-reassign", input.workOrderId, input.idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; assertExpectedRevision(data, input.expectedRevision); if (![...ACTIVE].includes(String(data.status) as any)) throw new HttpError(409, "Only active Work Orders can be reassigned."); const newCleaner = await transaction.get(firestore.collection("cleaners").doc(input.assignedCleanerId)); if (!newCleaner.exists || newCleaner.data()?.schemaVersion !== 2 || newCleaner.data()?.siteId !== input.siteId) throw new HttpError(404, "Replacement Cleaner not found."); const site = await transaction.get(firestore.collection("sites").doc(input.siteId)); const account = await transaction.get(firestore.collection("userAccounts").doc(String(newCleaner.data()?.authUid))); const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId)); if (!account.exists || account.data()?.status !== "active") throw new HttpError(409, "Replacement Cleaner account is inactive."); assertCleanerAvailable(site.data()!, newCleaner.data()!, station.exists ? station.data()! : null); const auditRef = firestore.collection("auditEvents").doc(); transaction.update(oldRef, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.update(newCleaner.ref, { activeWorkOrderId: input.workOrderId, activeWorkAssignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.update(workRef, { assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(newCleaner.data()?.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, type: "reassigned", fromStatus: data.status, toStatus: data.status, cleanerId: input.assignedCleanerId, previousCleanerId: String(oldCleaner.data()?.cleanerId ?? data.assignedCleanerId), actor: actorMap(actor), reasonCode: "supervisor_reassigned", note: input.reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "work_order_reassigned", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, before: { cleanerId: data.assignedCleanerId }, after: { cleanerId: input.assignedCleanerId }, requestId })); });
+  return getV2WorkOrder(input.siteId, input.workOrderId);
+}
+
+export async function takeOverV2WorkOrder(siteId: string, workOrderId: string, actor: V2WorkActor, reason: string, idempotencyKey: string, requestId: string) { await firestore.runTransaction(async (transaction) => { const context = await workContext(siteId, workOrderId, transaction); const { data, workRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-takeover", workOrderId, idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; if (String(data.managementMode) === "manual") return; const auditRef = firestore.collection("auditEvents").doc(); transaction.update(workRef, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: "takeover", fromStatus: data.status, toStatus: data.status, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_takeover", note: reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, action: "work_order_takeover", resourceType: "WorkOrder", resourceId: workOrderId, outcome: "succeeded", reason, before: { managementMode: data.managementMode }, after: { managementMode: "manual" }, requestId })); }); return getV2WorkOrder(siteId, workOrderId); }
+
+export async function listV2WorkEvents(siteId: string, workOrderId: string) { await getV2WorkOrder(siteId, workOrderId); const snapshot = await firestore.collection("workOrders").doc(workOrderId).collection("events").orderBy("occurredAt", "desc").limit(100).get(); return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })); }
+
+export async function listV2Verifications(siteId: string, workOrderId: string) {
+  await getV2WorkOrder(siteId, workOrderId);
+  const snapshot = await firestore.collection("workOrders").doc(workOrderId).collection("verifications").orderBy("requestedAt", "desc").limit(20).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
+export async function uploadV2CompletionEvidence(input: { siteId: string; workOrderId: string; cleanerId: string; file: { buffer: Buffer; mimetype: string; originalname: string } }) {
+  const work = await getV2WorkOrder(input.siteId, input.workOrderId); if (work.assignedCleanerId !== input.cleanerId || work.status !== "in_progress" || work.target?.type !== "coordinate") throw new HttpError(409, "Completion Evidence is only accepted for the assigned coordinate Work Order in progress.");
+  const detected = detectSupportedImage(input.file.buffer); validateDeclaredImageType(input.file.mimetype, detected.mimeType); const mediaId = randomUUID(); const storageKey = `media/${mediaId}/completion-evidence.${detected.extension}`; await writeMedia(storageKey, input.file.buffer); await firestore.collection("mediaAssets").doc(mediaId).create({ schemaVersion: V2_SCHEMA_VERSION, mediaId, siteId: input.siteId, purpose: "work_completion_evidence", ownerType: "work_order", ownerId: input.workOrderId, cameraId: null, mimeType: detected.mimeType, originalFileName: input.file.originalname, byteSize: input.file.buffer.length, sha256: hash("v2-media", input.file.buffer.toString("base64")), storageKey, storageStatus: "available", width: null, height: null, durationSeconds: null, capturedAt: FieldValue.serverTimestamp(), retentionClass: "operational", expiresAt: null, createdAt: FieldValue.serverTimestamp(), createdByUid: input.cleanerId, deletedAt: null, revision: 1 }); return { mediaId, workOrderId: input.workOrderId };
+}
+
+export async function recordV2CameraVerificationObservation(siteId: string, cameraId: string, observation: V2LiveObservation) {
+  const works = await firestore.collection("workOrders").where("siteId", "==", siteId).where("cameraId", "==", cameraId).where("status", "==", "awaiting_review").limit(10).get();
+  let applied = 0;
+  for (const workDoc of works.docs) {
+    const work = workDoc.data(); if (work.schemaVersion !== 2 || work.managementMode !== "orchestrated" || work.origin !== "alert" || !work.latestVerificationId) continue;
+    const verificationRef = workDoc.ref.collection("verifications").doc(String(work.latestVerificationId)); const verification = await verificationRef.get(); if (!verification.exists || verification.data()?.status !== "collecting") continue;
+    let result: "clear" | "positive" | "inconclusive";
+    if (work.issueType === "bin_service") result = observation.binStates.some((bin) => bin.state === "full" || bin.state === "overflow") ? "positive" : observation.binStates.some((bin) => bin.state === "normal") ? "clear" : "inconclusive";
+    else result = observation.issues.some((issue) => issue.issueType === work.issueType) ? "positive" : "clear";
+    const sample = { sampleId: observation.sampleId, capturedAt: Timestamp.fromMillis(observation.capturedAtMs), result, modelVersions: observation.modelVersions };
+    const samples = [...(verification.data()?.sampleSummaries ?? []), sample].slice(-3); const clearCount = samples.filter((item: any) => item.result === "clear").length; const required = Number(verification.data()?.requiredSampleCount ?? 2);
+    await verificationRef.update({ sampleSummaries: samples, acceptedSampleCount: clearCount });
+    const outcome = result === "positive" ? "failed" : result === "inconclusive" ? "inconclusive" : clearCount >= required ? "passed" : null;
+    if (!outcome) continue;
+    const latest = await getV2WorkOrder(siteId, workDoc.id);
+    await applyV2Verification({ siteId, workOrderId: workDoc.id, outcome, reason: result === "positive" ? "issue_still_visible" : result === "inconclusive" ? "camera_evidence_inconclusive" : "required_clear_samples_observed", expectedRevision: Number(latest.revision), idempotencyKey: `camera-sample:${observation.sampleId}` }, { uid: "verification-engine", role: "supervisor", authority: null, displayName: "Verification engine", type: "orchestrator" }, observation.sampleId);
+    if (outcome === "inconclusive") { const supervisors = await firestore.collection("supervisors").where("siteId", "==", siteId).where("status", "==", "active").get(); for (const supervisor of supervisors.docs) { const notificationId = hash("v2-notification", siteId, "verification_inconclusive", workDoc.id, supervisor.id); await firestore.collection("notifications").doc(notificationId).set({ schemaVersion: 2, notificationId, siteId, recipientUid: supervisor.id, recipientRole: "supervisor", type: "verification_inconclusive", title: "Cleaning review needs attention", body: "Camera evidence was inconclusive. Please review the Work Order.", entityType: "work_order", entityId: workDoc.id, cameraId, alertId: work.alertId ?? null, workOrderId: workDoc.id, severity: work.severity ?? null, isSimulation: Boolean(work.isSimulation), createdAt: FieldValue.serverTimestamp(), expiresAt: null }); } }
+    applied += 1;
+  }
+  return applied;
+}

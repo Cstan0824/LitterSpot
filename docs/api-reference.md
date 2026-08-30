@@ -561,6 +561,7 @@ different video file or Camera returns `409`.
 | `GET` | `/api/media/{mediaId}/content` | Authenticated media bytes; marks missing files in Firestore and returns `410` |
 | `GET` | `/api/processing-jobs?status=all&limit=25` | List jobs; status may be `uploading`, `queued`, `processing`, `completed`, `failed`, or `cancelled` |
 | `GET` | `/api/processing-jobs/{jobId}` | Get one job and progress/summary/error state |
+| `GET` | `/api/processing-jobs/{jobId}/results` | Get the job, source media, pinned camera registration, and ordered image/video frame results in one frontend read model |
 | `POST` | `/api/processing-jobs/{jobId}/process` | Process an image synchronously, or enqueue a video and return `202` |
 | `POST` | `/api/processing-jobs/{jobId}/retry` | Retry a failed image synchronously, or enqueue a failed video and return `202`; every other state returns `409` |
 | `GET` | `/api/analysis-runs?jobId={jobId}&cameraId={cameraId}&limit=25&cursor={cursor}` | List analysis runs newest first, with at most one supplied filter and opaque cursor continuation |
@@ -652,9 +653,10 @@ not a second job. Poll `GET /api/processing-jobs/{videoJobId}` until the status
 is `completed` or `failed`. A completed job may still report some failed frames
 when at least one frame succeeded. The `summary` accumulates analysis-run,
 detection, and grouped-flag counts plus distinct alert IDs across successful frames.
-Use `GET /api/analysis-runs?jobId={videoJobId}` to retrieve each successful
-frame run and its `frameMediaId`/`videoOffsetSeconds`; use the existing detection
-and issue-observation APIs for details.
+Use `GET /api/processing-jobs/{videoJobId}/results` to retrieve the source media,
+pinned registration revision, and every successful frame ordered by
+`videoOffsetSeconds`. The lower-level analysis-run, detection, and
+issue-observation APIs remain available for audit and workflow details.
 
 Node processes video frames sequentially in an in-process concurrency-one
 worker. Each frame is extracted as a bounded JPEG with ffmpeg, inferred by the
@@ -686,6 +688,41 @@ confirmation buffers, create flags or alerts, or make them analytics-eligible.
 Operational video requires explicit `isTest=false` at upload time.
 
 ### Persisted analysis results
+
+New operational image and video jobs require an active camera with a published
+`ready` registration. Job creation copies that registration and revision onto
+the job. Processing therefore cannot switch geometry if a Supervisor publishes
+a newer camera registration while media is queued. Client-supplied operational
+`focusRegion` values are rejected; the published walkable-floor polygon is the
+only floor contract used by registered processing.
+
+Every new analysis run records `cameraRegistrationRevision`,
+`inferenceContractVersion`, `walkableFloorPolygonNormalized`, and normalized
+`floorHazards` alongside its people and bin observations. Registered video can
+create an overflow detection only after the per-bin temporal confirmation gate.
+A registered still image keeps its raw overflow state in the analysis run but
+does not create a `bin_overflow` detection from that single frame.
+
+`GET /api/processing-jobs/{jobId}/results` is the preferred frontend contract:
+
+```json
+{
+  "processingJob": { "id": "job-id", "status": "completed", "cameraRegistrationRevision": 2 },
+  "sourceMedia": { "id": "media-id", "contentUrl": "/api/media/media-id/content" },
+  "registration": { "cameraId": "camera-id", "revision": 2, "walkableFloorPolygon": [], "bins": [] },
+  "frames": [
+    {
+      "analysisRunId": "run-id",
+      "frameIndex": 0,
+      "videoOffsetSeconds": 0,
+      "people": [],
+      "bins": [],
+      "floorHazards": [],
+      "detections": []
+    }
+  ]
+}
+```
 
 For images, the analysis-run ID equals the job ID. Detection IDs are deterministic,
 so retries cannot create duplicate logical results. People count and person

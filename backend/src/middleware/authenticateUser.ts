@@ -4,13 +4,23 @@ import { firebaseAuth, firestore } from "../config/firebase.js";
 
 export type AuthenticatedUser = {
   uid: string;
-  role: "supervisor" | "cleaner";
+  role: "superadmin" | "supervisor" | "cleaner";
   profileId: string;
+  siteId: string | null;
+  authority: "root" | "regular" | null;
   email: string;
   displayName: string;
 };
 
 export type AuthenticatedSupervisor = {
+  uid: string;
+  siteId?: string;
+  authority?: "root" | "regular";
+  email: string;
+  displayName: string;
+};
+
+export type AuthenticatedSuperadmin = {
   uid: string;
   email: string;
   displayName: string;
@@ -65,18 +75,38 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
     if (!account) return res.status(403).json({ error: "Application account is not provisioned.", requestId: req.requestId });
     if (account.status !== "active") return res.status(403).json({ error: "Application access is inactive.", requestId: req.requestId });
 
+    const accountData = account as Record<string, unknown>;
+    if (account.role === "superadmin") {
+      const authenticated = {
+        uid: decoded.uid,
+        email: decoded.email ?? String(accountData.emailNormalized ?? ""),
+        displayName: String(accountData.displayName ?? decoded.name ?? decoded.email ?? "Superadmin"),
+      };
+      req.authUser = { ...authenticated, role: "superadmin", profileId: String(account.profileId ?? decoded.uid), siteId: null, authority: null };
+      return next();
+    }
+
     if (account.role === "supervisor") {
       const profile = await firestore.collection("supervisors").doc(String(account.profileId)).get();
-      if (!profile.exists || profile.data()?.role !== "supervisor" || profile.data()?.status !== "active") {
+      const profileData = profile.data();
+      const v2Profile = profileData?.schemaVersion === 2;
+      if (!profile.exists || profileData?.status !== "active" || !v2Profile && profileData?.role !== "supervisor") {
         return res.status(403).json({ error: "Supervisor access is inactive.", requestId: req.requestId });
+      }
+      const siteId = String(accountData.siteId ?? profileData?.siteId ?? "");
+      const authority = accountData.authority === "root" || profileData?.authority === "root" ? "root" : "regular";
+      if (!siteId && accountData.schemaVersion === 2) return res.status(403).json({ error: "Supervisor Site is not configured.", requestId: req.requestId });
+      if (siteId) {
+        const site = await firestore.collection("sites").doc(siteId).get();
+        if (!site.exists || site.data()?.status !== "active") return res.status(403).json({ error: "Site access is inactive.", requestId: req.requestId });
       }
       const authenticated = {
         uid: decoded.uid,
-        email: decoded.email ?? String(profile.data()?.email ?? ""),
-        displayName: String(profile.data()?.displayName ?? decoded.name ?? decoded.email ?? "Supervisor"),
+        email: decoded.email ?? String(profileData?.email ?? ""),
+        displayName: String(profileData?.fullName ?? profileData?.displayName ?? decoded.name ?? decoded.email ?? "Supervisor"),
       };
-      req.authUser = { ...authenticated, role: "supervisor", profileId: profile.id };
-      req.supervisor = authenticated;
+      req.authUser = { ...authenticated, role: "supervisor", profileId: profile.id, siteId, authority };
+      req.supervisor = { ...authenticated, siteId, authority };
       return next();
     }
 
@@ -85,25 +115,31 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
       const profileReference = firestore.collection("cleaners").doc(cleanerId);
       const profile = await profileReference.get();
       const data = profile.data();
+      const v2Profile = data?.schemaVersion === 2;
       if (!profile.exists || data?.status !== "active" || data.authUid !== decoded.uid
-        || !["invited", "active"].includes(String(data.accountStatus))) {
+        || !v2Profile && !["invited", "active"].includes(String(data.accountStatus))) {
         return res.status(403).json({ error: "Cleaner access is inactive.", requestId: req.requestId });
       }
       const email = decoded.email ?? String(data.email ?? "");
       const displayName = String(data.fullName ?? decoded.name ?? email ?? "Cleaner");
-      req.authUser = { uid: decoded.uid, role: "cleaner", profileId: cleanerId, email, displayName };
+      const siteId = String(data.siteId ?? data.assignedSiteId ?? "");
+      if (siteId) {
+        const site = await firestore.collection("sites").doc(siteId).get();
+        if (!site.exists || site.data()?.status !== "active") return res.status(403).json({ error: "Site access is inactive.", requestId: req.requestId });
+      }
+      req.authUser = { uid: decoded.uid, role: "cleaner", profileId: cleanerId, siteId: siteId || null, authority: null, email, displayName };
       req.cleaner = {
         uid: decoded.uid,
         cleanerId,
         email,
         displayName,
-        assignedSiteId: String(data.assignedSiteId),
-        assignedZoneId: String(data.assignedZoneId),
+        assignedSiteId: siteId,
+        assignedZoneId: String(data.assignedZoneId ?? ""),
         permittedSiteIds: Array.isArray(data.permittedSiteIds) ? data.permittedSiteIds.map(String) : [String(data.assignedSiteId)],
         permittedZoneIds: Array.isArray(data.permittedZoneIds) ? data.permittedZoneIds.map(String) : [String(data.assignedZoneId)],
         capabilities: Array.isArray(data.capabilities) ? data.capabilities.map(String) : ["general_cleaning"],
       };
-      if (data.accountStatus === "invited") {
+      if (!v2Profile && data.accountStatus === "invited") {
         await profileReference.update({
           accountStatus: "active",
           authLinkedAt: FieldValue.serverTimestamp(),

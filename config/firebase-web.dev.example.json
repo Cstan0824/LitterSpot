@@ -1,0 +1,8 @@
+{
+  "apiKey": "replace-with-development-web-api-key",
+  "authDomain": "replace-with-development-project.firebaseapp.com",
+  "projectId": "replace-with-development-project-id",
+  "storageBucket": "replace-with-development-project.firebasestorage.app",
+  "messagingSenderId": "replace-with-messaging-sender-id",
+  "appId": "replace-with-web-app-id"
+}

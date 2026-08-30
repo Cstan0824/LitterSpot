@@ -306,6 +306,7 @@ backend/node_modules/
 backend/dist/
 node_modules/
 .local/
+config/firebase-web.dev.json
 data/*.sqlite3
 data/media-store/
 data/heldout-evaluation/

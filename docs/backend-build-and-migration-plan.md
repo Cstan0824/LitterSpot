@@ -1,5 +1,7 @@
 # LitterSpot backend build and Python-to-Node migration plan
 
+> This is the historical V1 phase plan. The clarified V2 database and migration plan is in [`data-model-v2/06-migration-plan.md`](data-model-v2/06-migration-plan.md).
+
 ## 1. Purpose and status
 
 This document plans the work needed to move LitterSpot from its current demonstration implementation to the agreed prototype architecture.

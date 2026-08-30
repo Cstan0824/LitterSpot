@@ -16,12 +16,21 @@ function numberSetting(name: string, fallback: number, options: { integer?: bool
   return value;
 }
 
+function appEnvironmentSetting(): "test" | "local-emulator" | "development-cloud" | "production-cloud" {
+  const value = process.env.APP_ENV;
+  if (!value && process.env.NODE_ENV === "test") return "test" as const;
+  if (value === "local-emulator" || value === "development-cloud" || value === "production-cloud") return value;
+  throw new Error("APP_ENV must be local-emulator, development-cloud, or production-cloud.");
+}
+
 export const env = {
+  appEnvironment: appEnvironmentSetting(),
   port: numberSetting("PORT", 3000, { integer: true, minimum: 1, maximum: 65_535 }),
   aiServiceUrl: process.env.AI_SERVICE_URL ?? "http://127.0.0.1:8000",
   aiServiceToken: process.env.AI_SERVICE_TOKEN,
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? "litterspot",
   firebaseDatabaseId: process.env.FIREBASE_DATABASE_ID ?? "litterspot",
+  expectedFirebaseProjectId: process.env.EXPECTED_FIREBASE_PROJECT_ID ?? "",
   mediaStorageRoot: process.env.MEDIA_STORAGE_ROOT ?? defaultMediaStorageRoot,
   videoUploadTempRoot: process.env.VIDEO_UPLOAD_TEMP_ROOT ?? defaultVideoUploadTempRoot,
   videoMaxBytes: numberSetting("VIDEO_MAX_BYTES", 250 * 1024 * 1024, { integer: true, minimum: 1, maximum: 2 * 1024 * 1024 * 1024 }),
@@ -31,7 +40,7 @@ export const env = {
   videoLeaseSeconds: numberSetting("VIDEO_LEASE_SECONDS", 300, { integer: true, minimum: 30, maximum: 86_400 }),
   ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",
-  corsOrigins: (process.env.CORS_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173")
+  corsOrigins: (process.env.CORS_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174")
     .split(",").map((value) => value.trim()).filter(Boolean),
   generalRateLimitPerMinute: numberSetting("GENERAL_RATE_LIMIT_PER_MINUTE", 300, { integer: true, minimum: 1, maximum: 100_000 }),
   inferenceRateLimitPerMinute: numberSetting("INFERENCE_RATE_LIMIT_PER_MINUTE", 120, { integer: true, minimum: 1, maximum: 100_000 }),

@@ -29,6 +29,13 @@ import { recordOperationalFailure, recoverOperationalEvent } from "./dependencyE
 import { getCameraRegistration } from "./cameraRegistrationService.js";
 import { loadRegistrationReference, type RegistrationReferencePayload } from "./cameraRegistrationReference.js";
 import type { PipelineAnalysisResponse } from "../schemas/detection.js";
+import {
+  assertRegistrationFrameDimensions,
+  pinCameraRegistration,
+  pinnedRegistrationFromJob,
+  REGISTERED_FRAME_INFERENCE_CONTRACT_VERSION,
+  type PinnedCameraRegistration,
+} from "./processingRegistration.js";
 
 type VideoClaim = { completed: true } | { completed: false; claimToken: string; job: DocumentData };
 
@@ -59,7 +66,11 @@ function trackingState(value: unknown): VideoBinTrackingState | null {
 }
 
 function failure(error: unknown) {
-  if (error instanceof HttpError) return { code: "VIDEO_PROCESSING_FAILED", message: error.message };
+  if (error instanceof HttpError) {
+    const code = error.details && typeof error.details === "object" && "code" in error.details
+      ? String(error.details.code) : "VIDEO_PROCESSING_FAILED";
+    return { code, message: error.message };
+  }
   if (axios.isAxiosError(error)) return { code: "INFERENCE_FAILED", message: "The AI inference service failed during video processing." };
   return { code: "VIDEO_PROCESSING_FAILED", message: error instanceof Error ? error.message : "Video processing failed." };
 }
@@ -218,7 +229,7 @@ async function processVideoFrame(options: {
   frameIndex: number;
   offsetSeconds: number;
   currentTrackingState: VideoBinTrackingState | null;
-  registration?: Record<string, unknown> | null;
+  registration: PinnedCameraRegistration;
   reference?: RegistrationReferencePayload | null;
 }) {
   const runId = deterministicVideoAnalysisRunId(options.jobId, options.frameIndex);
@@ -245,6 +256,7 @@ async function processVideoFrame(options: {
     reference: options.reference,
     binReviewEnabled: true,
   });
+  assertRegistrationFrameDimensions(options.registration, inferred.image);
   const frameMediaId = deterministicVideoFrameMediaId(options.jobId, options.frameIndex);
   const frameMediaReference = firestore.collection("mediaAssets").doc(frameMediaId);
   const frameStorageKey = `media/${frameMediaId}/frame-${options.claimToken}.jpg`;
@@ -321,16 +333,20 @@ async function processVideoFrame(options: {
       zoneId: location.zoneId,
       zoneName: location.zoneNameSnapshot,
       cameraId: location.cameraId,
+      cameraRegistrationRevision: options.registration.revision,
+      inferenceContractVersion: REGISTERED_FRAME_INFERENCE_CONTRACT_VERSION,
       cameraCode: location.cameraCodeSnapshot,
       cameraName: location.cameraNameSnapshot,
       capturedAt,
       frameIndex: options.frameIndex,
       videoOffsetSeconds: options.offsetSeconds,
       image: result.image,
-      focusRegionNormalized: result.focusRegion,
+      focusRegionNormalized: options.registration.walkableFloorPolygon,
+      walkableFloorPolygonNormalized: options.registration.walkableFloorPolygon,
       peopleCount: result.peopleCount,
       people: normalized.people,
       bins: normalized.bins,
+      floorHazards: normalized.floorHazards,
       issueKinds: normalized.issueKinds,
       issueCounts: normalized.issueCounts,
       modelVersions: result.modelVersions,
@@ -458,7 +474,8 @@ export async function processVideoJob(jobId: string) {
     const plannedFrames = Number(job.progress?.plannedFrames);
     if (!Number.isInteger(plannedFrames) || plannedFrames < 1) throw new HttpError(422, "Video job has an invalid frame plan.");
     let currentTrackingState = trackingState(job.videoTrackingState);
-    const registration = await getCameraRegistration(String(job.cameraId));
+    const registration = pinnedRegistrationFromJob(job)
+      ?? pinCameraRegistration(String(job.cameraId), await getCameraRegistration(String(job.cameraId)) ?? undefined);
     const reference = await loadRegistrationReference(registration);
     const lastFrameIndex = Number.isInteger(job.progress?.lastFrameIndex) ? Number(job.progress.lastFrameIndex) : -1;
     for (let frameIndex = lastFrameIndex + 1; frameIndex < plannedFrames; frameIndex += 1) {

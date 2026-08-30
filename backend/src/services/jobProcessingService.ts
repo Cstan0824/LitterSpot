@@ -15,6 +15,12 @@ import { applyCompletedAnalysisAnalytics } from "./analyticsService.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
 import { getCameraRegistration } from "./cameraRegistrationService.js";
 import { loadRegistrationReference } from "./cameraRegistrationReference.js";
+import {
+  assertRegistrationFrameDimensions,
+  pinCameraRegistration,
+  pinnedRegistrationFromJob,
+  REGISTERED_FRAME_INFERENCE_CONTRACT_VERSION,
+} from "./processingRegistration.js";
 
 type ClaimResult = { completedRunId: string } | { claimToken: string; job: DocumentData };
 
@@ -31,7 +37,11 @@ function serializeDocument(snapshot: DocumentSnapshot, label: string): Record<st
 }
 
 function failureDetails(error: unknown) {
-  if (error instanceof HttpError) return { code: "MEDIA_UNAVAILABLE", message: error.message };
+  if (error instanceof HttpError) {
+    const code = error.details && typeof error.details === "object" && "code" in error.details
+      ? String(error.details.code) : "MEDIA_UNAVAILABLE";
+    return { code, message: error.message };
+  }
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data && typeof error.response.data === "object" && "detail" in error.response.data
       ? String(error.response.data.detail)
@@ -249,7 +259,8 @@ export async function processImageJob(jobId: string) {
     const floorConfidence = typeof options.floorConfidence === "number" ? options.floorConfidence : 0.25;
     const binLocalizerConfidence = typeof options.binLocalizerConfidence === "number" ? options.binLocalizerConfidence : 0.80;
     const focusRegion = Array.isArray(options.focusRegionNormalized) ? options.focusRegionNormalized as Array<{ x: number; y: number }> : [];
-    const registration = await getCameraRegistration(String(job.cameraId));
+    const registration = pinnedRegistrationFromJob(job)
+      ?? pinCameraRegistration(String(job.cameraId), await getCameraRegistration(String(job.cameraId)) ?? undefined);
     const reference = await loadRegistrationReference(registration);
     const result = await inferFrame({
       contents,
@@ -262,6 +273,7 @@ export async function processImageJob(jobId: string) {
       reference,
       binReviewEnabled: false,
     });
+    assertRegistrationFrameDimensions(registration, result.image);
     const normalized = normalizeAnalysis(result, analysisRunId, floorConfidence, {
       requireConfirmedOverflow: Boolean(registration),
     });
@@ -301,16 +313,20 @@ export async function processImageJob(jobId: string) {
         zoneId: String(job.zoneId),
         zoneName: String(media.zoneNameSnapshot),
         cameraId: String(job.cameraId),
+        cameraRegistrationRevision: registration.revision,
+        inferenceContractVersion: REGISTERED_FRAME_INFERENCE_CONTRACT_VERSION,
         cameraCode: String(media.cameraCodeSnapshot),
         cameraName: String(media.cameraNameSnapshot),
         capturedAt,
         frameIndex: null,
         videoOffsetSeconds: null,
         image: result.image,
-        focusRegionNormalized: result.focusRegion,
+        focusRegionNormalized: registration.walkableFloorPolygon,
+        walkableFloorPolygonNormalized: registration.walkableFloorPolygon,
         peopleCount: result.peopleCount,
         people: normalized.people,
         bins: normalized.bins,
+        floorHazards: normalized.floorHazards,
         issueKinds: normalized.issueKinds,
         issueCounts: normalized.issueCounts,
         modelVersions: result.modelVersions,

@@ -1,0 +1,3 @@
+$kind: collection
+order: 19000
+description: Run Get Active Map, Save Valid Draft, Validate Draft, then Publish Draft.

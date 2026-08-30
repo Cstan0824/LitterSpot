@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Map - List Revisions
+url: "{{baseUrl}}/api/site-map/revisions"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Map history has at least two revisions', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().revisions.length).to.be.at.least(2); });
+    language: text/javascript
+order: 5000

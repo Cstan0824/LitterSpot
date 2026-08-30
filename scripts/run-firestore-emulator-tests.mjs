@@ -21,6 +21,8 @@ const childCommand = customCommand || "node scripts/run-emulator-smokes.mjs";
 const requiresSentinel = !customCommand;
 const environment = {
   ...process.env,
+  APP_ENV: "local-emulator",
+  EXPECTED_FIREBASE_PROJECT_ID: "demo-litterspot",
   FIREBASE_EMULATORS_PATH: emulatorCache,
   XDG_CONFIG_HOME: firebaseConfig,
   FIREBASE_PROJECT_ID: "demo-litterspot",

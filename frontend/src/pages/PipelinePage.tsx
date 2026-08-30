@@ -1,212 +1,299 @@
-import { useEffect, useRef, useState } from "react";
-import { AnalysisResult } from "../features/pipeline/AnalysisResult";
-import { FocusRegionEditor } from "../features/pipeline/FocusRegionEditor";
-import { HistoryPanel } from "../features/pipeline/HistoryPanel";
-import { PlacementPanel } from "../features/pipeline/PlacementPanel";
-import { VideoAnalysisPanel } from "../features/pipeline/VideoAnalysisPanel";
-import type { PipelineHistory, PipelineResult, PlacementRecommendation, Point } from "../features/pipeline/types";
-import { cameraOptions, moveLiveVideo, publishLiveVideo, updateLiveVideoAnalysis } from "../features/pipeline/liveVideoStore";
-import { apiFetch } from "../services/apiClient";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getCameras, type CameraRecord } from "../services/locationAPI";
+import {
+  getProcessingJob,
+  getProcessingJobResults,
+  startProcessingJob,
+  uploadTestMedia,
+  type NormalizedBox,
+  type ProcessingFrame,
+  type ProcessingJob,
+  type ProcessingJobResults,
+} from "../services/processingAPI";
 
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
+type MediaType = "image" | "video";
+type RunPhase = "idle" | "uploading" | "processing" | "completed" | "failed" | "stopped";
+
+const imageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const videoTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function boxStyle(box: NormalizedBox) {
+  return {
+    left: `${box.x1 * 100}%`,
+    top: `${box.y1 * 100}%`,
+    width: `${(box.x2 - box.x1) * 100}%`,
+    height: `${(box.y2 - box.y1) * 100}%`,
+  };
+}
+
+function formatTime(seconds: number | null) {
+  if (seconds == null) return "Image";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function displayedBinState(bin: ProcessingFrame["bins"][number]) {
+  if (bin.state === "unknown" || bin.state === "review") return bin.state;
+  if (bin.confirmed === false && bin.state === "overflow") return "review";
+  return bin.stableState ?? bin.state;
+}
+
+function frameForTime(frames: ProcessingFrame[], seconds: number) {
+  if (!frames.length) return undefined;
+  let selected = frames[0];
+  for (const frame of frames) {
+    const offset = frame.videoOffsetSeconds ?? 0;
+    if (offset <= seconds + 0.15) selected = frame;
+    else break;
+  }
+  return selected;
+}
+
+function ResultOverlay({ frame, registration }: {
+  frame?: ProcessingFrame;
+  registration: ProcessingJobResults["registration"];
+}) {
+  if (!frame) return null;
+  const floor = frame.walkableFloorPolygonNormalized.length
+    ? frame.walkableFloorPolygonNormalized : registration?.walkableFloorPolygon ?? [];
+  return <div className="model-test-overlay" aria-hidden="true">
+    <svg viewBox="0 0 1 1" preserveAspectRatio="none">
+      {floor.length >= 3 && <polygon className="model-test-floor" points={floor.map((point) => `${point.x},${point.y}`).join(" ")} />}
+      {frame.floorHazards.map((hazard) => hazard.polygonNormalized.length >= 3
+        ? <polygon className={`model-test-hazard-polygon ${hazard.className}`} points={hazard.polygonNormalized.map((point) => `${point.x},${point.y}`).join(" ")} key={`polygon-${hazard.entityId}`} />
+        : null)}
+    </svg>
+    {frame.people.map((person, index) => <span className="model-test-box person" style={boxStyle(person.bboxNormalized)} key={`person-${index}`}><b>Person · {Math.round(person.confidence * 100)}%</b></span>)}
+    {frame.bins.map((bin) => {
+      const state = displayedBinState(bin);
+      return <span className={`model-test-box bin ${state}`} style={boxStyle(bin.bboxNormalized)} key={bin.entityId}><b>{bin.binId ?? bin.entityId} · {state}</b></span>;
+    })}
+    {frame.floorHazards.map((hazard) => <span className={`model-test-box hazard ${hazard.className}`} style={boxStyle(hazard.bboxNormalized)} key={hazard.entityId}><b>{hazard.className === "floor_spill" ? "Spill" : "Litter"} · {Math.round(hazard.confidence * 100)}%</b></span>)}
+  </div>;
+}
 
 export function PipelinePage() {
-  const [mode, setMode] = useState<"image" | "video">("image");
+  const [cameras, setCameras] = useState<CameraRecord[]>([]);
+  const [cameraId, setCameraId] = useState("");
+  const [mediaType, setMediaType] = useState<MediaType>("video");
   const [file, setFile] = useState<File>();
-  const [cameraId, setCameraId] = useState("CAMERA-1");
-  const [result, setResult] = useState<PipelineResult>();
-  const [history, setHistory] = useState<PipelineHistory[]>([]);
-  const [placement, setPlacement] = useState<PlacementRecommendation>();
-  const [windowDays, setWindowDays] = useState(3);
+  const [previewUrl, setPreviewUrl] = useState<string>();
+  const [frameIntervalSeconds, setFrameIntervalSeconds] = useState(2);
+  const [phase, setPhase] = useState<RunPhase>("idle");
+  const [job, setJob] = useState<ProcessingJob>();
+  const [results, setResults] = useState<ProcessingJobResults>();
+  const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [videoTime, setVideoTime] = useState(0);
   const [error, setError] = useState<string>();
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<string>();
-  const [focusPoints, setFocusPoints] = useState<Point[]>([]);
-  const [drawing, setDrawing] = useState(false);
-  const [videoUrl, setVideoUrl] = useState<string>();
-  const [streaming, setStreaming] = useState(false);
-  const [sampleInterval, setSampleInterval] = useState(2);
-  const [framesAnalyzed, setFramesAnalyzed] = useState(0);
+  const runToken = useRef(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const liveVideoIdRef = useRef<string | undefined>(undefined);
-  const stopStreaming = useRef(false);
 
-  async function loadHistory() {
-    try {
-      const response = await apiFetch("/api/detections/pipeline/recent");
-      const body = await response.json();
-      setHistory(body.items ?? []);
-    } catch { /* Optional while services start. */ }
+  const readyCameras = useMemo(() => cameras.filter((camera) => camera.status === "active" && camera.registrationStatus === "ready"), [cameras]);
+  const selectedCamera = readyCameras.find((camera) => camera.id === cameraId);
+  const selectedFrame = useMemo(() => {
+    if (!results?.frames.length) return undefined;
+    if (selectedRunId) return results.frames.find((frame) => frame.analysisRunId === selectedRunId) ?? results.frames[0];
+    return mediaType === "video" ? frameForTime(results.frames, videoTime) : results.frames[0];
+  }, [mediaType, results, selectedRunId, videoTime]);
+  const busy = phase === "uploading" || phase === "processing";
+  const progress = job?.progress;
+  const progressRatio = progress?.plannedFrames ? Math.min(1, progress.processedFrames / progress.plannedFrames) : 0;
+  const stageRatio = selectedFrame?.image
+    ? `${selectedFrame.image.width} / ${selectedFrame.image.height}`
+    : results?.registration ? `${results.registration.sourceWidth} / ${results.registration.sourceHeight}` : "16 / 9";
+
+  useEffect(() => {
+    void getCameras().then((items) => {
+      setCameras(items);
+      const first = items.find((camera) => camera.status === "active" && camera.registrationStatus === "ready");
+      if (first) setCameraId(first.id);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Registered cameras could not be loaded."));
+  }, []);
+
+  useEffect(() => () => {
+    runToken.current += 1;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  function resetRun() {
+    runToken.current += 1;
+    setPhase("idle");
+    setJob(undefined);
+    setResults(undefined);
+    setSelectedRunId(undefined);
+    setVideoTime(0);
+    setError(undefined);
   }
 
-  async function loadPlacement(targetCamera = cameraId) {
-    if (!targetCamera.trim()) return;
-    try {
-      const response = await apiFetch(`/api/detections/pipeline/placement/${encodeURIComponent(targetCamera)}`);
-      const body = await response.json();
-      if (response.ok) { setPlacement(body); setWindowDays(body.windowDays); }
-    } catch { /* Optional while services start. */ }
+  function selectType(next: MediaType) {
+    if (busy || next === mediaType) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setMediaType(next);
+    setFile(undefined);
+    setPreviewUrl(undefined);
+    resetRun();
   }
-
-  async function saveWindow() {
-    const response = await apiFetch(`/api/detections/pipeline/placement/${encodeURIComponent(cameraId)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ windowDays }),
-    });
-    const body = await response.json();
-    if (!response.ok) { setError(body.error ?? "Could not update observation window."); return; }
-    setPlacement(body);
-  }
-
-  useEffect(() => { void loadHistory(); void loadPlacement("CAMERA-1"); }, []);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-  useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
-  useEffect(() => () => { stopStreaming.current = true; }, []);
 
   function selectFile(next?: File) {
-    stopVideoAnalysis();
-    setVideoUrl(undefined);
-    setResult(undefined);
-    setError(undefined);
-    setFocusPoints([]);
-    setDrawing(false);
-    if (!next) return;
-    if (!allowedTypes.has(next.type)) { setError("Use a JPEG, PNG, or WebP image."); return; }
-    setFile(next);
-    setPreview(URL.createObjectURL(next));
-  }
-
-  function selectVideo(next?: File) {
-    stopVideoAnalysis();
-    setResult(undefined);
-    setError(undefined);
-    setFramesAnalyzed(0);
-    setFocusPoints([]);
-    setDrawing(false);
-    if (!next) return;
-    if (!allowedVideoTypes.has(next.type)) { setError("Use an MP4, WebM, or Ogg video."); return; }
+    resetRun();
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setFile(undefined);
-    setPreview(undefined);
-    liveVideoIdRef.current = publishLiveVideo(next, cameraId);
-    setVideoUrl(URL.createObjectURL(next));
-  }
-
-  async function analyzeFrame(frame: File) {
-    const body = new FormData();
-    body.append("image", frame);
-    body.append("cameraId", cameraId);
-    body.append("confirmationFrames", "3");
-    if (focusPoints.length >= 3) body.append("focusRegion", JSON.stringify(focusPoints));
-    const response = await apiFetch("/api/detections/pipeline/frame", { method: "POST", body });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "Analysis failed.");
-    setResult(payload);
-    updateLiveVideoAnalysis(cameraId, payload);
-  }
-
-  async function analyze() {
-    if (!file) return;
-    if (focusPoints.length === 1 || focusPoints.length === 2) {
-      setError("Add at least three focus-area points, or clear the area.");
+    setPreviewUrl(undefined);
+    if (!next) return;
+    const allowed = mediaType === "image" ? imageTypes : videoTypes;
+    if (!allowed.has(next.type)) {
+      setError(mediaType === "image" ? "Choose a JPEG, PNG, or WebP image." : "Choose an MP4, WebM, or MOV video.");
       return;
     }
-    if (drawing && focusPoints.length >= 3) setDrawing(false);
-    setLoading(true);
-    setError(undefined);
-    try {
-      await analyzeFrame(file);
-      await loadHistory();
-      await loadPlacement(cameraId);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Analysis failed.");
-    } finally {
-      setLoading(false);
-    }
+    setFile(next);
+    setPreviewUrl(URL.createObjectURL(next));
   }
 
-  function stopVideoAnalysis() {
-    stopStreaming.current = true;
-    videoRef.current?.pause();
-    setStreaming(false);
-  }
-
-  async function captureVideoFrame(video: HTMLVideoElement, frameNumber: number) {
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("This browser cannot capture video frames.");
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
-      (value) => value ? resolve(value) : reject(new Error("Could not encode the video frame.")),
-      "image/jpeg",
-      0.9,
-    ));
-    return new File([blob], `cctv-frame-${String(frameNumber).padStart(5, "0")}.jpg`, { type: "image/jpeg" });
-  }
-
-  async function startVideoAnalysis() {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight) { setError("Wait for the video preview to finish loading."); return; }
-    stopStreaming.current = false;
-    setStreaming(true);
-    setError(undefined);
-    setFramesAnalyzed(0);
-    try {
-      video.currentTime = 0;
-      await video.play();
-      let frameNumber = 0;
-      while (!stopStreaming.current && !video.ended) {
-        const startedAt = performance.now();
-        frameNumber += 1;
-        const frame = await captureVideoFrame(video, frameNumber);
-        setPreview((current) => {
-          if (current) URL.revokeObjectURL(current);
-          return URL.createObjectURL(frame);
-        });
-        await analyzeFrame(frame);
-        setFramesAnalyzed(frameNumber);
-        const remaining = sampleInterval * 1000 - (performance.now() - startedAt);
-        if (remaining > 0) await new Promise((resolve) => window.setTimeout(resolve, remaining));
+  async function pollJob(jobId: string, token: number) {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      if (token !== runToken.current) throw new DOMException("Cancelled", "AbortError");
+      const latest = await getProcessingJob(jobId);
+      setJob(latest);
+      if (latest.status === "completed") return latest;
+      if (latest.status === "failed" || latest.status === "cancelled") {
+        throw new Error(latest.error?.message ?? `Processing job ${latest.status}.`);
       }
-      await Promise.all([loadHistory(), loadPlacement(cameraId)]);
+      await delay(1_000);
+    }
+    throw new Error("Processing is taking longer than ten minutes. The job is still available in the backend.");
+  }
+
+  async function runTest() {
+    if (!file || !cameraId || busy) return;
+    const token = runToken.current + 1;
+    runToken.current = token;
+    setError(undefined);
+    setResults(undefined);
+    setSelectedRunId(undefined);
+    try {
+      setPhase("uploading");
+      const uploaded = await uploadTestMedia({ file, cameraId, type: mediaType, frameIntervalSeconds });
+      if (token !== runToken.current) return;
+      setJob(uploaded.job);
+      setPhase("processing");
+      await startProcessingJob(uploaded.job.id);
+      const completed = await pollJob(uploaded.job.id, token);
+      const nextResults = await getProcessingJobResults(completed.id);
+      if (token !== runToken.current) return;
+      setJob(completed);
+      setResults(nextResults);
+      setPhase("completed");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Video analysis failed.");
-    } finally {
-      video.pause();
-      setStreaming(false);
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setPhase("failed");
+      setError(reason instanceof Error ? reason.message : "The model test could not complete.");
     }
   }
 
-  return <main className="app-shell pipeline-page">
-    <header className="hero"><div><p className="eyebrow">LITTERSPOT / UNIFIED ANALYSIS</p><h1>Every frame.<br /><em>Every change.</em></h1><p className="lede">Analyze a single image or monitor an uploaded video with live, one-second detection updates.</p></div><button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>Dashboard</button></header>
-    <div className="playground-tabs" role="tablist" aria-label="Analysis input type">
-      <button role="tab" aria-selected={mode === "image"} className={mode === "image" ? "active" : ""} onClick={() => setMode("image")}>Image</button>
-      <button role="tab" aria-selected={mode === "video"} className={mode === "video" ? "active" : ""} onClick={() => setMode("video")}>Video</button>
-    </div>
-    {mode === "video" ? <VideoAnalysisPanel cameraId={cameraId} onCameraIdChange={setCameraId} onPersisted={() => { void loadHistory(); void loadPlacement(cameraId); }} /> : <>
-    <section className="workspace">
-      <article className="card">
-        <div className="card-heading"><div><span className="step">01</span><h2>Analyze camera frame</h2></div></div>
-        <label className="dropzone"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectFile(event.target.files?.[0])} />{preview ? <img src={preview} alt="Selected camera frame" /> : <><span className="upload-icon">↑</span><strong>Upload a camera image</strong><span>JPEG, PNG, or WebP · 10 MB maximum</span></>}</label>
-        {preview && !videoUrl && <FocusRegionEditor preview={preview} points={focusPoints} drawing={drawing} onPointsChange={setFocusPoints} onDrawingChange={setDrawing} />}
-        <div className="video-ingest">
-          <label><span>CCTV video</span><input type="file" accept="video/mp4,video/webm,video/ogg" disabled={streaming} onChange={(event) => selectVideo(event.target.files?.[0])} /></label>
-          {videoUrl && <video ref={videoRef} src={videoUrl} controls muted playsInline onEnded={stopVideoAnalysis} />}
-          {videoUrl && <label className="control"><span>Sample interval <b>{sampleInterval}s</b></span><input type="range" min="1" max="10" step="1" value={sampleInterval} disabled={streaming} onChange={(event) => setSampleInterval(Number(event.target.value))} /><small>Frames follow the clip's current playback position, with only one inference request running at a time.</small></label>}
+  function stopWaiting() {
+    runToken.current += 1;
+    setPhase("stopped");
+    setError(undefined);
+  }
+
+  async function resumeMonitoring() {
+    if (!job || busy) return;
+    const token = runToken.current + 1;
+    runToken.current = token;
+    setPhase("processing");
+    setError(undefined);
+    try {
+      const completed = await pollJob(job.id, token);
+      const nextResults = await getProcessingJobResults(completed.id);
+      if (token !== runToken.current) return;
+      setJob(completed);
+      setResults(nextResults);
+      setPhase("completed");
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      setPhase("failed");
+      setError(reason instanceof Error ? reason.message : "The processing job could not be monitored.");
+    }
+  }
+
+  function selectTimelineFrame(frame: ProcessingFrame) {
+    const offset = frame.videoOffsetSeconds ?? 0;
+    if (videoRef.current) videoRef.current.currentTime = offset;
+    setVideoTime(offset);
+    setSelectedRunId(frame.analysisRunId);
+  }
+
+  return <main className="app-shell model-test-page">
+    <header className="model-test-header">
+      <div><h1>Registered camera test</h1><p>Upload one test image or video. Node uses the camera's published floor and bin geometry, then returns frame-aligned model results.</p></div>
+      <button className="quiet nav-button" onClick={() => { location.hash = "/"; }}>Dashboard</button>
+    </header>
+
+    <section className="model-test-layout">
+      <form className="model-test-controls" onSubmit={(event) => { event.preventDefault(); void (phase === "stopped" && job ? resumeMonitoring() : runTest()); }}>
+        <div className="model-test-mode" role="group" aria-label="Choose test media type">
+          <button type="button" aria-pressed={mediaType === "video"} className={mediaType === "video" ? "active" : ""} onClick={() => selectType("video")}>Video</button>
+          <button type="button" aria-pressed={mediaType === "image"} className={mediaType === "image" ? "active" : ""} onClick={() => selectType("image")}>Image</button>
         </div>
-        <label className="control"><span>Camera ID</span><select value={cameraId} onChange={(event) => { setCameraId(event.target.value); if (liveVideoIdRef.current) moveLiveVideo(liveVideoIdRef.current, event.target.value); void loadPlacement(event.target.value); }}>{cameraOptions.map((id) => <option value={id} key={id}>{id}</option>)}</select></label>
-        {videoUrl && <div className="action-row"><button className="primary" disabled={streaming} onClick={() => void startVideoAnalysis()}>{streaming ? "Analyzing stream..." : "Start CCTV simulation"}</button>{streaming && <button className="quiet" onClick={stopVideoAnalysis}>Stop</button>}<span className="frame-counter">{framesAnalyzed} frames analyzed</span></div>}
-        <div className="action-row"><button className="primary" disabled={!file || loading} onClick={() => void analyze()}>{loading ? "Analyzing…" : "Run unified analysis"}</button></div>
-        {error && <p className="error">{error}</p>}
-      </article>
-      <aside className="card pipeline-summary"><p className="eyebrow">Flag policy</p><h2>Human-reviewed alerts</h2><div className="policy-row"><b className="critical">Critical</b><span>Confirmed overflow or floor spill</span></div><div className="policy-row"><b className="warning">Warning</b><span>Floor litter</span></div><div className="policy-row"><b className="clear">Context</b><span>People count</span></div></aside>
+
+        <label className="model-test-field">Registered camera
+          <select value={cameraId} disabled={busy} onChange={(event) => { setCameraId(event.target.value); resetRun(); }}>
+            <option value="">Select a camera</option>
+            {readyCameras.map((camera) => <option value={camera.id} key={camera.id}>{camera.name} · {camera.zoneName} · revision {camera.registrationRevision}</option>)}
+          </select>
+          <small>{selectedCamera ? `${selectedCamera.code} · ${selectedCamera.siteName} · registration revision ${selectedCamera.registrationRevision}` : "Only active cameras with a published registration appear here."}</small>
+        </label>
+
+        {!readyCameras.length && <div className="model-test-no-cameras"><strong>No registered cameras</strong><span>Publish a floor and optional bin registration before processing media.</span><button type="button" className="outline-button" onClick={() => { location.hash = "/camera-registration"; }}>Open camera registration</button></div>}
+
+        {mediaType === "video" && <label className="model-test-field">Frame interval
+          <div className="model-test-interval"><input type="range" min="1" max="10" step="1" value={frameIntervalSeconds} disabled={busy} onChange={(event) => { resetRun(); setFrameIntervalSeconds(Number(event.target.value)); }} /><b>{frameIntervalSeconds}s</b></div>
+          <small>Two seconds is fast enough for the current five-second bin confirmation window.</small>
+        </label>}
+
+        <label className={`model-test-file ${file ? "selected" : ""}`}>
+          <input type="file" disabled={busy} accept={mediaType === "image" ? "image/jpeg,image/png,image/webp" : "video/mp4,video/webm,video/quicktime"} onChange={(event) => selectFile(event.target.files?.[0])} />
+          <span>{file ? "Selected file" : `Choose ${mediaType}`}</span>
+          <strong>{file?.name ?? (mediaType === "video" ? "MP4, WebM, or MOV" : "JPEG, PNG, or WebP")}</strong>
+          <small>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "The media must use the same camera angle and dimensions as its registration."}</small>
+        </label>
+
+        <div className="model-test-safety"><i />Test mode is locked on. Results are stored, but they cannot create alerts or affect analytics.</div>
+        <div className="model-test-actions"><button className="primary model-test-run" type="submit" disabled={!file || !cameraId || busy}>{phase === "uploading" ? "Uploading…" : phase === "processing" ? "Processing…" : phase === "stopped" && job ? "Resume monitoring" : "Run registered-camera test"}</button>{busy && <button type="button" className="quiet" onClick={stopWaiting}>Stop waiting</button>}</div>
+        {phase === "stopped" && <div className="model-test-stopped" role="status">Monitoring stopped. The backend job may still be running; resume when you are ready.</div>}
+        {error && <div className="model-test-error" role="alert"><strong>Test stopped</strong><span>{error}</span></div>}
+      </form>
+
+      <section className="model-test-stage-panel">
+        <div className="model-test-stage" style={{ aspectRatio: stageRatio }}>
+          {!previewUrl && <div className="model-test-empty"><strong>No test media yet</strong><span>Choose a registered camera and upload a file to inspect the saved floor, bin states, people and floor hazards.</span></div>}
+          {previewUrl && mediaType === "image" && <img src={previewUrl} alt="Selected camera test" />}
+          {previewUrl && mediaType === "video" && <video ref={videoRef} src={previewUrl} controls muted playsInline onTimeUpdate={(event) => { setVideoTime(event.currentTarget.currentTime); setSelectedRunId(undefined); }} />}
+          <ResultOverlay frame={selectedFrame} registration={results?.registration ?? null} />
+          {previewUrl && <span className={`model-test-status ${phase}`} role="status" aria-live="polite">{phase === "idle" ? "Ready" : phase === "completed" ? selectedFrame ? `Result · ${formatTime(selectedFrame.videoOffsetSeconds)}` : "Completed" : phase}</span>}
+        </div>
+
+        {busy && <div className="model-test-progress" aria-live="polite"><div><strong>{phase === "uploading" ? "Storing test media" : "Running registered inference"}</strong><span>{progress ? `${progress.processedFrames} of ${progress.plannedFrames} frames` : "Preparing job"}</span></div><i><b style={{ width: `${phase === "uploading" ? 8 : Math.max(8, progressRatio * 100)}%` }} /></i></div>}
+
+        {results && selectedFrame && <>
+          <div className="model-test-metrics">
+            <span><b>{selectedFrame.peopleCount}</b>People</span>
+            <span><b>{selectedFrame.bins.length}</b>Registered bins</span>
+            <span><b>{selectedFrame.floorHazards.length}</b>Floor hazards</span>
+            <span><b>{Math.round(selectedFrame.processingTimeMs)} ms</b>Inference</span>
+          </div>
+          {mediaType === "video" && <div className="model-test-timeline" aria-label="Analyzed video frames">
+            {results.frames.map((frame) => <button type="button" aria-pressed={frame.analysisRunId === selectedFrame.analysisRunId} className={frame.analysisRunId === selectedFrame.analysisRunId ? "active" : ""} key={frame.analysisRunId} onClick={() => selectTimelineFrame(frame)}><span>{formatTime(frame.videoOffsetSeconds)}</span><b>{frame.bins.filter((bin) => displayedBinState(bin) === "overflow").length + frame.floorHazards.length} issues</b></button>)}
+          </div>}
+          <div className="model-test-result-footer"><span>Registration revision {results.registration?.revision ?? "unknown"}</span><span>{selectedFrame.inferenceContractVersion ?? "legacy contract"}</span><span>{selectedFrame.modelVersions.binState ?? "model version unavailable"}</span></div>
+          <details className="model-test-json"><summary>View current frame JSON</summary><pre>{JSON.stringify(selectedFrame, null, 2)}</pre></details>
+        </>}
+      </section>
     </section>
-    {result && preview && <AnalysisResult result={result} imageUrl={preview} />}
-    </>}
-    {placement && <PlacementPanel placement={placement} windowDays={windowDays} onWindowDaysChange={setWindowDays} onSave={() => void saveWindow()} onRefresh={() => void loadPlacement()} />}
-    <HistoryPanel history={history} onRefresh={() => void loadHistory()} />
   </main>;
 }

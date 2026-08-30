@@ -1,0 +1,38 @@
+$kind: http-request
+name: V2 Map - Save Valid Draft
+url: "{{baseUrl}}/api/site-map/draft"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {
+      "baseRevisionId": "{{v2ActiveMapRevisionId}}",
+      "widthMeters": 100,
+      "heightMeters": 100,
+      "gridSizeMeters": 5,
+      "backgroundMediaId": null,
+      "backgroundTransform": null,
+      "zones": [{
+        "zoneId": "{{v2ZoneId}}",
+        "zoneNameSnapshot": "Main Entrance",
+        "polygon": [
+          {"xMeters":0,"yMeters":0},
+          {"xMeters":50,"yMeters":0},
+          {"xMeters":50,"yMeters":50},
+          {"xMeters":0,"yMeters":50}
+        ]
+      }],
+      "cameraPlacements": [],
+      "cleanerStations": []
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Valid draft saved', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().draft.validationStatus).to.eql('valid'); });
+    language: text/javascript
+order: 2000

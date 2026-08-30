@@ -1,0 +1,36 @@
+$kind: http-request
+name: V2 Cleaner Management - Create Cleaner
+url: "{{baseUrl}}/api/cleaners"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {
+      "staffCode": "CLN-001",
+      "fullName": "Postman V2 Cleaner",
+      "phone": "+60123456789",
+      "email": "{{v2CleanerEmail}}",
+      "password": "{{v2CleanerPassword}}",
+      "notes": "Created during V2 Postman testing",
+      "profileMediaId": null,
+      "weeklySchedule": {
+        "mon":{"startMinute":0,"endMinute":0}, "tue":{"startMinute":0,"endMinute":0},
+        "wed":{"startMinute":0,"endMinute":0}, "thu":{"startMinute":0,"endMinute":0},
+        "fri":{"startMinute":0,"endMinute":0}, "sat":{"startMinute":0,"endMinute":0},
+        "sun":{"startMinute":0,"endMinute":0}
+      },
+      "stationPoint": {"xMeters":10,"yMeters":10},
+      "idempotencyKey": "postman-v2-cleaner-001"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Cleaner created', () => pm.response.to.have.status(201));
+      if (pm.response.code === 201) { const cleaner = pm.response.json().cleaner; pm.environment.set('v2CleanerId', cleaner.id); pm.environment.set('v2CleanerRevision', String(cleaner.revision)); pm.expect(cleaner.stationZoneId).to.eql(pm.environment.get('v2ZoneId')); }
+    language: text/javascript
+order: 1000

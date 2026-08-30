@@ -6,9 +6,11 @@ scripts:
   - type: http:beforeRequest
     code: |-
       const name = pm.info.requestName;
-      const publicRequest = ['Backend and AI Health', 'Backend Liveness', 'Backend Readiness', 'Firebase Login', 'Cleaner Firebase Login'].includes(name);
-      const cleanerRequest = name.startsWith('Cleaner -');
-      const token = pm.environment.get(cleanerRequest ? 'cleanerFirebaseIdToken' : 'firebaseIdToken');
+      const publicRequest = ['Backend and AI Health', 'Backend Liveness', 'Backend Readiness', 'Firebase Login', 'Cleaner Firebase Login', 'V2 Superadmin Login', 'V2 Root Login', 'V2 Cleaner Login'].includes(name);
+      const cleanerRequest = name.startsWith('Cleaner -') || name.startsWith('V2 Cleaner -');
+      const superadminRequest = name.startsWith('V2 Superadmin -');
+      const rootRequest = name.startsWith('V2 Root -') || name.startsWith('V2 Map -') || name.startsWith('V2 Cleaner Management -');
+      const token = pm.environment.get(superadminRequest ? 'v2SuperadminToken' : rootRequest ? 'v2RootToken' : cleanerRequest ? 'v2CleanerToken' : 'firebaseIdToken');
       if (!publicRequest && !token) {
         throw new Error(cleanerRequest
           ? 'No Cleaner Firebase ID token. Complete the invitation, set cleanerEmail/cleanerPassword, and run Cleaner Firebase Login.'

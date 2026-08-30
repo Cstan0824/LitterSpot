@@ -1,6 +1,30 @@
 {
   "indexes": [
     {
+      "collectionGroup": "siteMapRevisions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "revisionNumber", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "monitoringEpisodes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "monitoringSessionId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cameraRuntimeStates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "connectionStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "alerts",
       "queryScope": "COLLECTION",
       "fields": [
@@ -313,6 +337,23 @@
         { "fieldPath": "scopeType", "order": "ASCENDING" },
         { "fieldPath": "scopeId", "order": "ASCENDING" },
         { "fieldPath": "lastSeenAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "cameraId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "assignedCleanerId", "order": "ASCENDING" }
       ]
     },
     {

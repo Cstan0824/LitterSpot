@@ -1,0 +1,3 @@
+$kind: collection
+order: 21000
+description: Manual cloud workflow intentionally omitted until a Camera Draft media upload endpoint exists. Do not seed mediaAssets manually. Phases 5-7 remain covered by emulator automation meanwhile.
