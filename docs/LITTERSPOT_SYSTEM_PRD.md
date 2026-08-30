@@ -1,5 +1,7 @@
 # LitterSpot system product requirements document
 
+> **V2 scope notice:** This 2026-08-15 PRD predates the clarified V2 identity, Cleaner, Work, and Orchestrator decisions. For Phase 9 assignment, use [`current-clarified-requirements-continuation.md`](current-clarified-requirements-continuation.md), [`data-model-v2/`](data-model-v2/), and [`adr/0003-orchestrator-selects-assignment-pair.md`](adr/0003-orchestrator-selects-assignment-pair.md). The current LLM selects an Alert and Cleaner pair from a bounded Node-validated context. Older Cleaner-only ranking, GPS, acceptance, rejection, and deterministic-fallback language in this PRD is historical.
+
 ## Document control
 
 | Field | Value |

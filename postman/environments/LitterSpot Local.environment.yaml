@@ -152,3 +152,31 @@ values:
     value: ''
   - key: v2CleanerRevision
     value: ''
+  - key: v2AlertId
+    value: ''
+  - key: v2WorkOrderId
+    value: ''
+  - key: v2WorkRevision
+    value: ''
+  - key: v2VerificationId
+    value: ''
+  - key: v2CompletionEvidenceMediaId
+    value: ''
+  - key: v2ReplacementCleanerId
+    value: ''
+  - key: v2OrchestratorRunId
+    value: ''
+  - key: v2OrchestratorAssignmentAlertId
+    value: ''
+  - key: v2OrchestratorAssignmentCleanerId
+    value: ''
+  - key: v2OrchestratorReviewRunId
+    value: ''
+  - key: v2TestCameraId
+    value: ''
+  - key: v2TestAlertRequestId
+    value: phase9-fake-alert-001
+  - key: v2SiteOperationId
+    value: ''
+  - key: allowSiteDeactivationTest
+    value: 'false'

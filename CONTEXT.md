@@ -71,8 +71,16 @@ The Camera-view configuration containing a reference frame, visible walkable-flo
 _Avoid_: Camera placement, zone registration
 
 **Cleaner Station Point**:
-The fixed Site Map coordinate assigned to a Cleaner; assignment decisions treat an available Cleaner as being near this point.
+The fixed Site Map coordinate assigned to a Cleaner and their default assignment origin; a fresh Recent Work Location may temporarily supplement it while the Cleaner returns.
 _Avoid_: GPS location, live location, home address
+
+**Recent Work Location**:
+The target snapshot of a Cleaner's most recently resolved Work Order, used for a short period as an approximate returning-to-station assignment signal; it is not live tracking.
+_Avoid_: Current GPS position, Cleaner check-in, permanent Station Point
+
+**Assignment Pair**:
+One waiting Alert and one available Cleaner selected together by the Orchestrator from a bounded, backend-validated assignment context.
+_Avoid_: Preselected Alert plus Cleaner choice, unvalidated model assignment
 
 **Cleaner Schedule**:
 The Root Supervisor-managed recurring daily time ranges that determine when a Cleaner can become available for assignment.

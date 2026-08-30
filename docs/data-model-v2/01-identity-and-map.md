@@ -121,6 +121,10 @@ This is both the Cleaner profile and the atomic assignment lock. `cleanerId` rem
 | `scheduleTimeZone` | string | yes | Site timezone snapshot used to interpret the schedule. |
 | `activeWorkOrderId` | string or null | yes | Atomic busy lock. Non-null makes the Cleaner unavailable for new Work. |
 | `activeWorkAssignedAt` | timestamp or null | yes | Assignment time for stale-lock diagnosis. |
+| `lastResolvedWorkOrderId` | string or null | yes | Most recently resolved Work used for assignment context traceability. |
+| `lastResolvedWorkTarget` | Work target snapshot or null | yes | Approximate Recent Work Location; never presented as live position. |
+| `lastResolvedWorkAt` | timestamp or null | yes | Freshness clock for the Recent Work Location. |
+| `lastResolvedMapRevisionId` | string or null | yes | Must match the Active Map Revision before recent location is considered. |
 | `createdAt` | timestamp | yes | Profile creation time. |
 | `createdByUid` | string | yes | Creating Supervisor or Superadmin. |
 | `updatedAt` | timestamp | yes | Latest mutable profile change. |
@@ -149,6 +153,8 @@ and current Site-local time falls in the recurring schedule
 and activeWorkOrderId is null
 and Active Map Revision has one valid Station Point
 ```
+
+Resolving Work atomically updates the four `lastResolved*` projection fields. Dismissing Work does not update them. Assignment context falls back to Station Point when the projection is missing, stale or belongs to another map revision.
 
 ## `cleanerStaffCodeKeys/{keyHash}`
 

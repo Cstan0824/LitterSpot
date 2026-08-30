@@ -63,8 +63,10 @@ cameras/{cameraId}
 waiting Alert
     -> orchestratorOutbox
        -> orchestratorRun
-          -> available Cleaner selected
-             -> atomic Cleaner reservation and Work Order creation
+          -> bounded waiting Alerts + available Cleaners
+             -> LLM selects one Alert and Cleaner pair
+                -> Node validates both IDs and current eligibility
+                   -> atomic Cleaner reservation and Work Order creation
 
 operational events and minute Camera aggregates
     -> analyticsMinuteBuckets

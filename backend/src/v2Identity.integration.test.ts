@@ -79,7 +79,7 @@ run("V2 identity and Site workflow", () => {
     expect(response.status).toBe(200);
     expect((await request(app).get("/api/me").set("Authorization", `Bearer ${rootToken}`)).status).toBe(403);
     const operation = await firestore.collection("siteOperations").where("siteId", "==", siteId).where("type", "==", "deactivate").get();
-    expect(operation.docs[0].data().status).toBe("pending");
+    expect(operation.docs[0].data().status).toBe("completed");
     const reactivated = await request(app).patch(`/api/superadmin/sites/${siteId}/status`).set("Authorization", `Bearer ${superadminToken}`).send({ status: "active", reason: "integration test complete" });
     expect(reactivated.status).toBe(200);
     expect((await request(app).get("/api/me").set("Authorization", `Bearer ${rootToken}`)).status).toBe(200);

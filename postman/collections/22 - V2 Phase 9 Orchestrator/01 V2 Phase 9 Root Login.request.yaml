@@ -1,0 +1,19 @@
+$kind: http-request
+name: V2 Phase 9 Root Login
+url: https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseWebApiKey}}
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {"email":"{{v2RootEmail}}","password":"{{v2RootPassword}}","returnSecureToken":true}
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('V2 Root login succeeds', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.environment.set('v2RootToken', pm.response.json().idToken);
+    language: text/javascript
+order: 1000

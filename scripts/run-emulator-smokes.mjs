@@ -33,6 +33,9 @@ const integrationTests = [
   ["src/v2Camera.integration.test.ts", {}],
   ["src/v2Monitoring.integration.test.ts", {}],
   ["src/v2WorkOrder.integration.test.ts", {}],
+  ["src/v2Orchestrator.integration.test.ts", {}],
+  ["src/v2TestSupport.integration.test.ts", {}],
+  ["src/v2Operations.integration.test.ts", {}],
 ];
 
 for (const [testFile, environment] of integrationTests) {

@@ -37,6 +37,10 @@ import { v2CameraRoutes } from "./routes/v2CameraRoutes.js";
 import { v2MonitoringRoutes } from "./routes/v2MonitoringRoutes.js";
 import { v2SupervisorAccountRoutes } from "./routes/v2SupervisorAccountRoutes.js";
 import { v2WorkOrderRoutes } from "./routes/v2WorkOrderRoutes.js";
+import { v2OrchestratorInternalRoutes, v2OrchestratorSupervisorRoutes } from "./routes/v2OrchestratorRoutes.js";
+import { v2TestSupportRoutes } from "./routes/v2TestSupportRoutes.js";
+import { v2OperationsRoutes } from "./routes/v2OperationsRoutes.js";
+import { auditV2Mutation } from "./middleware/auditV2Mutation.js";
 
 export const app = express();
 
@@ -78,6 +82,8 @@ app.use("/api/me", supervisorRoutes);
 app.use("/api/superadmin", requireSuperadmin, superadminRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
+app.use("/api/operations/v2", v2OperationsRoutes);
+app.use(["/api/site-map", "/api/camera-creation", "/api/monitoring", "/api/alerts", "/api/supervisors"], auditV2Mutation);
 app.use("/api/site-map", siteMapRoutes);
 app.use("/api/camera-creation", v2CameraRoutes);
 app.use("/api/monitoring", v2MonitoringRoutes);
@@ -101,8 +107,11 @@ app.use("/api/work-orders", (req, _res, next) => {
   if (req.authUser.siteId && req.authUser.role === "supervisor") return v2WorkOrderRoutes(req, _res, next);
   return next();
 });
+app.use("/api/test-support/v2", v2TestSupportRoutes);
 app.use("/api/zones", zoneRoutes);
+app.use("/api/orchestrator/v2", v2OrchestratorSupervisorRoutes);
 app.use("/api/orchestrator", orchestratorSupervisorRoutes);
+app.use("/internal/orchestrator/v2", v2OrchestratorInternalRoutes);
 app.use("/internal/orchestrator", orchestratorInternalRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found.", requestId: req.requestId }));

@@ -31,6 +31,7 @@ const environment = {
   LITTERSPOT_EMULATOR_SENTINEL: sentinel,
   MEDIA_STORAGE_ROOT: mediaRoot,
   VIDEO_UPLOAD_TEMP_ROOT: videoTempRoot,
+  ORCHESTRATOR_INTERNAL_TOKEN: "emulator-orchestrator-token",
 };
 delete environment.GOOGLE_APPLICATION_CREDENTIALS;
 

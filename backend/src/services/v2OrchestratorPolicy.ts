@@ -1,13 +1,29 @@
-export type CleanerCandidate = { cleanerId: string; distanceMeters: number; available: boolean };
+export type Point = { xMeters: number; yMeters: number };
+export type RecentLocationStrength = "strong" | "weak" | "expired";
 
-export function selectCandidate(candidates: CleanerCandidate[], excludedIds: Set<string>) {
-  return candidates.filter((candidate) => candidate.available && !excludedIds.has(candidate.cleanerId)).sort((a, b) => a.distanceMeters - b.distanceMeters)[0] ?? null;
+export function mapDistanceMeters(from: Point, to: Point) {
+  return Math.hypot(to.xMeters - from.xMeters, to.yMeters - from.yMeters);
 }
 
-export function nextCandidateAfterConflict(candidates: CleanerCandidate[], excludedIds: Set<string>, conflictedId: string) {
-  excludedIds.add(conflictedId);
-  return selectCandidate(candidates, excludedIds);
+export function recentLocationStrength(minutesSinceResolution: number): RecentLocationStrength {
+  if (minutesSinceResolution <= 5) return "strong";
+  if (minutesSinceResolution <= 15) return "weak";
+  return "expired";
 }
 
-export function technicalRetryDelays(limit = 3) { return [1000, 2000, 4000].slice(0, Math.max(0, limit)); }
+export function assignmentPairKey(alertId: string, cleanerId: string) {
+  return `${alertId}\u0000${cleanerId}`;
+}
 
+export function isEligibleAssignmentPair(
+  eligiblePairs: Array<{ alertId: string; cleanerId: string }>,
+  alertId: string,
+  cleanerId: string,
+) {
+  const expected = assignmentPairKey(alertId, cleanerId);
+  return eligiblePairs.some((pair) => assignmentPairKey(pair.alertId, pair.cleanerId) === expected);
+}
+
+export function technicalRetryDelays(limit = 3) {
+  return [1000, 2000, 4000].slice(0, Math.max(0, limit));
+}

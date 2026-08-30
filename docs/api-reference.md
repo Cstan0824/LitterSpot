@@ -1,6 +1,6 @@
 # LitterSpot Node API reference
 
-Last updated: 2026-08-25
+Last updated: 2026-08-30
 
 This document is the integration contract for the public Node/Express API. The
 React application and external API clients must call Node at `/api`; they must
@@ -1495,7 +1495,9 @@ folder and must be sent child-first only after the hierarchy has been tested.
 For the two model-test adapter requests, select a local image in Postman's file
 picker; collection files intentionally contain no machine-specific image paths.
 
-## 15.1 Orchestrator foundation
+## 15.1 Historical V1 Orchestrator foundation
+
+> These routes remain for V1 compatibility. New V2 work must use section 15.2.
 
 Phase 12 adds a Node-owned orchestration boundary. Alert creation writes one
 deterministic `orchestratorRuns/{runId}` record and one matching
@@ -1546,7 +1548,84 @@ and `postman/collections/16 - Review and rework foundation`. Set
 `orchestratorInternalToken` in the local environment before running private
 requests.
 
+## 15.2 V2 Orchestrator assignment and review
+
+The V2 LLM selects one Alert and Cleaner pair from a bounded Node-validated context. Node calculates priority, eligibility, Station Point distance and fresh Recent Work distance. Python never reads Firestore.
+
+Supervisor routes:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/orchestrator/v2/config` | Read configuration and health timestamps |
+| `POST` | `/api/orchestrator/v2/status` | Pause or resume with `{ "status": "running" | "paused", "reason": null }` |
+| `GET` | `/api/orchestrator/v2/runs?limit=50` | List Site-scoped V2 Runs |
+| `GET` | `/api/orchestrator/v2/runs/{runId}` | Read Run, provider attempts and Node tool actions |
+| `POST` | `/api/orchestrator/v2/assignment-cycle` | Run one real provider-backed cycle |
+
+Private routes require `X-Orchestrator-Token` and `X-Orchestrator-Worker-ID`:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/internal/orchestrator/v2/assignment-runs` | Create a leased assignment Run |
+| `GET` | `/internal/orchestrator/v2/runs/{runId}/assignment-context?siteId={siteId}` | Return up to 10 waiting Alerts, available Cleaners and eligible pairs |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/assign-cleaner` | Validate and commit the selected pair |
+| `POST` | `/internal/orchestrator/v2/review-runs` | Create a leased deterministic review Run |
+| `GET` | `/internal/orchestrator/v2/runs/{runId}/review-context?siteId={siteId}&workOrderId={workOrderId}` | Read ready Verification outcome |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/resolve-verified-work` | Apply only a passed outcome |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/request-rework` | Apply only a failed outcome |
+
+Assignment decision body:
+
+```json
+{
+  "siteId": "sunway-theme-park",
+  "alertId": "alert-id-from-context",
+  "cleanerId": "cleaner-id-from-context",
+  "rationaleSummary": "Short Supervisor-visible explanation."
+}
+```
+
+The pair must appear in the current context and still pass the Work Order transaction. A stale selection returns `409`; it never bypasses Cleaner availability or Alert state.
+
+The first assignment-context response is fixed to that Run and hashed. Re-reading it returns the same snapshot. Assignment and review commands are exactly replayable after completion when the body is unchanged; changed replay returns `409`. Only one assignment or review Run can be active for a Site.
+
+Camera Verification is automatic but deterministic. Fresh ordered samples move the Verification to `ready` and enqueue `review_work`. The worker resolves passed Work, returns failed Work to the same Cleaner, and leaves inconclusive Work for Supervisor review. Pausing the Orchestrator blocks review mutation as well as assignment.
+
 ## 16. Future frontend integration rule
+
+### V2 Phase 10 platform APIs
+
+| Method | Route | Access and response |
+| --- | --- | --- |
+| GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, recent Runs and safe events |
+| GET | `/api/operations/v2/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/notifications?limit=50` | V2 Cleaner's own inbox; `{ notifications }` |
+| GET | `/api/operations/v2/audit-events` | Root's own Site only; `{ events }` |
+| GET | `/api/superadmin/sites/:siteId/operations/:operationId` | Superadmin; `{ operation }` |
+| POST | `/api/superadmin/sites/:siteId/operations/:operationId/reconcile` | Superadmin; processes one cleanup page and returns `{ operation }` |
+
+Site-status mutation returns `site.operationId`. Deactivation immediately blocks Site access and schedules cleanup. Reactivation returns `409` until cleanup completes. It never reopens dismissed work. See [the Phase 10 brief](phase-10-completed-brief.md) for safe Postman tests and development Firestore deployment commands.
+
+Notifications are immutable; no read receipts or direct frontend writes are supported. Client Firestore queries must filter both `recipientUid` and `siteId` and sort by `createdAt desc`.
+
+### Development-only simulated Alerts
+
+`POST /api/test-support/v2/alerts` requires a Root Supervisor bearer token and is rejected in production-cloud mode. Site identity comes from the authenticated account.
+
+```json
+{
+  "cameraId": "existing-active-v2-camera-id",
+  "issueType": "floor_litter",
+  "condition": "litter",
+  "severity": "warning",
+  "confidence": 0.99,
+  "clientRequestId": "phase9-fake-alert-001"
+}
+```
+
+Returns `201 { alert, flag, idempotent }`. Same input replays the same Alert. Changed input with the same request identity or another active Alert for that Camera/issue returns `409`. The response has no evidence image. This creates real development workflow data and queues automatic assignment; it does not run inference or fabricate verification evidence. See [the testing guide](phase-9-simulated-alert-testing.md).
+
+### Integration boundary
 
 Until the React structure is stable, new modules are backend-first:
 

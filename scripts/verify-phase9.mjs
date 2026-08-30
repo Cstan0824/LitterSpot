@@ -30,6 +30,7 @@ async function run(label, command, arguments_, environment = {}) {
 
 await run("Backend unit and contract tests", npm, ["--workspace=backend", "run", "test"]);
 await run("Backend TypeScript build", npm, ["--workspace=backend", "run", "build"]);
+await run("Isolated assignment provider and pair-contract tests", npm, ["run", "test:assignment"]);
 await run("Frontend compatibility build", npm, ["--workspace=frontend", "run", "build"]);
 await run("Canonical Postman YAML and scripts", npm, ["run", "validate:postman"]);
 await run("FastAPI inference-only contract tests", python, [

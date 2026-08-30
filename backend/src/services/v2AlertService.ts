@@ -7,6 +7,8 @@ import { writeMedia } from "./localMediaStorage.js";
 import { qualifiesIssue, priorityScore, type V2IssueType } from "./v2AlertPolicy.js";
 import { getV2LiveIssueState } from "./v2LiveMonitoringService.js";
 import { canonicalHash } from "./v2Persistence.js";
+import { enqueueV2OrchestratorTriggerInTransaction } from "./v2OrchestratorTriggers.js";
+import { notifyV2SiteSupervisors } from "./v2NotificationService.js";
 
 const threshold = 0.5;
 const activeStatuses = ["waiting_for_cleaner", "assigned", "in_progress", "awaiting_review"];
@@ -35,6 +37,8 @@ export async function evaluateV2AlertsForCamera(siteId: string, cameraId: string
     const candidate = state.candidate; let evidenceMediaId: string | null = null; const priorConfidence = Number(existingAlert.data()?.evidence?.confidence ?? -1); const strongerCondition = best.condition === "overflow" && existingAlert.data()?.observedCondition !== "overflow"; if (candidate && (candidate.confidence > priorConfidence || strongerCondition)) evidenceMediaId = await persistEvidence({ siteId, cameraId, alertId, candidate });
     const severity = best.condition === "overflow" || issueType === "floor_spill" ? "critical" : "warning"; const created = !existingAlert.exists;
     await firestore.runTransaction(async (transaction) => {
+      const site = await transaction.get(firestore.collection("sites").doc(siteId));
+      if (site.data()?.status !== "active") throw new HttpError(409, "Site is inactive.");
       const [key, alert] = await Promise.all([transaction.get(keyRef), transaction.get(alertRef)]);
       if (key.exists && key.data()?.alertId !== alertId) throw new HttpError(409, "Active Alert changed.");
       if (!key.exists) transaction.create(keyRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, cameraId, issueType, alertId, createdAt: FieldValue.serverTimestamp() });
@@ -44,15 +48,49 @@ export async function evaluateV2AlertsForCamera(siteId: string, cameraId: string
       transaction.set(alertRef.collection("occurrences").doc(flagId), { schemaVersion: V2_SCHEMA_VERSION, siteId, alertId, flagId, capturedAt: Timestamp.fromMillis(current.capturedAtMs), confidence: best.confidence, observedCondition: best.condition, severityCandidate: severity, becameEvidence: Boolean(evidenceMediaId), createdAt: FieldValue.serverTimestamp() });
       const eventRef = alertRef.collection("events").doc(); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, alertId, type: created ? "created" : prior?.severity !== nextSeverity ? "severity_changed" : "occurrence", fromStatus: null, toStatus: created ? "waiting_for_cleaner" : null, fromSeverity: prior?.severity ?? null, toSeverity: nextSeverity, workOrderId: null, actor: { type: "system", serviceId: "alert-policy", displayNameSnapshot: "Alert policy" }, reasonCode: best.condition, note: null, requestId: current.sampleId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
       transaction.update(flagRef, { alertId });
+      if (created) enqueueV2OrchestratorTriggerInTransaction(transaction, { siteId, type: "assign_alert", aggregateType: "alert", aggregateId: alertId, triggerType: "alert_created", uniquenessKey: alertId });
     });
     outcomes.push({ issueType, flagId, alertId, created });
+    if (created && (await firestore.collection("orchestratorConfigs").doc(siteId).get()).data()?.status === "paused") {
+      await notifyV2SiteSupervisors({ siteId, type: "alert_waiting_orchestrator_paused", eventKey: alertId,
+        title: "Alert waiting for assignment", body: "The Orchestrator is paused. Assign a Cleaner manually or resume automation.",
+        entityType: "alert", entityId: alertId, cameraId, alertId, workOrderId: null, severity, isSimulation: current.isSimulation });
+    }
   }
   return outcomes;
 }
 
 export async function ageV2Alerts(siteId: string, now = new Date()) {
-  const snapshot = await firestore.collection("alerts").where("siteId", "==", siteId).limit(500).get(); let changed = 0;
-  for (const alert of snapshot.docs) { const data = alert.data(); if (!activeStatuses.includes(String(data.status))) continue; const createdAtMs = data.createdAt?.toMillis?.() ?? now.getTime(); const nextSeverity = data.severity === "warning" && now.getTime() - createdAtMs >= 15 * 60000 ? "critical" : data.severity; const score = priorityScore({ severity: nextSeverity, createdAtMs, nowMs: now.getTime() }); if (nextSeverity !== data.severity || score !== data.priorityScore) { await alert.ref.update({ severity: nextSeverity, highestSeverity: nextSeverity === "critical" ? "critical" : data.highestSeverity, priorityScore: score, nextEscalationAt: nextSeverity === "critical" ? null : data.nextEscalationAt, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); changed += 1; } }
+  const snapshot = await firestore.collection("alerts").where("siteId", "==", siteId).limit(500).get();
+  let changed = 0;
+  const config = await firestore.collection("orchestratorConfigs").doc(siteId).get();
+  for (const alert of snapshot.docs) {
+    const result = await firestore.runTransaction(async tx => {
+      const [current, site] = await Promise.all([tx.get(alert.ref), tx.get(firestore.collection("sites").doc(siteId))]);
+      const data = current.data();
+      if (!data || data.schemaVersion !== 2 || site.data()?.status !== "active" || !activeStatuses.includes(String(data.status))) return null;
+      const createdAtMs = data.createdAt?.toMillis?.() ?? now.getTime();
+      const severity = data.severity === "warning" && now.getTime() - createdAtMs >= 15 * 60000 ? "critical" : data.severity;
+      const score = priorityScore({ severity, createdAtMs, nowMs: now.getTime() });
+      if (severity === data.severity && score === data.priorityScore) return null;
+      tx.update(alert.ref, { severity, highestSeverity: severity === "critical" ? "critical" : data.highestSeverity, priorityScore: score,
+        nextEscalationAt: severity === "critical" ? null : data.nextEscalationAt, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+      if (severity !== data.severity) tx.create(alert.ref.collection("events").doc(), {
+        schemaVersion: 2, siteId, alertId: alert.id, type: "severity_changed", fromStatus: data.status, toStatus: data.status,
+        fromSeverity: data.severity, toSeverity: severity, actor: { type: "system", serviceId: "alert-aging" },
+        reasonCode: "alert_age", requestId: `aging:${now.toISOString()}`, occurredAt: FieldValue.serverTimestamp(),
+      });
+      return { escalated: severity !== data.severity, data };
+    });
+    if (!result) continue;
+    changed++;
+    if (result.escalated && config.data()?.status === "paused") await notifyV2SiteSupervisors({
+      siteId, type: "alert_escalated", eventKey: `${alert.id}:critical`, title: "Alert priority increased",
+      body: "An unresolved Alert is now critical. Automation is paused.", entityType: "alert", entityId: alert.id,
+      cameraId: result.data.cameraId, alertId: alert.id, workOrderId: result.data.activeWorkOrderId ?? null,
+      severity: "critical", isSimulation: Boolean(result.data.isSimulation),
+    });
+  }
   return changed;
 }
 

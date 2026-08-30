@@ -151,16 +151,15 @@ experience.
 
 When an alert is triggered, the AI Supervisor considers information such as:
 
-- issue type and severity;
-- site, zone, camera, time, and visual evidence;
-- available Cleaners and their permitted locations;
-- Cleaner availability and current workload;
-- current or last-known Cleaner location and how fresh it is;
-- distance to the affected zone;
-- previous assignment attempts or rejection reasons.
+- up to 10 waiting Alerts, including issue type, severity, age, target, and evidence;
+- every currently available Cleaner;
+- each Cleaner's Station Point and distance to each Alert;
+- a fresh recently resolved Work target, when available, as an uncertain returning-to-station clue;
+- active Work constraints and previous failed reservation attempts.
 
 It then decides:
 
+- which waiting Alert should be handled next;
 - which Cleaner to assign;
 - what instructions to provide;
 - whether and when to reassign;
@@ -538,8 +537,10 @@ The following scenario illustrates how the product's capabilities connect:
 1. Batu Caves is selected as the active site.
 2. Repeated litter is detected in the Main Entrance zone during a busy period.
 3. One medium- or high-priority floor-litter alert is created.
-4. The AI Supervisor considers three available Cleaners and assigns the closest
-   eligible Cleaner with a manageable workload.
+4. The AI Supervisor compares the Alert with the other waiting Alerts and the
+   available Cleaners. It selects this Alert and one Cleaner as a pair. The
+   decision may consider a fresh recently completed Work location while still
+   treating the Station Point as the Cleaner's default location.
 5. The Supervisor sees the decision, explanation, and assignment progress.
 6. The Cleaner receives the task on their phone, accepts it, reaches the zone,
    and starts work.

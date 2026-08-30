@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
 import { createV2AlertWorkOrder, recordV2CameraVerificationObservation } from "./services/v2WorkOrderService.js";
+import { runV2ReviewCycle } from "./services/v2OrchestratorService.js";
 
 const run = process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -43,6 +44,7 @@ run("V2 Work Order and Verification", () => {
     await firestore.collection("userAccounts").doc(secondCleanerUid).set({ schemaVersion: 2, uid: secondCleanerUid, role: "cleaner", siteId, profileId: secondCleanerId, authority: null, emailNormalized: secondCleanerEmail, displayName: "Second Cleaner", status: "active", revision: 1 });
     await firestore.collection("cleaners").doc(secondCleanerId).set({ schemaVersion: 2, cleanerId: secondCleanerId, authUid: secondCleanerUid, siteId, staffCode: "WORK-002", staffCodeNormalized: "WORK-002", fullName: "Second Cleaner", phone: "+60123456780", status: "active", availabilityOverride: "none", weeklySchedule: { mon: { startMinute: 0, endMinute: 0 }, tue: { startMinute: 0, endMinute: 0 }, wed: { startMinute: 0, endMinute: 0 }, thu: { startMinute: 0, endMinute: 0 }, fri: { startMinute: 0, endMinute: 0 }, sat: { startMinute: 0, endMinute: 0 }, sun: { startMinute: 0, endMinute: 0 } }, scheduleTimeZone: "Asia/Kuala_Lumpur", activeWorkOrderId: null, revision: 1 });
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Work Site", timeZone: "Asia/Kuala_Lumpur", status: "active", rootSupervisorUid: rootUid, activeMapRevisionId: mapId, revision: 1 });
+    await firestore.collection("orchestratorConfigs").doc(siteId).set({ schemaVersion: 2, siteId, status: "running", assignmentEnabled: true, reviewEnabled: true, provider: "test", model: "test", revision: 1 });
     const map = firestore.collection("siteMapRevisions").doc(mapId);
     await map.set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100 });
     await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 100, yMeters: 0 }, { xMeters: 100, yMeters: 100 }, { xMeters: 0, yMeters: 100 }] });
@@ -76,6 +78,7 @@ run("V2 Work Order and Verification", () => {
     const failed = await request(app).post(`/api/work-orders/${workOrderId}/verification`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "failed", expectedRevision: awaiting.body.workOrder.revision, idempotencyKey: `verify-failed-${suffix}` });
     expect(failed.status).toBe(200);
     expect(failed.body.workOrder.status).toBe("in_progress");
+    expect((await firestore.collection("notifications").where("workOrderId", "==", workOrderId).get()).docs.some(doc => doc.data().type === "work_rework" && doc.data().recipientUid === cleanerUid)).toBe(true);
     expect((await firestore.collection("cleaners").doc(cleanerId).get()).data()?.activeWorkOrderId).toBe(workOrderId);
 
     await request(app).post(`/api/cleaner/work-orders/${workOrderId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `submit-${suffix}-2` });
@@ -83,6 +86,7 @@ run("V2 Work Order and Verification", () => {
     const passed = await request(app).post(`/api/work-orders/${workOrderId}/verification`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "passed", expectedRevision: awaitingAgain.body.workOrder.revision, idempotencyKey: `verify-passed-${suffix}` });
     expect(passed.status).toBe(200);
     expect(passed.body.workOrder.status).toBe("resolved");
+    expect((await firestore.collection("notifications").where("workOrderId", "==", workOrderId).get()).docs.some(doc => doc.data().type === "work_resolved" && doc.data().recipientUid === cleanerUid)).toBe(true);
     expect((await firestore.collection("cleaners").doc(cleanerId).get()).data()?.activeWorkOrderId).toBeNull();
     expect((await firestore.collection("alerts").doc(alertId).get()).data()?.status).toBe("resolved");
   });
@@ -110,7 +114,9 @@ run("V2 Work Order and Verification", () => {
     const automated = await createV2AlertWorkOrder({ siteId, alertId: automatedAlert, assignedCleanerId: cleanerId, idempotencyKey: `auto-${suffix}` }, { uid: "orchestrator-test", role: "supervisor", authority: null, displayName: "Orchestrator", type: "orchestrator" }, `auto-${suffix}`);
     await request(app).post(`/api/cleaner/work-orders/${automated.id}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `auto-start-${suffix}` });
     await request(app).post(`/api/cleaner/work-orders/${automated.id}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `auto-submit-${suffix}` });
-    for (let index = 1; index <= 2; index += 1) await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `clear-${suffix}-${index}`, capturedAtMs: Date.now() + index, peopleCount: 0, issues: [], binStates: [], modelVersions: {}, isSimulation: false });
+    for (let index = 1; index <= 2; index += 1) await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `clear-${suffix}-${index}`, capturedAtMs: Date.now() + index, peopleCount: 0, people: [], bins: [], issues: [], binStates: [], modelVersions: {}, isSimulation: false });
+    expect((await firestore.collection("workOrders").doc(automated.id).get()).data()?.status).toBe("awaiting_review");
+    await runV2ReviewCycle(siteId, automated.id);
     expect((await firestore.collection("workOrders").doc(automated.id).get()).data()?.status).toBe("resolved");
 
     const binAlert = `bin-alert-${suffix}`;
@@ -118,7 +124,7 @@ run("V2 Work Order and Verification", () => {
     const binWork = await createV2AlertWorkOrder({ siteId, alertId: binAlert, assignedCleanerId: cleanerId, idempotencyKey: `bin-auto-${suffix}` }, { uid: "orchestrator-test", role: "supervisor", authority: null, displayName: "Orchestrator", type: "orchestrator" }, `bin-auto-${suffix}`);
     await request(app).post(`/api/cleaner/work-orders/${binWork.id}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `bin-start-${suffix}` });
     await request(app).post(`/api/cleaner/work-orders/${binWork.id}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `bin-submit-${suffix}` });
-    await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `unknown-${suffix}`, capturedAtMs: Date.now(), peopleCount: 0, issues: [], binStates: [{ binId: "bin-1", state: "unknown" }], modelVersions: {}, isSimulation: false });
+    await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `unknown-${suffix}`, capturedAtMs: Date.now(), peopleCount: 0, people: [], bins: [{ binId: "bin-1", state: "unknown", confidence: 0, bbox: { x1: 0, y1: 0, x2: 1, y2: 1 } }], issues: [], binStates: [{ binId: "bin-1", state: "unknown" }], modelVersions: {}, isSimulation: false });
     const inconclusive = await request(app).get(`/api/work-orders/${binWork.id}`).set("Authorization", `Bearer ${rootToken}`);
     expect(inconclusive.body.workOrder).toMatchObject({ status: "awaiting_review", latestVerificationOutcome: "inconclusive" });
     const override = await request(app).post(`/api/work-orders/${binWork.id}/verification/override`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "passed", reason: "Supervisor inspected the Camera manually", expectedRevision: inconclusive.body.workOrder.revision, idempotencyKey: `override-${suffix}` });

@@ -121,7 +121,9 @@ Superadmin access to selected-Site operational pages is read and structural in i
 - One minute bucket per Site/UTC minute.
 - One daily summary per Site/local date.
 - Event-to-daily-summary application is idempotent and versioned.
-- Orchestrator only sees backend-validated available Cleaners and calculated distances.
+- Orchestrator only sees backend-validated waiting Alerts, available Cleaners, calculated Station Point distances and fresh Recent Work Location distances.
+- The model selects an Alert and Cleaner pair. Node rejects either ID when it is absent from the supplied context or no longer eligible.
+- Recent Work Location is ignored when stale or tied to a different Active Map Revision. It never represents live tracking.
 - Each Cleaner is reserved at most once within one assignment run.
 - Technical provider retries do not count as Cleaner attempts.
 - Paused/inactive/manual state rejects Orchestrator tool mutations even if a worker has stale context.

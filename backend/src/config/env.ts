@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url";
 
 const defaultMediaStorageRoot = fileURLToPath(new URL("../../../data/media-store/", import.meta.url));
 const defaultVideoUploadTempRoot = fileURLToPath(new URL("../../../data/media-store/.incoming/", import.meta.url));
+const defaultOrchestratorDebugRoot = fileURLToPath(new URL("../../../data/orchestrator-debug/", import.meta.url));
+const defaultOrchestratorPythonPath = fileURLToPath(new URL(
+  process.platform === "win32" ? "../../../.venv/Scripts/python.exe" : "../../../.venv/bin/python",
+  import.meta.url,
+));
 
 function numberSetting(name: string, fallback: number, options: { integer?: boolean; minimum: number; maximum: number }) {
   const raw = process.env[name];
@@ -21,6 +26,14 @@ function appEnvironmentSetting(): "test" | "local-emulator" | "development-cloud
   if (!value && process.env.NODE_ENV === "test") return "test" as const;
   if (value === "local-emulator" || value === "development-cloud" || value === "production-cloud") return value;
   throw new Error("APP_ENV must be local-emulator, development-cloud, or production-cloud.");
+}
+
+function booleanSetting(name: string, fallback: boolean) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be true or false.`);
 }
 
 export const env = {
@@ -48,4 +61,8 @@ export const env = {
   processingMutationRateLimitPerMinute: numberSetting("PROCESSING_MUTATION_RATE_LIMIT_PER_MINUTE", 60, { integer: true, minimum: 1, maximum: 100_000 }),
   orchestratorInternalToken: process.env.ORCHESTRATOR_INTERNAL_TOKEN,
   orchestratorLeaseSeconds: numberSetting("ORCHESTRATOR_LEASE_SECONDS", 300, { integer: true, minimum: 30, maximum: 900 }),
+  orchestratorPythonPath: process.env.ORCHESTRATOR_PYTHON_PATH ?? defaultOrchestratorPythonPath,
+  orchestratorDebugOutput: booleanSetting("ORCHESTRATOR_DEBUG_OUTPUT", false),
+  orchestratorDebugRoot: process.env.ORCHESTRATOR_DEBUG_ROOT ?? defaultOrchestratorDebugRoot,
+  orchestratorWorkerEnabled: booleanSetting("ORCHESTRATOR_WORKER_ENABLED", true),
 };

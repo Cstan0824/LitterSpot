@@ -1,6 +1,8 @@
 # LitterSpot current clarified requirements
 
 > Decisions after 2026-08-30 continue in [`current-clarified-requirements-continuation.md`](current-clarified-requirements-continuation.md) to keep the active discussion document compact.
+>
+> **Phase 9 scope notice:** Section 7 of the continuation supersedes this document's earlier single-Alert assignment rules. The LLM now selects one Alert and one Cleaner together from a bounded Node-validated context. A fresh resolved Work target may temporarily supplement the Cleaner Station Point while the Cleaner returns.
 
 ## 1. Document purpose and authority
 

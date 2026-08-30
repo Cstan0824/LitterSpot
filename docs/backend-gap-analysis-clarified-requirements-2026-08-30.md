@@ -1,5 +1,7 @@
 # Backend gap analysis against clarified requirements
 
+> **Post-audit Phase 9 revision:** The implementation findings in this dated report remain unchanged, but its proposed single-Alert Orchestrator contract has been superseded. The LLM now selects an Alert and Cleaner pair from up to 10 waiting Alerts and all backend-validated available Cleaners. See [`current-clarified-requirements-continuation.md`](current-clarified-requirements-continuation.md) and [`adr/0003-orchestrator-selects-assignment-pair.md`](adr/0003-orchestrator-selects-assignment-pair.md).
+
 ## 1. Purpose and scope
 
 This report compares the current LitterSpot repository and live Firestore shape with:

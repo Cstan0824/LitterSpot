@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Phase 8 List Verifications
+url: "{{baseUrl}}/api/work-orders/{{v2WorkOrderId}}/verifications"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Coordinate Verification is ready', () => { const items = pm.response.json().verifications; pm.response.to.have.status(200); pm.expect(items.length).to.be.above(0); pm.expect(items[0].kind).to.eql('coordinate_supervisor'); pm.environment.set('v2VerificationId', items[0].id); });
+    language: text/javascript
+order: 10000

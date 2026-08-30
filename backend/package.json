@@ -21,6 +21,7 @@
     "v2:validate-schema": "tsx src/scripts/v2/validateSchema.ts",
     "v2:reset-application-data": "tsx src/scripts/v2/resetApplicationData.ts",
     "v2:bootstrap-development": "tsx src/scripts/v2/bootstrapDevelopmentSite.ts",
+    "v2:smoke-orchestrator-provider": "tsx src/scripts/v2/smokeOrchestratorProvider.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.15.3",
     "@types/supertest": "^7.2.1",
+    "firebase": "^12.17.1",
     "supertest": "^7.2.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",

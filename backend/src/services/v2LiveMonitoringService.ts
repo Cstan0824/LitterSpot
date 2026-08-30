@@ -10,7 +10,22 @@ import { inferFrame } from "./frameInferenceClient.js";
 import { shouldAcceptSample, type MonitoringLease } from "./v2MonitoringLease.js";
 
 export type LiveIssue = { issueType: "floor_litter" | "floor_spill" | "bin_service"; condition: "litter" | "spill" | "full" | "overflow"; confidence: number; entityId: string; geometry: unknown };
-export type V2LiveObservation = { sampleId: string; capturedAtMs: number; peopleCount: number; issues: LiveIssue[]; binStates: Array<{ binId: string; state: "normal" | "full" | "overflow" | "review" | "unknown" }>; modelVersions: Record<string, string>; isSimulation: boolean };
+export type V2LiveObservation = {
+  sampleId: string;
+  capturedAtMs: number;
+  peopleCount: number;
+  people: Array<{ confidence: number; bbox: { x1: number; y1: number; x2: number; y2: number } }>;
+  bins: Array<{
+    binId: string;
+    state: "normal" | "full" | "overflow" | "review" | "unknown";
+    confidence: number;
+    bbox: { x1: number; y1: number; x2: number; y2: number };
+  }>;
+  issues: LiveIssue[];
+  binStates: Array<{ binId: string; state: "normal" | "full" | "overflow" | "review" | "unknown" }>;
+  modelVersions: Record<string, string>;
+  isSimulation: boolean;
+};
 export type V2EvidenceCandidate = { confidence: number; frame: Buffer; mimeType: string; observation: V2LiveObservation };
 type MinuteAccumulator = { siteId: string; minuteStart: string; timeZone: string; mapRevisionId: string; cameraId: string; zoneId: string; sampleAttemptCount: number; successfulSampleCount: number; failedSampleCount: number; peopleSum: number; peopleMax: number; litter: number; spill: number; full: number; overflow: number; simulation: number };
 
@@ -74,7 +89,22 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
   const accumulator = minute.get(minuteKey) ?? { siteId: input.siteId, minuteStart, timeZone: String(episode.data()?.timeZoneSnapshot ?? "Asia/Kuala_Lumpur"), mapRevisionId: String(episode.data()?.mapRevisionId ?? ""), cameraId: input.cameraId, zoneId: String(episode.data()?.zoneId), sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, litter: 0, spill: 0, full: 0, overflow: 0, simulation: 0 }; accumulator.sampleAttemptCount += 1; minute.set(minuteKey, accumulator);
   try {
     const result = await serializeInference(input.cameraId, () => inference({ contents: input.frame.buffer, fileName: input.frame.originalname || `sample-${input.sequence}.${detected.extension}`, mimeType: detected.mimeType, floorConfidence: 0.25, binLocalizerConfidence: 0.8, focusRegion: registration.data()?.walkableFloorPolygon ?? [], registration: { ...registration.data(), status: "ready", alignmentStatus: "valid" }, reference, binReviewEnabled: true }));
-    const observation: V2LiveObservation = { sampleId: `${input.episodeId}:${input.sequence}`, capturedAtMs: input.capturedAt.getTime(), peopleCount: result.peopleCount, issues: issues(result), binStates: result.bins.map((bin) => ({ binId: bin.binId ?? `bin-${bin.binIndex}`, state: bin.state })), modelVersions: result.modelVersions, isSimulation: Boolean(camera.data()?.isSimulation) };
+    const observation: V2LiveObservation = {
+      sampleId: `${input.episodeId}:${input.sequence}`,
+      capturedAtMs: input.capturedAt.getTime(),
+      peopleCount: result.peopleCount,
+      people: result.people.map((person) => ({ confidence: person.confidence, bbox: person.bbox })),
+      bins: result.bins.map((bin) => ({
+        binId: bin.binId ?? `bin-${bin.binIndex}`,
+        state: bin.state,
+        confidence: bin.stateConfidence,
+        bbox: bin.bbox,
+      })),
+      issues: issues(result),
+      binStates: result.bins.map((bin) => ({ binId: bin.binId ?? `bin-${bin.binIndex}`, state: bin.state })),
+      modelVersions: result.modelVersions,
+      isSimulation: Boolean(camera.data()?.isSimulation),
+    };
     for (const issueType of ["floor_litter", "floor_spill", "bin_service"] as const) { const key = `${input.siteId}:${input.cameraId}:${issueType}`; const values = temporal.get(key) ?? []; values.push(observation); temporal.set(key, values.slice(-5)); const matching = observation.issues.filter((issue) => issue.issueType === issueType); const best = matching.sort((a, b) => b.confidence - a.confidence)[0]; if (best) { const current = evidence.get(key); if (!current || best.confidence >= current.confidence) evidence.set(key, { confidence: best.confidence, frame: Buffer.from(input.frame.buffer), mimeType: detected.mimeType, observation }); } }
     accumulator.successfulSampleCount += 1; accumulator.peopleSum += result.peopleCount; accumulator.peopleMax = Math.max(accumulator.peopleMax, result.peopleCount); accumulator.litter += observation.issues.filter((issue) => issue.condition === "litter").length; accumulator.spill += observation.issues.filter((issue) => issue.condition === "spill").length; accumulator.full += observation.issues.filter((issue) => issue.condition === "full").length; accumulator.overflow += observation.issues.filter((issue) => issue.condition === "overflow").length; accumulator.simulation += observation.isSimulation ? 1 : 0;
     await firestore.collection("cameraRuntimeStates").doc(input.cameraId).set({ connectionStatus: "online", monitoringSessionId: input.sessionId, monitoringEpisodeId: input.episodeId, lastFrameCapturedAt: Timestamp.fromDate(input.capturedAt), lastSampleAcceptedAt: FieldValue.serverTimestamp(), lastInferenceSucceededAt: FieldValue.serverTimestamp(), lastPeopleCount: result.peopleCount, lastIssueSummary: { litter: accumulator.litter, spill: accumulator.spill, full: accumulator.full, overflow: accumulator.overflow }, sourceErrorCode: null, sourceErrorMessage: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });

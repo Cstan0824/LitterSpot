@@ -181,3 +181,76 @@ The sandbox:
 - Automated tests remain emulator-backed.
 - Backend startup fails closed on project/credential mismatch.
 - Development media and personal Web configuration stay in ignored local paths.
+
+## 7. Phase 9 assignment revision
+
+### 7.1 Alert–Cleaner pair selection
+
+**Confirmed** The Orchestrator LLM chooses both the waiting Alert and the Cleaner as one Assignment Pair.
+
+Node supplies a bounded backlog containing at most the top 10 waiting Alerts and every backend-validated available Cleaner. Node calculates facts and enforces constraints, but it does not preselect one Alert before asking the LLM.
+
+The LLM returns:
+
+```json
+{
+  "alertId": "alert-id",
+  "cleanerId": "cleaner-id",
+  "rationaleSummary": "Short structured explanation"
+}
+```
+
+Node validates that both IDs were present in the trusted context and atomically reserves the Cleaner and creates Work for that Alert. A reservation conflict excludes only the failed pair/Cleaner as appropriate, refreshes the context and allows another model decision.
+
+Node continues to calculate:
+
+- Alert status, priority, severity and age;
+- Cleaner account, schedule and Availability Override state;
+- one-active-Work constraint;
+- Site and map ownership;
+- all map distances;
+- recent-location freshness;
+- Firestore transaction validity.
+
+The LLM reasons across the valid combinations. It does not calculate geometry or override backend eligibility.
+
+### 7.2 Returning-to-station location assumption
+
+**Confirmed direction** An available Cleaner normally returns toward their Station Point after resolving Work. The Station Point remains the canonical home base and long-term assignment origin.
+
+**Confirmed direction** The target of the most recently **resolved** Work Order may temporarily supplement the Station Point as a Recent Work Location. This is an approximate operational hint, not GPS or a claim about the Cleaner's exact current position.
+
+Do not use dismissed Work as a location signal because dismissal does not prove that the Cleaner reached or completed the target.
+
+The assignment context may include:
+
+- current Station Point;
+- distance from Station Point to each waiting Alert;
+- most recent resolved Work target;
+- resolution timestamp and minutes since resolution;
+- distance from the Recent Work Location to each waiting Alert;
+- an explicit `returning_to_station` uncertainty label.
+
+Do not interpolate an invented position between the Work target and Station Point. LitterSpot has no route, walking-speed or live-location evidence to support that precision.
+
+Ignore the Recent Work Location when its `mapRevisionId` differs from the Active Map Revision.
+
+**Provisional freshness defaults awaiting calibration**:
+
+```text
+0–5 minutes after resolution: strong recent-location signal
+>5–15 minutes: weak recent-location signal; consider both locations
+>15 minutes: ignore recent location and use Station Point
+```
+
+The 15-minute window remains configurable and can later become Site-specific.
+
+### 2026-08-30 — Assignment Pair and recent Work context
+
+- Replaced Node-preselected single-Alert assignment with LLM-selected Alert–Cleaner pairs from the top 10 waiting Alerts.
+- Node still validates all facts, eligibility, distances, versions and transactions.
+- Station Point remains the canonical home base.
+- Most recent resolved Work may act as a short-lived approximate location signal while the Cleaner returns to Station.
+- Dismissed Work never updates the Recent Work Location.
+- Recent Work is ignored across incompatible Site Map revisions.
+- Exact walking-position interpolation remains out of scope.

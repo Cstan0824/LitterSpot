@@ -21,6 +21,7 @@ One mutable Site configuration controls automation.
 | `technicalRetryLimit` | integer | yes | Additional LLM retries, initially 3. |
 | `technicalRetryDelaysMs` | integer array | yes | Initially `[1000,2000,4000]`. |
 | `requestTimeoutMs` | integer | yes | Provider request timeout. |
+| `activeRunId` | string or null | yes | Site-wide assignment/review mutex. Cleared by atomic completion or expired-lease recovery. |
 | `lastRunAt` | timestamp or null | yes | Latest started run for System page. |
 | `lastSuccessfulRunAt` | timestamp or null | yes | Health summary. |
 | `lastFailureAt` | timestamp or null | yes | Health summary. |
@@ -41,9 +42,11 @@ The outbox makes assignment/review triggers durable and retryable.
 | `eventId` | string | yes | Deterministic document ID. |
 | `siteId` | string | yes | Tenant. |
 | `type` | enum | yes | `assign_alert`, `retry_waiting_alerts`, or `review_work`. |
-| `aggregateType` | enum | yes | `alert` or `work_order`. |
+| `aggregateType` | enum | yes | `site`, `alert`, or `work_order`. Site is used for backlog scans before the LLM selects an Alert. |
 | `aggregateId` | string | yes | Target ID. |
 | `triggerType` | string | yes | Alert created, Cleaner available, scheduled scan, review ready, and similar safe code. |
+| `verificationId` | string or null | yes | Exact ready Verification for a review trigger. |
+| `isRunRecord` | boolean | yes | Internal Run event marker. Workers process only external trigger events. |
 | `status` | enum | yes | `pending`, `claimed`, `completed`, `failed`, or `cancelled`. |
 | `availableAt` | timestamp | yes | Earliest worker claim time. |
 | `claimTokenHash` | string or null | yes | Lease token hash. |
@@ -69,11 +72,18 @@ Each assignment or review episode receives a new Run. A prior run does not block
 | `type` | enum | yes | `assignment` or `review`. |
 | `status` | enum | yes | `queued`, `running`, `succeeded`, `failed`, `exhausted`, or `cancelled`. |
 | `triggerEventId` | string | yes | Outbox event. |
-| `alertId` | string or null | yes | Assignment/review Alert. |
+| `alertId` | string or null | yes | Alert selected by the completed assignment decision, or the review Alert. Null before assignment selection. |
 | `workOrderId` | string or null | yes | Review/result Work. |
 | `managementModeSnapshot` | enum | yes | Cancels tool actions when Alert/Work changed to manual. |
+| `requestedWorkerId` | string | yes | Worker identity fixed when the Run starts. |
+| `configRevision` | integer | yes | Orchestrator configuration revision required at commit. |
+| `verificationId` | string or null | yes | Exact Verification owned by a review Run. |
 | `inputSnapshot` | map | yes | Bounded structured issue, target, availability and Verification context. No private notes. |
+| `contextHash` | string or null | yes | Canonical hash of the saved assignment snapshot used as its pair allowlist. |
 | `candidateCount` | integer | yes | Available Cleaner count at first assignment context. |
+| `inputAlertCount` | integer | yes | Waiting Alerts offered to the assignment decision, maximum 10. |
+| `candidatePairCount` | integer | yes | Valid Alert–Cleaner combinations supplied after backend calculation. |
+| `selectedAlertId` | string or null | yes | Alert ID returned by the model and accepted by Node. |
 | `selectedCleanerId` | string or null | yes | Final accepted selection. |
 | `decisionSummary` | string or null | yes | Concise Supervisor-visible explanation. Not hidden chain of thought. |
 | `decisionFactors` | map | yes | Structured distances, availability facts and outcome facts. |
@@ -92,6 +102,8 @@ Each assignment or review episode receives a new Run. A prior run does not block
 | `completedAt` | timestamp or null | yes | Terminal time. |
 | `createdAt` | timestamp | yes | Run creation. |
 | `updatedAt` | timestamp | yes | Latest state. |
+| `commandFingerprint` | string or null | yes | Exact committed command identity for replay conflict detection. |
+| `commandResult` | map or null | yes | Bounded response returned to an exact command replay. |
 
 ## `orchestratorRuns/{runId}/attempts/{attemptId}`
 
@@ -104,6 +116,7 @@ Assignment attempts record technical retries and Cleaner reservation attempts wi
 | `runId` | string | Parent. |
 | `sequence` | integer | Total attempt order. |
 | `kind` | enum | `provider_request` or `cleaner_reservation`. |
+| `selectedAlertId` | string or null | Alert returned or attempted for this step. |
 | `selectedCleanerId` | string or null | Returned/attempted Cleaner. |
 | `candidateIds` | string array | Bounded IDs offered in that provider call. |
 | `excludedCleanerIds` | string array | Candidates already rejected in the run. |

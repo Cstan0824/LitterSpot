@@ -7,6 +7,7 @@ import { deriveCleanerAvailability, type WeeklySchedule } from "./v2CleanerAvail
 import { beginIdentityOperation, compensateIdentityOperation, createIdentityAuthUser, identityOperationId, normalizeIdentityEmail } from "./v2IdentityService.js";
 import { canonicalHash } from "./v2Persistence.js";
 import { publishV2CleanerStation } from "./v2MapService.js";
+import { enqueueV2ImmediateAssignmentTrigger } from "./v2OrchestratorTriggers.js";
 
 const timestamp = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
 const normalizeStaffCode = (value: string) => value.trim().toUpperCase();
@@ -62,7 +63,7 @@ export async function createV2Cleaner(input: {
       if (operation.data()?.status !== "auth_created" || reservation.data()?.operationId !== operationId) throw new HttpError(409, "Cleaner identity operation state changed.");
       if (existingCode.exists) throw new HttpError(409, "Staff code is already registered for this Site.");
       transaction.create(staffKey, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, staffCodeNormalized: code, cleanerId: cleanerRef.id, createdAt: FieldValue.serverTimestamp() });
-      transaction.create(cleanerRef, { schemaVersion: V2_SCHEMA_VERSION, cleanerId: cleanerRef.id, authUid: uid, siteId: input.siteId, staffCode: code, staffCodeNormalized: code, fullName: input.fullName.trim(), phone: input.phone.trim(), profileMediaId: input.profileMediaId ?? null, notes: input.notes?.trim() || null, status: "active", availabilityOverride: "none", availabilityOverrideAt: null, availabilityOverrideByUid: null, weeklySchedule: input.weeklySchedule, scheduleTimeZone: String(site.data()?.timeZone), activeWorkOrderId: null, activeWorkAssignedAt: null, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, deactivatedAt: null, deactivatedByUid: null, revision: 1 });
+      transaction.create(cleanerRef, { schemaVersion: V2_SCHEMA_VERSION, cleanerId: cleanerRef.id, authUid: uid, siteId: input.siteId, staffCode: code, staffCodeNormalized: code, fullName: input.fullName.trim(), phone: input.phone.trim(), profileMediaId: input.profileMediaId ?? null, notes: input.notes?.trim() || null, status: "active", availabilityOverride: "none", availabilityOverrideAt: null, availabilityOverrideByUid: null, weeklySchedule: input.weeklySchedule, scheduleTimeZone: String(site.data()?.timeZone), activeWorkOrderId: null, activeWorkAssignedAt: null, lastResolvedWorkOrderId: null, lastResolvedWorkTarget: null, lastResolvedWorkAt: null, lastResolvedMapRevisionId: null, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, deactivatedAt: null, deactivatedByUid: null, revision: 1 });
       transaction.create(firestore.collection("userAccounts").doc(uid!), { schemaVersion: V2_SCHEMA_VERSION, uid, role: "cleaner", siteId: input.siteId, profileId: cleanerRef.id, authority: null, emailNormalized: normalizeIdentityEmail(input.email), displayName: input.fullName.trim(), status: "active", lastLoginAt: null, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: 1 });
       transaction.update(started.reservation, { uid, profileId: cleanerRef.id, state: "active", updatedAt: FieldValue.serverTimestamp() });
       transaction.update(started.operation, { authUid: uid, profileId: cleanerRef.id, status: "firestore_committed", lastCompletedStep: "profile_created", updatedAt: FieldValue.serverTimestamp() });
@@ -96,5 +97,8 @@ export async function updateV2Cleaner(input: { siteId: string; cleanerId: string
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "cleaner_updated", resourceType: "Cleaner", resourceId: input.cleanerId, outcome: "succeeded", before: { status: cleaner.data()?.status, availabilityOverride: cleaner.data()?.availabilityOverride }, after: { status: nextStatus, availabilityOverride: input.availabilityOverride ?? cleaner.data()?.availabilityOverride }, requestId }));
   });
   await firebaseAuth.updateUser(authUid, { disabled: nextStatus === "inactive", ...(input.fullName !== undefined ? { displayName: input.fullName.trim() } : {}) });
+  if (nextStatus === "active" && (input.weeklySchedule !== undefined || input.availabilityOverride === "none" || input.status === "active")) {
+    await enqueueV2ImmediateAssignmentTrigger(input.siteId, "cleaner_availability_changed", `cleaner:${input.cleanerId}:${Date.now()}`);
+  }
   return presentV2Cleaner(input.cleanerId, input.siteId);
 }

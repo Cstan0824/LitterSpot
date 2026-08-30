@@ -117,6 +117,7 @@ await firestore.runTransaction(async (transaction) => {
     schemaVersion: V2_SCHEMA_VERSION, siteId: siteRef.id, status: "running", pausedAt: null, pausedByUid: null,
     pauseReason: null, assignmentEnabled: true, reviewEnabled: true, provider: "ollama", model: "qwen3.5:4b",
     assignmentPolicyVersion: "assignment-v2", reviewPolicyVersion: "review-v2", technicalRetryLimit: 3,
+    activeRunId: null,
     technicalRetryDelaysMs: [1000, 2000, 4000], requestTimeoutMs: 60_000, lastRunAt: null,
     lastSuccessfulRunAt: null, lastFailureAt: null, lastFailureCode: null, updatedAt: now, updatedByUid: superadmin.uid, revision: 1,
   }, { merge: true });

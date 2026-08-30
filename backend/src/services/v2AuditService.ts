@@ -72,11 +72,31 @@ function timestamp(value: unknown) {
 }
 
 export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: string; limit?: number } = {}) {
-  let query = firestore.collection("auditEvents").orderBy("occurredAt", "desc").limit(Math.min(filters.limit ?? 100, 200));
+  const limit = Math.min(filters.limit ?? 100, 200);
+  let query = firestore.collection("auditEvents").orderBy("occurredAt", "desc").limit(limit);
   if (filters.siteId) query = query.where("siteId", "==", filters.siteId);
   if (filters.actorUid) query = query.where("actorUid", "==", filters.actorUid);
-  const snapshot = await query.get();
-  return snapshot.docs.map((doc) => {
+  let documents: FirebaseFirestore.QueryDocumentSnapshot[];
+  try {
+    documents = (await query.get()).docs;
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error ? Number(error.code) : null;
+    if (code !== 9) throw error;
+    const fallback = await firestore.collection("auditEvents").limit(501).get();
+    if (fallback.size > 500) {
+      throw new Error("Audit Event indexes are still building and the bounded fallback limit was exceeded.");
+    }
+    documents = fallback.docs
+      .filter((doc) => !filters.siteId || doc.data().siteId === filters.siteId)
+      .filter((doc) => !filters.actorUid || doc.data().actorUid === filters.actorUid)
+      .sort((left, right) => {
+        const leftTime = left.data().occurredAt instanceof Timestamp ? left.data().occurredAt.toMillis() : 0;
+        const rightTime = right.data().occurredAt instanceof Timestamp ? right.data().occurredAt.toMillis() : 0;
+        return rightTime - leftTime || right.id.localeCompare(left.id);
+      })
+      .slice(0, limit);
+  }
+  return documents.map((doc) => {
     const data = doc.data();
     return { ...data, id: doc.id, occurredAt: timestamp(data.occurredAt) };
   });

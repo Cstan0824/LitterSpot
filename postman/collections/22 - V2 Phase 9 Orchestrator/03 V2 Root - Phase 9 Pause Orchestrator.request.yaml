@@ -1,0 +1,19 @@
+$kind: http-request
+name: V2 Root - Phase 9 Pause Orchestrator
+url: "{{baseUrl}}/api/orchestrator/v2/status"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"status":"paused","reason":"Postman Phase 9 test"}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Orchestrator is paused', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().config.status).to.eql('paused'); });
+    language: text/javascript
+order: 3000

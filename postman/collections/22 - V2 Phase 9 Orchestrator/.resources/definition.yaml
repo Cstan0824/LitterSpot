@@ -1,0 +1,4 @@
+$kind: collection
+order: 23000
+name: 22 - V2 Phase 9 Orchestrator
+description: Run 01-04 for login and configuration. Use 05a-05b to create a development simulated Alert without vision inference, then 06-07 for real model assignment and Run details. Set ORCHESTRATOR_WORKER_ENABLED=false and restart Node for manual stepping. Run 10-12 to test private assignment tools without the model. Review requests 20-23 require real ready Verification evidence; the fake Alert helper does not simulate that evidence.

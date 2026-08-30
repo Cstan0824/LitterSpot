@@ -13,10 +13,11 @@ from urllib.request import Request, urlopen
 SELECTION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "cleanerId": {"type": "string"},
-        "rationaleSummary": {"type": "string", "maxLength": 300},
+        "alertId": {"type": "string", "minLength": 1, "description": "An Alert ID copied exactly from eligiblePairs."},
+        "cleanerId": {"type": "string", "minLength": 1, "description": "A Cleaner ID copied exactly from the same eligible pair."},
+        "rationaleSummary": {"type": "string", "minLength": 1, "maxLength": 300, "description": "One short sentence explaining the chosen pair using the supplied facts."},
     },
-    "required": ["cleanerId", "rationaleSummary"],
+    "required": ["alertId", "cleanerId", "rationaleSummary"],
     "additionalProperties": False,
 }
 
@@ -27,6 +28,7 @@ class ModelProviderError(RuntimeError):
 
 @dataclass(frozen=True)
 class ModelSelection:
+    alert_id: str
     cleaner_id: str
     rationale_summary: str
     provider: str
@@ -134,20 +136,21 @@ class ProviderChain:
             raise ValueError("At least one model provider is required.")
         self._providers = providers
 
-    def select(self, system_prompt: str, user_prompt: str, eligible_cleaner_ids: set[str]) -> ModelSelection:
+    def select(self, system_prompt: str, user_prompt: str, eligible_pairs: set[tuple[str, str]]) -> ModelSelection:
         errors: list[str] = []
         for provider in self._providers:
             try:
                 result = provider.generate(system_prompt, user_prompt)
                 if not isinstance(result, dict):
                     raise ModelProviderError("Model response was not a JSON object.")
+                alert_id = result.get("alertId")
                 cleaner_id = result.get("cleanerId")
                 rationale = result.get("rationaleSummary")
-                if not isinstance(cleaner_id, str) or cleaner_id not in eligible_cleaner_ids:
-                    raise ModelProviderError("Model selected a Cleaner outside the eligible candidate set.")
+                if not isinstance(alert_id, str) or not isinstance(cleaner_id, str) or (alert_id, cleaner_id) not in eligible_pairs:
+                    raise ModelProviderError("Model selected an Alert and Cleaner pair outside the eligible context.")
                 if not isinstance(rationale, str) or not rationale.strip():
                     raise ModelProviderError("Model did not provide a rationale summary.")
-                return ModelSelection(cleaner_id, rationale.strip()[:1000], provider.name, provider.model)
+                return ModelSelection(alert_id, cleaner_id, rationale.strip()[:300], provider.name, provider.model)
             except ModelProviderError as error:
                 errors.append(f"{provider.name}/{provider.model}: {error}")
         raise ModelProviderError("All assignment providers failed: " + " | ".join(errors))

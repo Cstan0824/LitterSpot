@@ -2,8 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { listV2AuditEvents } from "../services/v2AuditService.js";
 import { createV2Site, recoverV2Root, updateV2SiteStatus } from "../services/v2SuperadminService.js";
+import { getV2SiteOperation, reconcileV2SiteOperation } from "../services/v2SiteOperationService.js";
 
 export const superadminRoutes = Router();
+
+superadminRoutes.get("/sites/:siteId/operations/:operationId", async (req, res) => res.json({ operation: await getV2SiteOperation(req.params.siteId, req.params.operationId) }));
+superadminRoutes.post("/sites/:siteId/operations/:operationId/reconcile", async (req, res) => res.json({ operation: await reconcileV2SiteOperation(req.params.siteId, req.params.operationId) }));
 
 superadminRoutes.get("/sites", async (_req, res) => {
   const status = z.enum(["active", "inactive", "all"]).default("all").parse(_req.query.status);

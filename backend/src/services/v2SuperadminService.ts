@@ -5,6 +5,7 @@ import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { v2AuditEventData, writeV2AuditEvent, type AuditActor } from "./v2AuditService.js";
 import { beginIdentityOperation, compensateIdentityOperation, createIdentityAuthUser, identityOperationId, normalizeIdentityEmail } from "./v2IdentityService.js";
 import { firebaseAuth } from "../config/firebase.js";
+import { reconcileV2SiteOperation } from "./v2SiteOperationService.js";
 
 function iso(value: unknown) { return value instanceof Timestamp ? value.toDate().toISOString() : null; }
 
@@ -55,6 +56,7 @@ export async function createV2Site(input: {
         schemaVersion: V2_SCHEMA_VERSION, siteId: siteRef.id, status: "running", pausedAt: null, pausedByUid: null, pauseReason: null,
         assignmentEnabled: true, reviewEnabled: true, provider: "ollama", model: "qwen3.5:4b", assignmentPolicyVersion: "assignment-v2",
         reviewPolicyVersion: "review-v2", technicalRetryLimit: 3, technicalRetryDelaysMs: [1000, 2000, 4000], requestTimeoutMs: 60000,
+        activeRunId: null,
         lastRunAt: null, lastSuccessfulRunAt: null, lastFailureAt: null, lastFailureCode: null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: 1,
       });
       transaction.update(started.reservation, { uid: rootUid, profileId: rootUid, siteId: siteRef.id, state: "active", updatedAt: FieldValue.serverTimestamp() });
@@ -79,6 +81,10 @@ export async function updateV2SiteStatus(siteId: string, status: "active" | "ina
     if (!current.exists) throw new HttpError(404, "Site not found.");
     before = current.data()!;
     if (before.status === status) throw new HttpError(409, `Site is already ${status}.`);
+    if (status === "active" && before.deactivationOperationId) {
+      const priorOperation = await transaction.get(firestore.collection("siteOperations").doc(String(before.deactivationOperationId)));
+      if (priorOperation.data()?.status !== "completed") throw new HttpError(409, "Site deactivation cleanup must complete before reactivation.");
+    }
     transaction.create(operationRef, {
       schemaVersion: V2_SCHEMA_VERSION, operationId: operationRef.id, siteId, type: status === "inactive" ? "deactivate" : "reactivate",
       status: status === "inactive" ? "pending" : "completed", reason, requestedByUid: actor.uid, requestId,
@@ -89,7 +95,13 @@ export async function updateV2SiteStatus(siteId: string, status: "active" | "ina
     if (status === "inactive") transaction.set(firestore.collection("orchestratorConfigs").doc(siteId), { status: "paused", pausedAt: FieldValue.serverTimestamp(), pausedByUid: actor.uid, pauseReason: "site_deactivated", updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) }, { merge: true });
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, siteNameSnapshot: String(before.name ?? ""), action: status === "inactive" ? "site_deactivated" : "site_reactivated", resourceType: "Site", resourceId: siteId, outcome: "succeeded", reason, before: { status: before.status }, after: { status, operationId: operationRef.id }, requestId }));
   });
-  return { ...before, id: siteId, status, createdAt: iso(before.createdAt), updatedAt: new Date().toISOString() };
+  if (status === "inactive") {
+    for (let page = 0; page < 12; page += 1) {
+      try { if ((await reconcileV2SiteOperation(siteId, operationRef.id)).status === "completed") break; }
+      catch { break; } // Durable pending operation will resume on the maintenance tick.
+    }
+  }
+  return { ...before, id: siteId, status, operationId: operationRef.id, deactivationOperationId: status === "inactive" ? operationRef.id : null, createdAt: iso(before.createdAt), updatedAt: new Date().toISOString() };
 }
 
 export async function recoverV2Root(input: {

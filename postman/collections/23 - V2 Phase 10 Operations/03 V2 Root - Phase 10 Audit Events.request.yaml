@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Phase 10 Audit Events
+url: "{{baseUrl}}/api/operations/v2/audit-events"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Request succeeds', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.events).to.be.an('array'); });
+    language: text/javascript
+order: 3000

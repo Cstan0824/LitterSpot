@@ -22,6 +22,7 @@ import { getWorkOrder, listWorkOrders, transitionWorkOrder } from "../services/w
 import { submitCleanerForReview } from "../services/reviewService.js";
 import { HttpError } from "../shared/httpError.js";
 import { presentV2Cleaner } from "../services/v2CleanerService.js";
+import { listV2Notifications } from "../services/v2NotificationService.js";
 import { getV2WorkOrder, listV2WorkOrders, transitionV2WorkOrder, uploadV2CompletionEvidence } from "../services/v2WorkOrderService.js";
 
 export const cleanerSelfRoutes = Router();
@@ -98,6 +99,10 @@ cleanerSelfRoutes.post("/work-orders/:workOrderId/completion-evidence", v2Eviden
 });
 
 cleanerSelfRoutes.get("/notifications", async (req, res) => {
+  if (isV2Cleaner(req)) {
+    const limit = z.coerce.number().int().min(1).max(100).default(50).parse(req.query.limit);
+    return res.json({ notifications: await listV2Notifications(String(req.authUser.siteId), req.authUser.uid, limit) });
+  }
   const query = notificationListQuerySchema.parse(req.query);
   const page = await listCleanerNotifications(req.cleaner!.cleanerId, query);
   return res.json({ notifications: page.items, nextCursor: page.nextCursor });

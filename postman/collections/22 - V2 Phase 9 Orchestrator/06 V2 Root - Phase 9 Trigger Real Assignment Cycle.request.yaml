@@ -1,0 +1,21 @@
+$kind: http-request
+name: V2 Root - Phase 9 Trigger Real Assignment Cycle
+description: Calls the configured Ollama or Gemini model and may create a real Work Order. Use only in the development Site after creating a waiting Alert and at least one available Cleaner.
+url: "{{baseUrl}}/api/orchestrator/v2/assignment-cycle"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"triggerType":"postman_real_model_test"}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Assignment cycle completed safely', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().run.schemaVersion).to.eql(2); });
+      if (pm.response.code === 201) { const body = pm.response.json(); pm.environment.set('v2OrchestratorRunId', body.run.id); if (body.run.workOrderId) pm.environment.set('v2WorkOrderId', body.run.workOrderId); }
+    language: text/javascript
+order: 6000

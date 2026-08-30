@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Cleaner - Phase 8 List My Work
+url: "{{baseUrl}}/api/cleaner/work-orders?status=all"
+method: GET
+headers:
+  Authorization: "Bearer {{v2CleanerToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Assigned Work is visible to Cleaner', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().workOrders.some(item => item.id === pm.environment.get('v2WorkOrderId'))).to.be.true; });
+    language: text/javascript
+order: 5000

@@ -65,7 +65,10 @@ mediaRoutes.get("/:mediaId/content", async (req, res) => {
   res.type(media.mimeType);
   res.setHeader("Content-Length", String(media.byteSize));
   res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(media.originalFileName)}`);
-  return res.sendFile(media.filePath);
+  // MEDIA_STORAGE_ROOT may intentionally live under an ignored `.local`
+  // directory. The storage service has already resolved and validated the
+  // absolute path, so allow dot-directory segments when Express serves it.
+  return res.sendFile(media.filePath, { dotfiles: "allow" });
 });
 
 mediaRoutes.get("/:mediaId", async (req, res) => {
