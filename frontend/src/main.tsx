@@ -4,6 +4,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebas
 // TypeScript may complain about missing type declarations for CSS imports.
 // @ts-ignore
 import "./styles.css";
+import "./field-station.css";
 import { OperationsConsole } from "./features/operations/OperationsConsole";
 import { DetectionTestPage } from "./pages/DetectionTestPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -12,6 +13,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { firebaseAuth } from "./config/firebase";
 import { apiFetch, readApiError } from "./services/apiClient";
+import { FieldStationShell } from "./components/FieldStationShell";
 
 type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
 type Route = OperationsPage | "pipeline" | "playground" | "status" | "camera-registration";
@@ -57,10 +59,10 @@ function App() {
   if (!authReady) return <main className="ops-loading">Checking Supervisor session…</main>;
   if (profileError && firebaseAuth.currentUser) return <main className="ops-loading"><p>{profileError}</p><button className="outline-button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></main>;
   if (!supervisor) return <LoginPage onLogin={async (email, password) => { await signInWithEmailAndPassword(firebaseAuth, email, password); }} />;
-  if (route === "playground") return <DetectionTestPage />;
-  if (route === "pipeline") return <PipelinePage />;
-  if (route === "camera-registration") return <CameraRegistrationPage />;
-  if (route === "status") return <DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} />;
+  if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DetectionTestPage /></FieldStationShell>;
+  if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><PipelinePage /></FieldStationShell>;
+  if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><CameraRegistrationPage /></FieldStationShell>;
+  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
   return <OperationsConsole supervisor={supervisor} page={route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void signOut(firebaseAuth); }} />;
 }
 
