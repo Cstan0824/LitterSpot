@@ -21,16 +21,29 @@ const formatTime = (value: string) => new Date(value).toLocaleString([], { day: 
 const statusLabel = (status: CleanerWorkStatus) => status.replaceAll("_", " ");
 const weekDates = ["25", "26", "27", "28", "29", "30", "31"];
 const shortDay = (day: string) => day.slice(0, 3);
-const calendarTimes = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+const monthNumbers: Record<string, number> = { May: 4, June: 5, July: 6 };
+const buildMonthWeeks = (month: string, year: number) => {
+  const daysInMonth = new Date(year, monthNumbers[month] + 1, 0).getDate();
+  const firstDay = (new Date(year, monthNumbers[month], 1).getDay() + 6) % 7;
+  const weeks: Array<Array<{ dayIndex: number; date: number }>> = [];
+  for (let date = 1; date <= daysInMonth; date += 1) {
+    const position = firstDay + date - 1;
+    const week = Math.floor(position / 7);
+    weeks[week] ??= [];
+    weeks[week].push({ dayIndex: position % 7, date });
+  }
+  return weeks;
+};
 const hoursTotal = (hours: string) => {
   if (hours === "Off") return 0;
   const [start, end] = hours.split(" – ").map((value) => Number(value.slice(0, 2)));
   return end - start;
 };
-const calendarRange = (hours: string) => {
+const calendarRange = (hours: string, timelineStart: number) => {
   const [start, end] = hours.split(" – ").map((value) => Number(value.slice(0, 2)));
-  return { start: start - 8, end: end - 8 };
+  return { start: start - timelineStart + 1, end: end - timelineStart + 1 };
 };
+const formatHour = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
 function StationMap({ x, y }: { x: number; y: number }) {
   return <div className="cleaner-map" aria-label="Site map"><div /><i style={{ left: `${x}%`, top: `${y}%` }} /><span>Station Point</span></div>;
@@ -53,6 +66,7 @@ export function CleanerMobileApp({ onLogout }: { onLogout: () => void }) {
   const [scheduleDetail, setScheduleDetail] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState("May");
   const [calendarYear, setCalendarYear] = useState("2026");
+  const [calendarWeek, setCalendarWeek] = useState(4);
   const isCoordinate = work.target.type === "coordinate";
   const active = work.status === "assigned" || work.status === "in_progress" || work.status === "awaiting_review";
 
@@ -111,10 +125,35 @@ export function CleanerMobileApp({ onLogout }: { onLogout: () => void }) {
     <section className="cleaner-recent"><header><span>WORK HISTORY</span></header>{demoRecentWork.map(historyItem)}</section>
   </>;
 
-  const selectedSchedule = demoCleaner.schedule[scheduleDay];
-  const weeklyHours = demoCleaner.schedule.reduce((total, day) => total + hoursTotal(day.hours), 0);
+  const calendarWeeks = buildMonthWeeks(calendarMonth, Number(calendarYear));
+  const activeWeek = calendarWeeks[calendarWeek] ?? calendarWeeks[0];
+  const activeWeekDays = activeWeek.map(({ dayIndex, date }) => ({ ...demoCleaner.schedule[dayIndex], date }));
+  const scheduledEntries = demoCleaner.schedule.filter((day) => day.hours !== "Off");
+  const timelineStart = Math.min(...scheduledEntries.map((day) => Number(day.hours.slice(0, 2))));
+  const timelineEnd = Math.max(...scheduledEntries.map((day) => Number(day.hours.split(" – ")[1].slice(0, 2))));
+  const calendarPeriods = Array.from({ length: timelineEnd - timelineStart }, (_, index) => `${formatHour(timelineStart + index)}–${formatHour(timelineStart + index + 1)}`);
+  const selectedSchedule = activeWeekDays[scheduleDay] ?? activeWeekDays[0];
+  const weeklyHours = activeWeekDays.reduce((total, day) => total + hoursTotal(day.hours), 0);
   const hasWorkingHours = calendarMonth === "May" && calendarYear === "2026";
-  const schedule = scheduleDetail ? <section className="cleaner-working-day-detail"><button className="cleaner-back" onClick={() => setScheduleDetail(false)}>← Working hours</button><header className="cleaner-section-head"><span>DAY DETAIL</span><h1>Working hours</h1></header><div className="cleaner-date-picker"><button type="button" onClick={() => setScheduleDay((scheduleDay + 6) % 7)}>‹</button><strong>{selectedSchedule.day} · {weekDates[scheduleDay]} May 2026</strong><button type="button" onClick={() => setScheduleDay((scheduleDay + 1) % 7)}>›</button></div>{selectedSchedule.hours === "Off" ? <section className="cleaner-hours-card off"><span>WORKING HOURS</span><strong>Off duty</strong><small>You are not scheduled for working hours on this day.</small></section> : <section className="cleaner-hours-card"><span>WORKING HOURS</span><strong>{selectedSchedule.hours}</strong><div><b>{hoursTotal(selectedSchedule.hours)} hours</b><small>Available to receive Work Orders</small></div></section>}<section className="cleaner-hours-station"><div><span>STATION POINT</span><strong>{demoCleaner.stationPoint.zoneName}</strong><small>Default working location</small></div><StationMap x={demoCleaner.stationPoint.x} y={demoCleaner.stationPoint.y} /></section><section className="cleaner-hours-note"><i>i</i><p>{selectedSchedule.hours === "Off" ? "No Work Orders will be assigned during this off-duty period." : "You may receive Work Orders during these listed working hours."}</p></section></section> : <section className="cleaner-working-hours"><header className="cleaner-calendar-heading"><button type="button" aria-label="Open navigation">☰</button><div><span>SCHEDULE</span><h1>Working hours</h1></div><button type="button" aria-label="Choose week">▦</button></header><div className="cleaner-calendar-filters"><label>MONTH<select value={calendarMonth} onChange={(event) => setCalendarMonth(event.target.value)}><option>May</option><option>June</option><option>July</option></select></label><label>YEAR<select value={calendarYear} onChange={(event) => setCalendarYear(event.target.value)}><option>2026</option><option>2027</option></select></label></div><div className="cleaner-week-range"><button type="button" aria-label="Previous week">‹</button><strong>{hasWorkingHours ? "25–31 May 2026" : `${calendarMonth} ${calendarYear}`}</strong><button type="button" aria-label="Next week">›</button></div><section className="cleaner-standard-calendar"><div className="cleaner-calendar-time-head"><span>DATE</span>{calendarTimes.map((time) => <b key={time}>{time}</b>)}</div><div className="cleaner-calendar-date-rows">{demoCleaner.schedule.map((day, index) => { const range = day.hours === "Off" ? undefined : calendarRange(day.hours); return <div className={index === scheduleDay ? "active" : ""} key={day.day}><button type="button" className="cleaner-calendar-date-label" onClick={() => setScheduleDay(index)}><b>{shortDay(day.day)}</b><span>{weekDates[index]}</span></button><div className="cleaner-calendar-day-track">{hasWorkingHours && range ? <button type="button" className="cleaner-working-band" style={{ gridColumn: `${range.start} / ${range.end}` }} onClick={() => { setScheduleDay(index); setScheduleDetail(true); }}><span>{day.hours.split(" – ")[0]}</span><b>{index === scheduleDay ? "Working hours" : ""}</b><small>{day.hours.split(" – ")[1]}</small></button> : hasWorkingHours ? <span className="cleaner-off-duty">Off duty</span> : null}</div></div>; })}{!hasWorkingHours && <div className="cleaner-calendar-empty"><i>◷</i><strong>No upcoming working hours</strong><span>There are no schedule changes for this period.</span></div>}</div></section><section className="cleaner-week-total"><i>◷</i><div><span>{hasWorkingHours ? "THIS WEEK" : "SCHEDULE"}</span><strong>{hasWorkingHours ? `${weeklyHours} working hours` : "No upcoming working hours"}</strong><p>{hasWorkingHours ? "Tap a working-hours band to view its details." : "Choose another month or year to view its timetable."}</p></div></section></section>;
+  const weekLabel = `${activeWeek[0].date}–${activeWeek.at(-1)?.date} ${calendarMonth} ${calendarYear}`;
+  const changeWeek = (direction: -1 | 1) => {
+    setCalendarWeek((current) => Math.min(calendarWeeks.length - 1, Math.max(0, current + direction)));
+    setScheduleDay(0);
+  };
+  const schedule = scheduleDetail ? <section className="cleaner-working-day-detail">
+    <button className="cleaner-back cleaner-back-icon" aria-label="Back to working hours" onClick={() => setScheduleDetail(false)}>←</button>
+    <header className="cleaner-section-head"><span>DAY DETAIL</span><h1>Working hours</h1></header>
+    <div className="cleaner-date-picker"><button type="button" onClick={() => setScheduleDay((scheduleDay + activeWeekDays.length - 1) % activeWeekDays.length)}>‹</button><strong>{selectedSchedule.day} · {selectedSchedule.date} May 2026</strong><button type="button" onClick={() => setScheduleDay((scheduleDay + 1) % activeWeekDays.length)}>›</button></div>
+    {selectedSchedule.hours === "Off" ? <section className="cleaner-hours-card off"><span>WORKING HOURS</span><strong>Off duty</strong><small>You are not scheduled for working hours on this day.</small></section> : <section className="cleaner-hours-card"><span>WORKING HOURS</span><strong>{selectedSchedule.hours}</strong><div><b>{hoursTotal(selectedSchedule.hours)} hours</b><small>Available to receive Work Orders</small></div></section>}
+    <section className="cleaner-hours-station"><div><span>STATION POINT</span><strong>{demoCleaner.stationPoint.zoneName}</strong><small>Default working location</small></div><StationMap x={demoCleaner.stationPoint.x} y={demoCleaner.stationPoint.y} /></section>
+    <section className="cleaner-hours-note"><i>i</i><p>{selectedSchedule.hours === "Off" ? "No Work Orders will be assigned during this off-duty period." : "You may receive Work Orders during these listed working hours."}</p></section>
+  </section> : <section className="cleaner-working-hours">
+    <header className="cleaner-calendar-heading"><div><span>SCHEDULE</span><h1>Working hours</h1></div></header>
+    <div className="cleaner-calendar-filters"><label>MONTH<select value={calendarMonth} onChange={(event) => { setCalendarMonth(event.target.value); setCalendarWeek(0); setScheduleDay(0); }}><option>May</option><option>June</option><option>July</option></select></label><label>YEAR<select value={calendarYear} onChange={(event) => { setCalendarYear(event.target.value); setCalendarWeek(0); setScheduleDay(0); }}><option>2026</option><option>2027</option></select></label></div>
+    <div className="cleaner-week-range"><button type="button" aria-label="Previous week" disabled={calendarWeek === 0} onClick={() => changeWeek(-1)}>‹</button><strong>{weekLabel}</strong><button type="button" aria-label="Next week" disabled={calendarWeek === calendarWeeks.length - 1} onClick={() => changeWeek(1)}>›</button></div>
+    <section className="cleaner-standard-calendar"><aside className="cleaner-calendar-fixed-dates"><span>DATE</span>{activeWeekDays.map((day, index) => <button type="button" className={index === scheduleDay ? "active" : ""} onClick={() => setScheduleDay(index)} key={`${day.day}-${day.date}`}><b>{shortDay(day.day)}</b><strong>{day.date}</strong></button>)}</aside><div className="cleaner-calendar-scroll-area"><div className="cleaner-calendar-time-head">{calendarPeriods.map((period) => <b key={period}>{period}</b>)}</div><div className="cleaner-calendar-date-rows">{activeWeekDays.map((day, index) => { const range = day.hours === "Off" ? undefined : calendarRange(day.hours, timelineStart); return <div className={index === scheduleDay ? "active" : ""} key={`${day.day}-${day.date}`}><div className="cleaner-calendar-day-track">{hasWorkingHours && range ? <button type="button" className="cleaner-working-band" style={{ gridColumn: `${range.start} / ${range.end}` }} onClick={() => { setScheduleDay(index); setScheduleDetail(true); }}><span>{day.hours.split(" – ")[0]}</span><b>{index === scheduleDay ? "Working hours" : ""}</b><small>{day.hours.split(" – ")[1]}</small></button> : hasWorkingHours ? <span className="cleaner-off-duty">Off duty</span> : null}</div></div>; })}{!hasWorkingHours && <div className="cleaner-calendar-empty"><i>◷</i><strong>No upcoming working hours</strong><span>There are no schedule changes for this period.</span></div>}</div></div></section>
+    <section className="cleaner-week-total"><i>◷</i><div><span>{hasWorkingHours ? "THIS WEEK" : "SCHEDULE"}</span><strong>{hasWorkingHours ? `${weeklyHours} working hours` : "No upcoming working hours"}</strong><p>{hasWorkingHours ? "Swipe to review each day and tap a working-hours band for details." : "Choose another month or year to view its timetable."}</p></div></section>
+  </section>;
   const notifications = <><header className="cleaner-section-head"><span>NOTIFICATIONS</span><h1>Updates</h1></header><section className="cleaner-notifications">{demoNotifications.map((item) => <button key={item.notificationId} onClick={() => item.workOrderId && openWork()}><i className={item.type} /><div><b>{item.title}</b><p>{item.message}</p><small>{formatTime(item.createdAt)}</small></div></button>)}</section></>;
   const profile = <><header className="cleaner-hero profile"><div><span>CLEANER PROFILE</span><h1>{demoCleaner.name}</h1><p>{demoCleaner.email}</p></div><i>AR</i></header><section className="cleaner-availability"><span>CURRENT AVAILABILITY</span><b><i />{demoCleaner.availability}</b></section><section className="cleaner-profile-details"><span>MY DETAILS</span><p><b>Staff ID</b><small>{demoCleaner.staffCode}</small></p><p><b>Contact</b><small>{demoCleaner.phone}</small></p><p><b>Site</b><small>{demoCleaner.siteName}</small></p></section><section className="cleaner-schedule"><header><span>WEEKLY WORKING HOURS</span><button type="button" onClick={() => setPage("schedule")}>View schedule</button></header>{demoCleaner.schedule.map((day) => <p key={day.day}><b>{day.day}</b><span>{day.hours}</span></p>)}</section><section className="cleaner-station"><span>STATION POINT</span><strong>Station Zone · {demoCleaner.stationPoint.zoneName}</strong><StationMap x={demoCleaner.stationPoint.x} y={demoCleaner.stationPoint.y} /></section><button className="cleaner-signout" onClick={onLogout}>Sign out</button></>;
 
