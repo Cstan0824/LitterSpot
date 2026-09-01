@@ -5,6 +5,7 @@ import { canonicalHash } from "./v2Persistence.js";
 import { createV2NotificationInTransaction } from "./v2NotificationService.js";
 import { v2Json } from "./v2Presentation.js";
 import { recordV2SystemEvent } from "./v2SystemService.js";
+import { isFirestoreQuotaError, safeFirestoreError } from "../shared/firestoreErrors.js";
 
 const stages = ["workOrders", "alerts", "cleaners", "orchestratorRuns", "orchestratorOutbox", "monitoringSessions", "monitoringEpisodes", "cameraRuntimeStates", "activeWorkOrderKeys", "activeAlertKeys"] as const;
 const activeWork = ["assigned", "in_progress", "awaiting_review"];
@@ -93,12 +94,15 @@ export async function reconcileV2SiteOperation(siteId: string, operationId: stri
 
 export async function recoverV2SiteOperations() {
   const ops = await firestore.collection("siteOperations").where("status", "in", ["pending", "running"]).limit(50).get();
+  let recovered = 0;
   for (const doc of ops.docs) {
     if (doc.data().schemaVersion !== 2 || doc.data().type !== "deactivate") continue;
-    try { await reconcileV2SiteOperation(String(doc.data().siteId), doc.id); }
-    catch {
-      await doc.ref.update({ lastErrorCode: "reconciliation_failed", updatedAt: FieldValue.serverTimestamp() });
-      await recordV2SystemEvent(String(doc.data().siteId), "site_operation_failed");
+    try { await reconcileV2SiteOperation(String(doc.data().siteId), doc.id); recovered += 1; }
+    catch (error) {
+      if (isFirestoreQuotaError(error)) throw error;
+      await doc.ref.update({ status: "failed", lastErrorCode: "reconciliation_failed", lastErrorSafeDetails: safeFirestoreError(error), updatedAt: FieldValue.serverTimestamp() });
+      await recordV2SystemEvent(String(doc.data().siteId), "site_operation_failed").catch(() => undefined);
     }
   }
+  return recovered;
 }

@@ -1,6 +1,38 @@
 {
   "indexes": [
     {
+      "collectionGroup": "analyticsMinuteBuckets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "binPlacementInterventions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "zoneId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "analyticsMinuteBuckets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "bucketStart", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "analyticsDailySummaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "localDate", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "auditEvents",
       "queryScope": "COLLECTION",
       "fields": [
@@ -483,5 +515,10 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "analyticsMinuteBuckets", "fieldPath": "contributions", "indexes": [] },
+    { "collectionGroup": "analyticsMinuteBuckets", "fieldPath": "zoneMetrics", "indexes": [] },
+    { "collectionGroup": "analyticsDailySummaries", "fieldPath": "zoneMinuteMetrics", "indexes": [] },
+    { "collectionGroup": "analyticsDailySummaries", "fieldPath": "zoneMetrics", "indexes": [] }
+  ]
 }

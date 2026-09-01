@@ -67,8 +67,14 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   if (!match) return res.status(401).json({ error: "Authentication required.", requestId: req.requestId });
 
+  let decoded;
   try {
-    const decoded = await firebaseAuth.verifyIdToken(match[1], true);
+    decoded = await firebaseAuth.verifyIdToken(match[1], true);
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired authentication token.", requestId: req.requestId });
+  }
+
+  try {
     const accountReference = firestore.collection("userAccounts").doc(decoded.uid);
     let accountSnapshot = await accountReference.get();
     let account = accountSnapshot.exists ? accountSnapshot.data()! : await legacySupervisorAccount(decoded.uid);
@@ -150,7 +156,7 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
     }
 
     return res.status(403).json({ error: "Application role is not supported.", requestId: req.requestId });
-  } catch {
-    return res.status(401).json({ error: "Invalid or expired authentication token.", requestId: req.requestId });
+  } catch (error) {
+    return next(error);
   }
 }

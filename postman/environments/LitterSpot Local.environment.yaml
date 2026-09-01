@@ -1,5 +1,7 @@
 name: LitterSpot Local
 values:
+  - key: v2BinPlacementSnapshotAt
+    value: ''
   - key: baseUrl
     value: 'http://127.0.0.1:3000'
   - key: supervisorEmail
@@ -133,9 +135,9 @@ values:
   - key: v2SiteId
     value: sunway-theme-park
   - key: v2ActiveMapRevisionId
-    value: ''
+    value: sunway-theme-park-initial
   - key: v2ZoneId
-    value: zone-main
+    value: main-entrance
   - key: v2RegularSupervisorEmail
     value: regular-supervisor@sunway-test.com
   - key: v2RegularSupervisorPassword
@@ -177,6 +179,10 @@ values:
   - key: v2TestAlertRequestId
     value: phase9-fake-alert-001
   - key: v2SiteOperationId
+    value: ''
+  - key: v2BinPlacementZoneId
+    value: ''
+  - key: v2BinPlacementInterventionId
     value: ''
   - key: allowSiteDeactivationTest
     value: 'false'

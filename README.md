@@ -129,8 +129,8 @@ python3 -m venv .venv
 
 ### Configure Firebase once
 
-The application uses Firebase project `litterspot`, the named Firestore
-database `litterspot` in `asia-southeast1`, and Email/Password Authentication.
+The application uses Firebase project `litterspot-v2-database`, Firestore
+database `(default)`, and Email/Password Authentication.
 React uses Firebase only to authenticate a Supervisor. Node.js verifies the ID
 token and is the only application service that reads or writes Firestore.
 

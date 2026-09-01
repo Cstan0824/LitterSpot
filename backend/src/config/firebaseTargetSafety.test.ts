@@ -5,9 +5,9 @@ describe("Firebase target safety", () => {
   it("accepts an explicitly matched development cloud target", () => {
     expect(() => assertSafeFirebaseTarget({
       appEnvironment: "development-cloud",
-      firebaseProjectId: "litterspot-dev-jeremy",
-      expectedFirebaseProjectId: "litterspot-dev-jeremy",
-      credentialProjectId: "litterspot-dev-jeremy",
+      firebaseProjectId: "litterspot-v2-database",
+      expectedFirebaseProjectId: "litterspot-v2-database",
+      credentialProjectId: "litterspot-v2-database",
       emulatorMode: false,
     })).not.toThrow();
   });
@@ -16,14 +16,14 @@ describe("Firebase target safety", () => {
     expect(() => assertSafeFirebaseTarget({
       appEnvironment: "development-cloud",
       firebaseProjectId: "litterspot",
-      expectedFirebaseProjectId: "litterspot-dev-jeremy",
+      expectedFirebaseProjectId: "litterspot-v2-database",
       credentialProjectId: "litterspot",
       emulatorMode: false,
     })).toThrow(/target mismatch/i);
     expect(() => assertSafeFirebaseTarget({
       appEnvironment: "development-cloud",
-      firebaseProjectId: "litterspot-dev-jeremy",
-      expectedFirebaseProjectId: "litterspot-dev-jeremy",
+      firebaseProjectId: "litterspot-v2-database",
+      expectedFirebaseProjectId: "litterspot-v2-database",
       credentialProjectId: "litterspot",
       emulatorMode: false,
     })).toThrow(/credential project/i);

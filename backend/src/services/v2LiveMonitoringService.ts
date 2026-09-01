@@ -8,6 +8,7 @@ import { detectSupportedImage, validateDeclaredImageType } from "./imageUploadVa
 import { loadRegistrationReference } from "./cameraRegistrationReference.js";
 import { inferFrame } from "./frameInferenceClient.js";
 import { shouldAcceptSample, type MonitoringLease } from "./v2MonitoringLease.js";
+import { persistMinuteContributions } from "./phase11MinuteStore.js";
 
 export type LiveIssue = { issueType: "floor_litter" | "floor_spill" | "bin_service"; condition: "litter" | "spill" | "full" | "overflow"; confidence: number; entityId: string; geometry: unknown };
 export type V2LiveObservation = {
@@ -27,7 +28,7 @@ export type V2LiveObservation = {
   isSimulation: boolean;
 };
 export type V2EvidenceCandidate = { confidence: number; frame: Buffer; mimeType: string; observation: V2LiveObservation };
-type MinuteAccumulator = { siteId: string; minuteStart: string; timeZone: string; mapRevisionId: string; cameraId: string; zoneId: string; sampleAttemptCount: number; successfulSampleCount: number; failedSampleCount: number; peopleSum: number; peopleMax: number; litter: number; spill: number; full: number; overflow: number; simulation: number };
+type MinuteAccumulator = { contributionId: string; pending: number; siteId: string; minuteStart: string; timeZone: string; mapRevisionId: string; cameraId: string; zoneId: string; zoneName: string; sampleAttemptCount: number; successfulSampleCount: number; failedSampleCount: number; peopleSum: number; peopleMax: number; litter: number; spill: number; full: number; overflow: number; simulation: number; latencySum: number; latencyCount: number };
 
 const temporal = new Map<string, V2LiveObservation[]>();
 const evidence = new Map<string, V2EvidenceCandidate>();
@@ -41,8 +42,8 @@ async function serializeInference<T>(cameraId: string, work: () => Promise<T>) {
 }
 
 export function setV2LiveInferenceForTests(replacement: typeof inferFrame | null) { inference = replacement ?? inferFrame; }
-export function resetV2LiveMemory(cameraId?: string) {
-  for (const store of [temporal, evidence, minute]) for (const key of store.keys()) if (!cameraId || key.includes(`:${cameraId}:`) || key.endsWith(`:${cameraId}`)) store.delete(key);
+export function resetV2LiveMemory(cameraId?: string, preserveMinute = false) {
+  for (const store of preserveMinute ? [temporal, evidence] : [temporal, evidence, minute]) for (const key of store.keys()) if (!cameraId || key.includes(`:${cameraId}:`) || key.endsWith(`:${cameraId}`)) store.delete(key);
 }
 export function inspectV2LiveMemory(cameraId: string) {
   return { temporalKeys: [...temporal.keys()].filter((key) => key.includes(`:${cameraId}:`)), evidenceKeys: [...evidence.keys()].filter((key) => key.includes(`:${cameraId}:`)), minuteKeys: [...minute.keys()].filter((key) => key.endsWith(`:${cameraId}`)) };
@@ -68,11 +69,12 @@ export async function startMonitoringEpisode(input: { siteId: string; cameraId: 
   if (!placement.exists || placement.data()?.siteId !== input.siteId) throw new HttpError(409, "Camera Placement is missing from the Active Map Revision.");
   await episodeRef.create({ schemaVersion: V2_SCHEMA_VERSION, episodeId: episodeRef.id, siteId: input.siteId, cameraId: input.cameraId, monitoringSessionId: input.sessionId, sourceRevisionId: camera.data()?.activeSourceRevisionId, registrationRevisionId: camera.data()?.activeRegistrationRevisionId, mapRevisionId, zoneId: placement.data()?.zoneId, timeZoneSnapshot: String(site.data()?.timeZone ?? "Asia/Kuala_Lumpur"), isSimulation: Boolean(camera.data()?.isSimulation), startedAt: FieldValue.serverTimestamp(), endedAt: null, endReason: null, lastSequence: 0 });
   await firestore.collection("cameraRuntimeStates").doc(input.cameraId).set({ schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: input.cameraId, connectionStatus: "online", cleanlinessState: "unknown", monitoringSessionId: input.sessionId, monitoringEpisodeId: episodeRef.id, lastFrameCapturedAt: null, lastSampleAcceptedAt: null, lastInferenceSucceededAt: null, lastPeopleCount: null, lastIssueSummary: {}, sourceErrorCode: null, sourceErrorMessage: null, updatedAt: FieldValue.serverTimestamp(), expiresAt: null });
-  resetV2LiveMemory(input.cameraId);
+  resetV2LiveMemory(input.cameraId, true);
   return { episodeId: episodeRef.id, nextSequence: 1, isSimulation: Boolean(camera.data()?.isSimulation) };
 }
 
 export async function processLiveSample(input: { siteId: string; cameraId: string; sessionId: string; episodeId: string; token: string; sequence: number; capturedAt: Date; frame: Express.Multer.File }) {
+  if (+input.capturedAt < Date.now() - 120000 || +input.capturedAt > Date.now() + 10000) throw new HttpError(400, "Live sample is outside the two-minute lateness window.");
   const detected = detectSupportedImage(input.frame.buffer); validateDeclaredImageType(input.frame.mimetype, detected.mimeType);
   const cameraRef = firestore.collection("cameras").doc(input.cameraId); const sessionRef = firestore.collection("monitoringSessions").doc(input.siteId); const episodeRef = firestore.collection("monitoringEpisodes").doc(input.episodeId);
   const [camera, session, episode] = await Promise.all([cameraRef.get(), sessionRef.get(), episodeRef.get()]);
@@ -85,8 +87,8 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
   if (!registration.exists || registration.data()?.siteId !== input.siteId || registration.data()?.cameraId !== input.cameraId) throw new HttpError(409, "Active Camera Registration is missing.");
   await firestore.runTransaction(async (transaction) => { const latest = await transaction.get(episodeRef); if (!latest.exists || latest.data()?.lastSequence !== expected - 1) throw new HttpError(409, "Live sample sequence changed."); transaction.update(episodeRef, { lastSequence: input.sequence }); });
   const reference = await loadRegistrationReference(registration.data());
-  const minuteStart = `${input.capturedAt.toISOString().slice(0, 16)}:00.000Z`; const minuteKey = `${input.siteId}:${minuteStart}:${input.cameraId}`;
-  const accumulator = minute.get(minuteKey) ?? { siteId: input.siteId, minuteStart, timeZone: String(episode.data()?.timeZoneSnapshot ?? "Asia/Kuala_Lumpur"), mapRevisionId: String(episode.data()?.mapRevisionId ?? ""), cameraId: input.cameraId, zoneId: String(episode.data()?.zoneId), sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, litter: 0, spill: 0, full: 0, overflow: 0, simulation: 0 }; accumulator.sampleAttemptCount += 1; minute.set(minuteKey, accumulator);
+  const minuteStart = `${input.capturedAt.toISOString().slice(0, 16)}:00.000Z`; const minuteKey = `${input.siteId}:${minuteStart}:${input.episodeId}:${input.cameraId}`;
+  const accumulator = minute.get(minuteKey) ?? { contributionId: randomUUID(), pending: 0, siteId: input.siteId, minuteStart, timeZone: String(episode.data()?.timeZoneSnapshot ?? "Asia/Kuala_Lumpur"), mapRevisionId: String(episode.data()?.mapRevisionId ?? ""), cameraId: input.cameraId, zoneId: String(episode.data()?.zoneId), zoneName:String(episode.data()?.zoneNameSnapshot??episode.data()?.zoneId), sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, litter: 0, spill: 0, full: 0, overflow: 0, simulation: 0, latencySum:0, latencyCount:0 }; accumulator.pending += 1; accumulator.sampleAttemptCount += 1; minute.set(minuteKey, accumulator);
   try {
     const result = await serializeInference(input.cameraId, () => inference({ contents: input.frame.buffer, fileName: input.frame.originalname || `sample-${input.sequence}.${detected.extension}`, mimeType: detected.mimeType, floorConfidence: 0.25, binLocalizerConfidence: 0.8, focusRegion: registration.data()?.walkableFloorPolygon ?? [], registration: { ...registration.data(), status: "ready", alignmentStatus: "valid" }, reference, binReviewEnabled: true }));
     const observation: V2LiveObservation = {
@@ -106,13 +108,15 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
       isSimulation: Boolean(camera.data()?.isSimulation),
     };
     for (const issueType of ["floor_litter", "floor_spill", "bin_service"] as const) { const key = `${input.siteId}:${input.cameraId}:${issueType}`; const values = temporal.get(key) ?? []; values.push(observation); temporal.set(key, values.slice(-5)); const matching = observation.issues.filter((issue) => issue.issueType === issueType); const best = matching.sort((a, b) => b.confidence - a.confidence)[0]; if (best) { const current = evidence.get(key); if (!current || best.confidence >= current.confidence) evidence.set(key, { confidence: best.confidence, frame: Buffer.from(input.frame.buffer), mimeType: detected.mimeType, observation }); } }
-    accumulator.successfulSampleCount += 1; accumulator.peopleSum += result.peopleCount; accumulator.peopleMax = Math.max(accumulator.peopleMax, result.peopleCount); accumulator.litter += observation.issues.filter((issue) => issue.condition === "litter").length; accumulator.spill += observation.issues.filter((issue) => issue.condition === "spill").length; accumulator.full += observation.issues.filter((issue) => issue.condition === "full").length; accumulator.overflow += observation.issues.filter((issue) => issue.condition === "overflow").length; accumulator.simulation += observation.isSimulation ? 1 : 0;
+    accumulator.successfulSampleCount += 1; accumulator.latencySum+=result.processingTimeMs; accumulator.latencyCount++; accumulator.peopleSum += result.peopleCount; accumulator.peopleMax = Math.max(accumulator.peopleMax, result.peopleCount); accumulator.litter += observation.issues.filter((issue) => issue.condition === "litter" && issue.confidence >= 0.5).length; accumulator.spill += observation.issues.filter((issue) => issue.condition === "spill" && issue.confidence >= 0.5).length; accumulator.full += observation.issues.filter((issue) => issue.condition === "full" && issue.confidence >= 0.5).length; accumulator.overflow += observation.issues.filter((issue) => issue.condition === "overflow" && issue.confidence >= 0.5).length; accumulator.simulation += observation.isSimulation ? 1 : 0;
     await firestore.collection("cameraRuntimeStates").doc(input.cameraId).set({ connectionStatus: "online", monitoringSessionId: input.sessionId, monitoringEpisodeId: input.episodeId, lastFrameCapturedAt: Timestamp.fromDate(input.capturedAt), lastSampleAcceptedAt: FieldValue.serverTimestamp(), lastInferenceSucceededAt: FieldValue.serverTimestamp(), lastPeopleCount: result.peopleCount, lastIssueSummary: { litter: accumulator.litter, spill: accumulator.spill, full: accumulator.full, overflow: accumulator.overflow }, sourceErrorCode: null, sourceErrorMessage: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { accepted: true, sequence: input.sequence, observation: { ...observation, issues: observation.issues, image: result.image, processingTimeMs: result.processingTimeMs } };
   } catch (error) {
     accumulator.failedSampleCount += 1;
     await firestore.collection("cameraRuntimeStates").doc(input.cameraId).set({ lastFrameCapturedAt: Timestamp.fromDate(input.capturedAt), lastSampleAcceptedAt: FieldValue.serverTimestamp(), sourceErrorCode: "inference_failed", sourceErrorMessage: "The sampled frame could not be analyzed.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     throw error;
+  } finally {
+    accumulator.pending -= 1;
   }
 }
 
@@ -122,15 +126,26 @@ export async function markOfflineCameras(siteId: string, now = new Date(), timeo
   return changed;
 }
 
+let flushTail: Promise<unknown> = Promise.resolve();
 export async function flushV2MinuteBuckets(siteId: string, before = new Date()) {
-  const selected = [...minute.entries()].filter(([, value]) => value.siteId === siteId && new Date(value.minuteStart).getTime() < before.getTime());
-  const groups = new Map<string, MinuteAccumulator[]>(); for (const [, value] of selected) { const key = `${value.siteId}:${value.minuteStart}`; const values = groups.get(key) ?? []; values.push(value); groups.set(key, values); }
-  for (const [key, values] of groups) {
-    const first = values[0]; const zones: Record<string, Record<string, number>> = {};
-    for (const value of values) { const zone = zones[value.zoneId] ?? { sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, qualifyingLitterCount: 0, qualifyingSpillCount: 0, qualifyingBinFullCount: 0, qualifyingBinOverflowCount: 0, simulationSampleCount: 0 }; zone.sampleAttemptCount += value.sampleAttemptCount; zone.successfulSampleCount += value.successfulSampleCount; zone.failedSampleCount += value.failedSampleCount; zone.peopleSum += value.peopleSum; zone.peopleMax = Math.max(zone.peopleMax, value.peopleMax); zone.qualifyingLitterCount += value.litter; zone.qualifyingSpillCount += value.spill; zone.qualifyingBinFullCount += value.full; zone.qualifyingBinOverflowCount += value.overflow; zone.simulationSampleCount += value.simulation; zones[value.zoneId] = zone; }
-    const bucketId = createHash("sha256").update(key).digest("hex"); const start = new Date(first.minuteStart);
-    await firestore.collection("analyticsMinuteBuckets").doc(bucketId).set({ schemaVersion: V2_SCHEMA_VERSION, bucketId, siteId: first.siteId, bucketStart: Timestamp.fromDate(start), bucketEnd: Timestamp.fromMillis(start.getTime() + 60000), siteLocalDate: new Intl.DateTimeFormat("en-CA", { timeZone: first.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(start), timeZoneSnapshot: first.timeZone, mapRevisionIds: [...new Set(values.map((value) => value.mapRevisionId))], zoneMetrics: zones, siteTotals: {}, aggregationVersion: "minute-v2", finalizedAt: FieldValue.serverTimestamp(), lastReconciledAt: null, expiresAt: Timestamp.fromMillis(start.getTime() + 90 * 86400000) }, { merge: true });
-  }
-  for (const [key] of selected) minute.delete(key);
-  return groups.size;
+  const work = async () => {
+    const selected = [...minute.entries()].filter(([, v]) => v.siteId === siteId && v.pending === 0 && Date.parse(v.minuteStart) + 60000 <= +before);
+    const groups = new Map<string, Array<{ key: string; value: MinuteAccumulator; count: number }>>();
+    for (const [key, value] of selected) {
+      const items = groups.get(value.minuteStart) ?? [];
+      items.push({ key, value, count: value.sampleAttemptCount }); groups.set(value.minuteStart, items);
+    }
+    for (const [start, items] of groups) {
+      await persistMinuteContributions(siteId, new Date(start), items[0].value.timeZone, items.map(({ value: v }) => ({
+        id: v.contributionId, zoneId: v.zoneId, zoneNameSnapshot:v.zoneName, mapRevisionId: v.mapRevisionId,
+        metrics: { sampleAttemptCount: v.sampleAttemptCount, successfulSampleCount: v.successfulSampleCount, failedSampleCount: v.failedSampleCount,
+          peopleObservationCount: v.successfulSampleCount, peopleSum: v.peopleSum, peopleMax: v.peopleMax, qualifyingLitterCount: v.litter,
+          qualifyingSpillCount: v.spill, qualifyingBinFullCount: v.full, qualifyingBinOverflowCount: v.overflow, simulationSampleCount: v.simulation, inferenceLatencyMsSum:v.latencySum,inferenceLatencySampleCount:v.latencyCount },
+      })));
+      for (const item of items) if (minute.get(item.key) === item.value && item.value.pending === 0 && item.value.sampleAttemptCount === item.count) minute.delete(item.key);
+    }
+    return groups.size;
+  };
+  const result = flushTail.then(work, work); flushTail = result.catch(() => undefined); return result;
 }
+export function liveAnalyticsSites() { return [...new Set([...minute.values()].map(v => v.siteId))]; }

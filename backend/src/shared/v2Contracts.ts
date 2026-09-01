@@ -41,6 +41,7 @@ export const V2_COLLECTIONS = [
   "analyticsMinuteBuckets",
   "analyticsDailySummaries",
   "dashboardSummaries",
+  "phase11MaintenanceStates",
   "binPlacementSnapshots",
   "binPlacementInterventions",
 ] as const;
@@ -72,4 +73,3 @@ export const V2_RESET_COLLECTIONS = [...V2_COLLECTIONS, ...RETIRED_V1_COLLECTION
 export function isV2CollectionName(value: string): value is V2CollectionName {
   return (V2_COLLECTIONS as readonly string[]).includes(value);
 }
-

@@ -1593,6 +1593,39 @@ Camera Verification is automatic but deterministic. Fresh ordered samples move t
 
 ## 16. Future frontend integration rule
 
+### V2 Phase 11 APIs
+
+All routes require an active Site Supervisor and use the authenticated Site.
+
+| Method | Route | Response |
+| --- | --- | --- |
+| GET | `/api/dashboard/v2` | `{ dashboard }`, one-minute cache |
+| POST | `/api/dashboard/v2/refresh` | `201 { dashboard }` |
+| GET | `/api/analytics/v2/daily?from=YYYY-MM-DD&to=YYYY-MM-DD` | `{ summaries }` |
+| POST | `/api/analytics/v2/daily/rebuild` | `{ summaries }`; supply `localDate` or array `dates`, never both |
+| POST | `/api/analytics/v2/minute/cleanup` | `{ deleted }`; expired minutes after daily preservation |
+| GET | `/api/bin-placement/v2/recommendations?days=30` | `{ snapshot }`; cheap cached read, refreshing when missing, expired, or the requested window changes |
+| POST | `/api/bin-placement/v2/recommendations/refresh` | `201 { snapshot }`; body `{ "days": 30 }` |
+| POST | `/api/bin-placement/v2/zones/:zoneId/implement` | `201 { intervention }` |
+| GET | `/api/bin-placement/v2/interventions` | `{ interventions }`, newest first |
+| GET | `/api/bin-placement/v2/interventions/:id/comparison?days=7` | `{ comparison }`, selected Zone only |
+
+Ranges accept integer days from 2 to 3660, without fixed presets. Recommendations use completed local days. Fewer than two observed days produces `insufficient_data` and null score/rank. Enough observed days but fewer than requested produces `partial_data`.
+
+Implementation body:
+
+```json
+{"snapshotCalculatedAt":"2026-08-31T02:00:00.000Z","note":"Optional installation note"}
+```
+
+Use the reviewed snapshot's timestamp. Stale snapshots, insufficient data and active exclusion return `409`. Identical implementation replay returns the existing Intervention. Exclusion spans two complete local calendar days, not 48 hours from a midday action.
+
+Comparison sides include `requestedStart`, `requestedEnd`, `availableDays`, `partialDays`, `partial`, `missingDates` and `series`. Series rows contain local date, exact bounded period, `cleaningFrequency`, `binOverflowFrequency` and coverage details. Boundary-day events are split at the Intervention timestamp; missing days are not zero-filled. `availableDays` can be fractional for partial days.
+
+See [the Phase 11 brief](phase-11-completed-brief.md) for Postman and index deployment instructions.
+
+The automatic worker finalizes only the previous Site-local day. Use the explicit daily rebuild endpoint for older repair dates. An array rebuild shares one Alert/Work history read across the batch. Firestore quota exhaustion returns `503` with `code: "firestore_quota_exceeded"`.
+
 ### V2 Phase 10 platform APIs
 
 | Method | Route | Access and response |

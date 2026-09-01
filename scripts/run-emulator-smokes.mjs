@@ -36,6 +36,7 @@ const integrationTests = [
   ["src/v2Orchestrator.integration.test.ts", {}],
   ["src/v2TestSupport.integration.test.ts", {}],
   ["src/v2Operations.integration.test.ts", {}],
+  ["src/phase11.integration.test.ts", {}],
 ];
 
 for (const [testFile, environment] of integrationTests) {

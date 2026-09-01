@@ -12,6 +12,11 @@ async function signIn(email: string, password: string) { const response = await 
 
 run("V2 live monitoring", () => {
   const suffix = randomUUID(); const uid = `monitor-root-${suffix}`; const email = `${uid}@example.test`; const password = "Monitor-password-123!"; const siteId = `monitor-site-${suffix}`; const mapId = `monitor-map-${suffix}`; const zoneId = `monitor-zone-${suffix}`; const cameraId = `monitor-camera-${suffix}`; const sourceId = `monitor-source-${suffix}`; const registrationId = `monitor-registration-${suffix}`; const referenceId = `monitor-reference-${suffix}`; const storageKey = `test/${referenceId}.jpg`;
+  // Keep every analytics assertion in one stable UTC minute. Using Date.now()
+  // per sample made this test split into two correct buckets near :59.
+  const capturedNowMs = Date.now();
+  const capturedMinuteStartMs = Math.floor(capturedNowMs / 60_000) * 60_000;
+  const capturedBaseMs = capturedMinuteStartMs + Math.min(Math.max(capturedNowMs - capturedMinuteStartMs, 1_000), 50_000);
   let token = ""; let sessionId = ""; let leaseToken = ""; let episodeId = "";
   let includeSpill = true; let binState: "normal" | "full" | "overflow" = "normal";
   beforeAll(async () => {
@@ -34,23 +39,27 @@ run("V2 live monitoring", () => {
     const claim = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({}); expect(claim.status).toBe(201); sessionId = claim.body.sessionId; leaseToken = claim.body.leaseToken;
     const second = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({}); expect(second.status).toBe(409);
     const start = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/start`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).send({}); expect(start.status).toBe(201); episodeId = start.body.episodeId;
-    const capturedAt = new Date().toISOString();
+    const capturedAt = new Date(capturedBaseMs + 1_000).toISOString();
     const sample = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "1").field("capturedAt", capturedAt).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" });
     expect(sample.status).toBe(200); expect(sample.body.observation).toMatchObject({ peopleCount: 4, isSimulation: true, people: [{ confidence: 0.88 }], bins: [{ binId: "bin-1", state: "normal", confidence: 0.9 }] });
     expect((await firestore.collection("analysisRuns").where("cameraId", "==", cameraId).get()).size).toBe(0);
     const media = await firestore.collection("mediaAssets").where("cameraId", "==", cameraId).get(); expect(media.size).toBe(1); expect(media.docs[0].data().purpose).toBe("alert_evidence");
     expect(inspectV2LiveMemory(cameraId).temporalKeys).toHaveLength(3);
+    expect(await flushV2MinuteBuckets(siteId, new Date())).toBe(0);
     expect(await flushV2MinuteBuckets(siteId, new Date(Date.now() + 60000))).toBe(1);
     expect((await firestore.collection("analyticsMinuteBuckets").where("siteId", "==", siteId).get()).size).toBe(1);
   });
 
   it("combines full and overflow into one escalating bin-service Alert", async () => {
     includeSpill = false; binState = "full";
-    for (const sequence of [2, 3]) { const response = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", String(sequence)).field("capturedAt", new Date(Date.now() + sequence * 1000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(response.status).toBe(200); }
+    for (const sequence of [2, 3]) { const response = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", String(sequence)).field("capturedAt", new Date(capturedBaseMs + sequence * 1_000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(response.status).toBe(200); }
     let alerts = await firestore.collection("alerts").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get(); expect(alerts.size).toBe(1); expect(alerts.docs[0].data()).toMatchObject({ observedCondition: "full", severity: "warning" });
     binState = "overflow";
-    const overflow = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "4").field("capturedAt", new Date(Date.now() + 4000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(overflow.status).toBe(200);
+    const overflow = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "4").field("capturedAt", new Date(capturedBaseMs + 4_000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(overflow.status).toBe(200);
     alerts = await firestore.collection("alerts").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get(); expect(alerts.size).toBe(1); expect(alerts.docs[0].data()).toMatchObject({ observedCondition: "overflow", severity: "critical" }); expect((await firestore.collection("activeAlertKeys").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get()).size).toBe(1);
+    await flushV2MinuteBuckets(siteId,new Date(Date.now()+120000));
+    const buckets=await firestore.collection("analyticsMinuteBuckets").where("siteId","==",siteId).get();
+    expect(buckets.size).toBe(1); expect(buckets.docs[0].data().siteTotals.successfulSampleCount).toBe(4); expect(buckets.docs[0].data().siteTotals.peopleSum).toBe(16); expect(buckets.docs[0].data().siteTotals.inferenceLatencyMsSum).toBe(48);
   });
 
   it("exposes Alert traceability, ages warnings, and dismisses with history", async () => {

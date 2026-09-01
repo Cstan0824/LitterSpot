@@ -17,6 +17,7 @@ if (!email || !password || !superadminEmail || !superadminPassword) throw new Er
 assertV2MigrationTarget({
   appEnvironment: env.appEnvironment,
   firebaseProjectId: env.firebaseProjectId,
+  expectedFirebaseProjectId: env.expectedFirebaseProjectId,
   firestoreDatabaseId: env.firebaseDatabaseId,
   emulator: Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST),
 });

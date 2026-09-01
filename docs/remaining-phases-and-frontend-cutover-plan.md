@@ -2,7 +2,7 @@
 
 ## Current position
 
-Canonical backend Phases 0 through 10 are complete. Phase 9's follow-up audit is resolved. Phase 11 analytics/read models are next, followed by the deferred frontend cutover.
+Canonical backend Phases 0 through 11 are implemented and locally verified. Phase 9's follow-up audit and the Phase 11 correctness review are resolved. Cloud acceptance testing remains a user-run step; the next build phase is the deferred frontend integration and cutover.
 
 The current `main` frontend is intentionally transitional. Some pages use V1 APIs and some use hardcoded data. It may continue that way while the frontend team prepares its complete first-version page and modal set. The V2 backend must not be merged into `main` by itself.
 
@@ -12,7 +12,7 @@ The current `main` frontend is intentionally transitional. Some pages use V1 API
 | --- | --- | --- |
 | 9 | Backend + Orchestrator teammate | Completed, including [follow-up automation hardening](phase-9-follow-up-audit.md) |
 | 10 | Backend | Delivered: notifications, audit, Site deactivation reconciliation and System read model |
-| 11 | Backend | Final Dashboard, daily analytics and Bin Placement APIs |
+| 11 | Backend | Implemented and locally verified: Dashboard, daily analytics and Bin Placement APIs |
 | 12 | Backend owner integrating frontend | Complete first frontend integration, V1 retirement, repository organization and atomic V2 cutover to `main` |
 | 13 | Frontend team, supported by backend owner | Missing/new UI built and wired directly against stable V2 |
 | 14 | Whole team | Final end-to-end acceptance, calibration, cleanup and release documentation |
@@ -74,6 +74,8 @@ Before Phase 12 begins, the frontend team provides one commit containing its com
 Record this commit as the frontend integration baseline. Coordinate a short integration window so large frontend restructures do not land while the backend owner is replacing its data layer.
 
 ## Phase 12 — first wired V2 system
+
+The source-based breakdown of the delivered UI and integration steps is in [Phase 12 UI integration plan](phase-12-ui-v2-integration-plan.md). The first delivery is already merged locally; newer main changes must be reviewed before the integration baseline is finalized. Phase 11 acceptance guidance is in [Phase 11 Postman testing](phase-11-postman-testing.md).
 
 ### 12.1 Merge and inventory
 

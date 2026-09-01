@@ -218,6 +218,7 @@ This tracks Site-wide jobs whose effects can exceed one Firestore transaction, i
 | `counts` | map | yes | Discovered and processed Alerts, Work Orders, Cleaners and outbox events. |
 | `cursorState` | map | yes | Resumable collection cursors. |
 | `lastErrorCode` | string or null | yes | Safe retry diagnosis. |
+| `lastErrorSafeDetails` | map or null | no | Allowlisted failure category used for support. It never stores provider messages, paths, credentials or stack traces. |
 | `createdAt` | timestamp | yes | Request time. |
 | `startedAt` | timestamp or null | yes | Worker start. |
 | `updatedAt` | timestamp | yes | Latest checkpoint. |

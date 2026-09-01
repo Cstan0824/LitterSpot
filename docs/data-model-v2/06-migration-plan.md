@@ -11,10 +11,10 @@ This migration covers database schema, backend modules, tests, Postman contracts
 | Environment | Project/database | Migration policy |
 | --- | --- | --- |
 | Automated tests | `demo-litterspot` emulators | Recreate for every test run |
-| Persistent development | `litterspot-dev-jeremy/(default)` | Target for V2 bootstrap and manual API testing |
-| Shared production/team project | `litterspot/litterspot` | Never read, reset, write or migrate during this rebuild |
+| Persistent development | `litterspot-v2-database/(default)` | Target for V2 bootstrap and manual API testing |
+| Retired team prototype | `litterspot/litterspot` | Retained as history; no active configuration or new writes |
 
-The persistent development project is currently empty. Therefore this is a schema and code migration followed by clean bootstrap, not a V1 document transformation.
+The persistent development project began empty and uses a clean bootstrap, not a V1 document transformation. The retired `litterspot-dev-jeremy/(default)` target is not a migration source.
 
 If the team later asks to preserve shared-project data, that becomes a separate approved export/transform/import project. Nothing in this plan grants permission to run against it.
 

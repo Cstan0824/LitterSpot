@@ -9,6 +9,7 @@ const confirmation = process.argv.find((argument) => argument.startsWith("--conf
 const target = {
   appEnvironment: env.appEnvironment,
   firebaseProjectId: env.firebaseProjectId,
+  expectedFirebaseProjectId: env.expectedFirebaseProjectId,
   firestoreDatabaseId: env.firebaseDatabaseId,
   emulator: Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST),
 };

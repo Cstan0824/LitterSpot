@@ -29,6 +29,7 @@ import { HttpError } from "./shared/httpError.js";
 import { env } from "./config/env.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { rateLimit } from "./middleware/rateLimit.js";
+import { isFirestoreQuotaError } from "./shared/firestoreErrors.js";
 import { orchestratorInternalRoutes, orchestratorSupervisorRoutes } from "./routes/orchestratorRoutes.js";
 import { binReplacementRoutes } from "./routes/binReplacementRoutes.js";
 import { superadminRoutes } from "./routes/superadminRoutes.js";
@@ -41,6 +42,7 @@ import { v2OrchestratorInternalRoutes, v2OrchestratorSupervisorRoutes } from "./
 import { v2TestSupportRoutes } from "./routes/v2TestSupportRoutes.js";
 import { v2OperationsRoutes } from "./routes/v2OperationsRoutes.js";
 import { auditV2Mutation } from "./middleware/auditV2Mutation.js";
+import { phase11AnalyticsRoutes, phase11BinPlacementRoutes, phase11DashboardRoutes } from "./routes/phase11Routes.js";
 
 export const app = express();
 
@@ -83,6 +85,10 @@ app.use("/api/superadmin", requireSuperadmin, superadminRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
 app.use("/api/operations/v2", v2OperationsRoutes);
+app.use(["/api/dashboard/v2", "/api/analytics/v2", "/api/bin-placement/v2"], auditV2Mutation);
+app.use("/api/dashboard/v2", phase11DashboardRoutes);
+app.use("/api/analytics/v2", phase11AnalyticsRoutes);
+app.use("/api/bin-placement/v2", phase11BinPlacementRoutes);
 app.use(["/api/site-map", "/api/camera-creation", "/api/monitoring", "/api/alerts", "/api/supervisors"], auditV2Mutation);
 app.use("/api/site-map", siteMapRoutes);
 app.use("/api/camera-creation", v2CameraRoutes);
@@ -117,6 +123,9 @@ app.use("/internal/orchestrator", orchestratorInternalRoutes);
 app.use((req, res) => res.status(404).json({ error: "Route not found.", requestId: req.requestId }));
 
 app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
+  if (isFirestoreQuotaError(error)) {
+    return res.status(503).json({ error: "Cloud database quota is temporarily unavailable. Try again after the daily quota resets.", code: "firestore_quota_exceeded", requestId: req.requestId });
+  }
   if (error instanceof ZodError) {
     return res.status(400).json({ error: "Invalid request.", details: error.flatten(), requestId: req.requestId });
   }

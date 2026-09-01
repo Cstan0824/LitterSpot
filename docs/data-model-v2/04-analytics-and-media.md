@@ -173,6 +173,8 @@ One document represents one UTC minute for one Site and holds per-Zone numeric a
 
 Node writes the bucket with deterministic merge operations. Late samples can reconcile only inside a bounded lateness window. Daily aggregation reads final minute buckets plus operational events.
 
+The implemented `minute-v3` path adds an unindexed `contributions` map. Stable Camera/Episode contribution IDs allow retry replacement and merging of late contributions. Live lateness is limited to two minutes. Coverage contributions estimate offline seconds at minute granularity, not as precise connection histories.
+
 ## `analyticsDailySummaries/{summaryId}`
 
 One compact Site-wide document per Site-local calendar date survives after minute buckets expire.
@@ -212,6 +214,8 @@ One compact Site-wide document per Site-local calendar date survives after minut
 
 Operational Alert/Work events remain the rebuild source of truth. Event documents store `analyticsAppliedVersion` and `analyticsAppliedAt` so a transaction can apply each event to a daily summary once. Rebuild tooling can discard/recreate summaries by date from retained histories.
 
+The implemented `daily-v3` path instead replaces snapshots from retained event timestamps, without depending on incremental event-marker fields. It adds `sourceSignature` for stale detection, `zoneMinuteMetrics` for retained sampling totals, and `minuteDataRetired` to preserve them after expiry. Expired source data must not overwrite previously preserved minute totals with zero.
+
 ## `dashboardSummaries/{siteId}`
 
 This is a replaceable read cache, not a source of truth.
@@ -245,7 +249,7 @@ warning Work = 1 point
 critical Work = 2 points
 ```
 
-Tie order is active Work points, qualifying issues in the same 15-minute window, people pressure, then Zone name.
+Tie order follows the clarified requirements: qualifying issues in the same 15-minute window, people pressure, Zone name, then Zone ID. Active Work points already contribute to the 50/50 score.
 
 ## `binPlacementSnapshots/{siteId}`
 
@@ -270,8 +274,8 @@ This singleton holds the latest calculated current recommendation list. Refresh 
 | Field | Type | Meaning and workflow use |
 | --- | --- | --- |
 | `zoneId` / `zoneNameSnapshot` | string | Ranked Zone. |
-| `rank` | integer | 1 is highest priority. |
-| `totalScore` | number 0..100 | Equal-third combined score. |
+| `rank` | integer or null | 1 is highest priority; null for insufficient data. |
+| `totalScore` | number 0..100 or null | Equal-third score; null with fewer than two observed completed days. |
 | `peopleActivity` | factor map | Raw, normalized, one-third contribution. |
 | `cleaningFrequency` | factor map | Resolved Work raw count, normalized, one-third contribution. |
 | `binServiceFrequency` | factor map | Bin-service Alert raw count, normalized, one-third contribution. |
@@ -280,6 +284,8 @@ This singleton holds the latest calculated current recommendation list. Refresh 
 | `excludedUntil` | timestamp or null | Zone exclusion after an Intervention. |
 
 Recommendations update daily and on Supervisor refresh. Implementing one does not create a pending state. It creates an Intervention and excludes that Zone from recommendation ranking for two full Site-local days.
+
+The implementation also stores `sourceFingerprint`, `mapRevisionId`, `timeZoneSnapshot`, `requestedStart`, `requestedEnd` and `availableDays`. Like factors are normalized across sufficient active Zones. API ranges allow 2 through 3660 calendar days. Offline-only coverage cannot qualify a Zone for scoring.
 
 ## `binPlacementInterventions/{interventionId}`
 
@@ -302,6 +308,20 @@ Recommendations update daily and on Supervisor refresh. Implementing one does no
 | `createdAt` | timestamp | yes | Record creation time, normally equal to implementation time. |
 
 Before/after comparison is calculated on request from this timestamp and daily summaries. The Supervisor may request any integer day count of at least 2. The API returns partial coverage when the intervention is newer than the requested after period or old source data is unavailable. It never pads missing days.
+
+## `phase11MaintenanceStates/{siteId}`
+
+One internal marker prevents repeated daily analytics work for an unchanged Site-local date.
+
+| Field | Type | Required | Meaning and workflow use |
+| --- | --- | ---: | --- |
+| `schemaVersion` | integer | yes | `2`. |
+| `siteId` | string | yes | Site and document identity. |
+| `lastCompletedLocalDate` | string | yes | Site-local date whose scheduled finalization, retention and recommendation maintenance completed. |
+| `lastCompletedAt` | timestamp | yes | Completion time of that daily sweep. |
+| `recommendationLookbackDays` | integer | yes | Lookback retained for the scheduled recommendation refresh. Defaults to 30. |
+
+The marker is replaceable worker state, not operational history. Missing state triggers one bounded daily check. It never stores a minute-bucket cursor or causes a scan of retained history.
 
 ## Analytics indexing and write cost
 

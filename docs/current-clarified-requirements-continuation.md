@@ -103,11 +103,11 @@ Source replacement preserves both structural `status` and `monitoringEnabled`. R
 
 **Confirmed** No destructive reset has been executed yet. Reset requires an explicit implementation-time approval and exact target validation.
 
-**Confirmed current state** The isolated development project currently has zero Firebase Authentication users and zero Firestore collections. Initial bootstrap requires no deletion. Existing shared-production Auth users, Firestore data, and `data/media-store` files remain untouched and are not reused.
+**Updated 2026-09-01** The current isolated development target is `litterspot-v2-database/(default)`. It began empty and was clean-bootstrapped for Phase 11 testing. The previous `litterspot-dev-jeremy/(default)` project is retained but no longer used after exhausting its Spark read quota. Existing shared-production Auth users, Firestore data, and `data/media-store` files remain untouched and are not reused.
 
 The reset/bootstrap tooling must:
 
-- target only the isolated development Firebase project `litterspot-dev-jeremy` and database `(default)` after explicit validation;
+- require the configured cloud project to exactly match `EXPECTED_FIREBASE_PROJECT_ID` and database `(default)` after explicit validation;
 - delete only an allowlisted set of LitterSpot application collections;
 - support a dry run that reports document counts;
 - bootstrap the new Site and Root Supervisor after the new identity schema exists;
@@ -116,7 +116,7 @@ The reset/bootstrap tooling must:
 **Confirmed environment isolation**:
 
 - shared production Firebase project `litterspot` and named database `litterspot` are out of scope for this backend rebuild;
-- persistent manual development uses `litterspot-dev-jeremy/(default)`;
+- persistent manual development uses `litterspot-v2-database/(default)`;
 - automated tests continue using Firebase Auth and Firestore emulators under demo project `demo-litterspot`;
 - the backend verifies `APP_ENV`, configured project ID, expected project ID, service-account project ID, and emulator-host consistency before connecting;
 - development-cloud media uses a separate ignored local directory under `.local/dev-cloud-media`;
@@ -176,7 +176,7 @@ The sandbox:
 
 ### 2026-08-30 — Isolated development Firebase
 
-- Persistent backend development uses separate project `litterspot-dev-jeremy` with `(default)` Firestore.
+- Persistent backend development and the prototype use the canonical project `litterspot-v2-database` with `(default)` Firestore.
 - The shared production Firebase project remains untouched.
 - Automated tests remain emulator-backed.
 - Backend startup fails closed on project/credential mismatch.

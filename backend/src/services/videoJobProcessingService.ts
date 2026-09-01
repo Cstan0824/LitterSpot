@@ -709,33 +709,35 @@ export async function recoverVideoJobs() {
   const now = Date.now();
   const preserveStagingNames = new Set<string>();
   let queued = 0;
-  let cursor: QueryDocumentSnapshot | undefined;
-  do {
-    let query = firestore.collection("processingJobs").orderBy(FieldPath.documentId()).limit(100);
-    if (cursor) query = query.startAfter(cursor);
-    const snapshot = await query.get();
-    for (const document of snapshot.docs) {
-      let data = document.data();
-      if (data.type !== "video") continue;
-      if (data.status === "uploading") {
-        try {
-          const recovered = await recoverUploadingVideoJob(document, data, preserveStagingNames);
-          if (recovered.stagingName) preserveStagingNames.add(recovered.stagingName);
-          data = { ...data, status: recovered.status };
-        } catch (error) {
-          console.error(`Video upload ${document.id} recovery is still pending:`, error);
-          continue;
+  for (const status of ["uploading", "queued", "processing"] as const) {
+    let cursor: QueryDocumentSnapshot | undefined;
+    do {
+      let query = firestore.collection("processingJobs").where("status", "==", status).orderBy(FieldPath.documentId()).limit(100);
+      if (cursor) query = query.startAfter(cursor);
+      const snapshot = await query.get();
+      for (const document of snapshot.docs) {
+        let data = document.data();
+        if (data.type !== "video") continue;
+        if (data.status === "uploading") {
+          try {
+            const recovered = await recoverUploadingVideoJob(document, data, preserveStagingNames);
+            if (recovered.stagingName) preserveStagingNames.add(recovered.stagingName);
+            data = { ...data, status: recovered.status };
+          } catch (error) {
+            console.error(`Video upload ${document.id} recovery is still pending:`, error);
+            continue;
+          }
+        }
+        const expired = data.status === "processing"
+          && (!(data.leaseExpiresAt instanceof Timestamp) || data.leaseExpiresAt.toMillis() <= now);
+        if (data.status === "queued" || expired) {
+          if (enqueueVideoJob(document.id)) queued += 1;
         }
       }
-      const expired = data.status === "processing"
-        && (!(data.leaseExpiresAt instanceof Timestamp) || data.leaseExpiresAt.toMillis() <= now);
-      if (data.status === "queued" || expired) {
-        if (enqueueVideoJob(document.id)) queued += 1;
-      }
-    }
-    cursor = snapshot.docs.at(-1);
-    if (snapshot.size < 100) break;
-  } while (cursor);
+      cursor = snapshot.docs.at(-1);
+      if (snapshot.size < 100) break;
+    } while (cursor);
+  }
 
   // Orphans can exist when a process dies before its first Firestore commit.
   // A one-hour age gate avoids racing active uploads on the same host.

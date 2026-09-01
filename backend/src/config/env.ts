@@ -65,4 +65,7 @@ export const env = {
   orchestratorDebugOutput: booleanSetting("ORCHESTRATOR_DEBUG_OUTPUT", false),
   orchestratorDebugRoot: process.env.ORCHESTRATOR_DEBUG_ROOT ?? defaultOrchestratorDebugRoot,
   orchestratorWorkerEnabled: booleanSetting("ORCHESTRATOR_WORKER_ENABLED", true),
+  analyticsWorkerEnabled: booleanSetting("ANALYTICS_WORKER_ENABLED", false),
+  siteOperationRecoveryIntervalMs: numberSetting("SITE_OPERATION_RECOVERY_INTERVAL_MS", 300_000, { integer: true, minimum: 10_000, maximum: 86_400_000 }),
+  siteOperationRecoveryMaxBackoffMs: numberSetting("SITE_OPERATION_RECOVERY_MAX_BACKOFF_MS", 3_600_000, { integer: true, minimum: 60_000, maximum: 86_400_000 }),
 };

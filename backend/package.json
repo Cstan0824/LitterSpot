@@ -21,6 +21,7 @@
     "v2:validate-schema": "tsx src/scripts/v2/validateSchema.ts",
     "v2:reset-application-data": "tsx src/scripts/v2/resetApplicationData.ts",
     "v2:bootstrap-development": "tsx src/scripts/v2/bootstrapDevelopmentSite.ts",
+    "v2:seed-phase11": "tsx src/scripts/v2/seedPhase11Development.ts",
     "v2:smoke-orchestrator-provider": "tsx src/scripts/v2/smokeOrchestratorProvider.ts",
     "test": "vitest run"
   },

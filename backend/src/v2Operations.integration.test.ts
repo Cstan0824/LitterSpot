@@ -9,7 +9,7 @@ import { firebaseAuth, firestore } from "./config/firebase.js";
 import { env } from "./config/env.js";
 import { writeV2Notification, listV2Notifications } from "./services/v2NotificationService.js";
 import { updateV2SiteStatus } from "./services/v2SuperadminService.js";
-import { reconcileV2SiteOperation } from "./services/v2SiteOperationService.js";
+import { reconcileV2SiteOperation, recoverV2SiteOperations } from "./services/v2SiteOperationService.js";
 import { recordV2SystemEvent } from "./services/v2SystemService.js";
 
 const run = process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST ? describe : describe.skip;
@@ -124,6 +124,16 @@ run("V2 platform operations", () => {
     await updateV2SiteStatus(site, "active", "finished", actor, suffix);
     const alerts = await firestore.collection("alerts").where("siteId", "==", site).get();
     expect(alerts.docs.every(doc => doc.data().status === "dismissed")).toBe(true);
+  });
+
+  it("marks an invalid recovery operation failed instead of retrying it forever", async () => {
+    const site = `${siteId}-invalid-recovery`, operationId = `invalid-recovery-${suffix}`;
+    await firestore.collection("sites").doc(site).set({ schemaVersion: 2, siteId: site, status: "inactive", deactivationOperationId: operationId });
+    const reference = firestore.collection("siteOperations").doc(operationId);
+    await reference.set({ schemaVersion: 2, siteId: site, operationId, type: "deactivate", status: "pending", cursorState: { stage: 999 }, counts: {} });
+    await recoverV2SiteOperations();
+    expect((await reference.get()).data()).toMatchObject({ status: "failed", lastErrorCode: "reconciliation_failed" });
+    expect(await recoverV2SiteOperations()).toBe(0);
   });
 
   it("aggregates safe System events and records recovery", async () => {

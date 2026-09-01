@@ -4,22 +4,24 @@ import { V2_DATABASE_MODEL, V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 export type MigrationTarget = {
   appEnvironment: AppEnvironment;
   firebaseProjectId: string;
+  expectedFirebaseProjectId: string;
   firestoreDatabaseId: string;
   emulator: boolean;
 };
 
 export function assertV2MigrationTarget(target: MigrationTarget) {
   if (target.appEnvironment === "local-emulator") {
-    if (!target.emulator || target.firebaseProjectId !== "demo-litterspot" || target.firestoreDatabaseId !== "litterspot") {
+    if (!target.emulator || target.firebaseProjectId !== "demo-litterspot" || target.expectedFirebaseProjectId !== "demo-litterspot" || target.firestoreDatabaseId !== "litterspot") {
       throw new Error("V2 emulator migration commands require demo-litterspot/litterspot with Firebase emulators enabled.");
     }
     return;
   }
   if (target.appEnvironment !== "development-cloud"
     || target.emulator
-    || target.firebaseProjectId !== "litterspot-dev-jeremy"
+    || !target.expectedFirebaseProjectId
+    || target.firebaseProjectId !== target.expectedFirebaseProjectId
     || target.firestoreDatabaseId !== "(default)") {
-    throw new Error("V2 cloud migration commands are limited to development-cloud litterspot-dev-jeremy/(default).");
+    throw new Error("V2 cloud migration commands require an exact EXPECTED_FIREBASE_PROJECT_ID match and the (default) development database.");
   }
 }
 
