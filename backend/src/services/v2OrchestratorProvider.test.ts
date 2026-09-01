@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 import { assignmentChildEnvironment, createPythonAssignmentSelector, writeAssignmentDebug } from "./v2OrchestratorProvider.js";
 
 const directories: string[] = [];
+const systemPythonPath = process.platform === "win32" ? "python" : "python3";
 async function script(source: string) {
   const directory = await mkdtemp(join(tmpdir(), "litterspot-provider-")); directories.push(directory);
   const path = join(directory, "provider.py"); await writeFile(path, source); return path;
@@ -23,14 +24,14 @@ describe("V2 Python assignment bridge", () => {
 
   it("parses one strict decision through stdin/stdout", async () => {
     const path = await script(`import json,sys\np=json.load(sys.stdin)\njson.dump({"alertId":p["context"]["eligiblePairs"][0]["alertId"],"cleanerId":"cleaner","rationaleSummary":"selected","provider":"fake","model":"fake"},sys.stdout)\n`);
-    const selector = createPythonAssignmentSelector({ scriptPath: path });
+    const selector = createPythonAssignmentSelector({ pythonPath: systemPythonPath, scriptPath: path });
     await expect(selector.select({ eligiblePairs: [{ alertId: "alert", cleanerId: "cleaner" }] }, { provider: "fake", model: "fake", requestTimeoutMs: 1000 }, "run")).resolves.toMatchObject({ alertId: "alert", cleanerId: "cleaner" });
   });
 
   it("rejects malformed and oversized output without exposing stderr", async () => {
-    const malformed = createPythonAssignmentSelector({ scriptPath: await script(`print("not-json")\n`) });
+    const malformed = createPythonAssignmentSelector({ pythonPath: systemPythonPath, scriptPath: await script(`print("not-json")\n`) });
     await expect(malformed.select({}, { provider: "fake", model: "fake", requestTimeoutMs: 1000 }, "run")).rejects.toThrow();
-    const oversized = createPythonAssignmentSelector({ scriptPath: await script(`print("x"*140000)\n`) });
+    const oversized = createPythonAssignmentSelector({ pythonPath: systemPythonPath, scriptPath: await script(`print("x"*140000)\n`) });
     await expect(oversized.select({}, { provider: "fake", model: "fake", requestTimeoutMs: 1000 }, "run")).rejects.toThrow("provider_output_limit");
   });
 
