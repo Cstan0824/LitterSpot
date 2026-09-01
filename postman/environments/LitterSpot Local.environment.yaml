@@ -135,12 +135,16 @@ values:
   - key: v2SiteId
     value: sunway-theme-park
   - key: v2ActiveMapRevisionId
-    value: sunway-theme-park-initial
+    value: ''
+  - key: v2BootstrapMapOnly
+    value: 'false'
   - key: v2ZoneId
     value: main-entrance
   - key: v2RegularSupervisorEmail
     value: regular-supervisor@sunway-test.com
   - key: v2RegularSupervisorPassword
+    secret: true
+  - key: v2RegularSupervisorToken
     secret: true
   - key: v2RegularSupervisorId
     value: ''
@@ -152,6 +156,10 @@ values:
     secret: true
   - key: v2CleanerId
     value: ''
+  - key: v2CleanerBootstrapOnly
+    value: 'false'
+  - key: v2CleanerCreateIdempotencyKey
+    value: postman-v2-cleaner-bootstrap-001
   - key: v2CleanerRevision
     value: ''
   - key: v2AlertId

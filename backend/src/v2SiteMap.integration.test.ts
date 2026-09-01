@@ -68,6 +68,20 @@ run("V2 Site Map workflow", () => {
     expect((await firestore.collection("siteMapRevisions").doc(response.body.station.mapRevisionId).collection("cleanerStations").doc(cleanerId).get()).exists).toBe(true);
   });
 
+  it("blocks a Regular Supervisor from full Site Map draft mutations", async () => {
+    const routes = [
+      request(app).post("/api/site-map/draft").set("Authorization", `Bearer ${regularToken}`).send({}),
+      request(app).post("/api/site-map/draft/validate").set("Authorization", `Bearer ${regularToken}`),
+      request(app).post("/api/site-map/draft/publish").set("Authorization", `Bearer ${regularToken}`),
+      request(app).delete("/api/site-map/draft").set("Authorization", `Bearer ${regularToken}`),
+    ];
+    const responses = await Promise.all(routes);
+    for (const response of responses) {
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe("Root Supervisor access is required.");
+    }
+  });
+
   it("removes omitted draft geometry and retires the removed stable Zone", async () => {
     const site = await firestore.collection("sites").doc(siteId).get();
     const zoneA = `zone-a-${suffix}`;

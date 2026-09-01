@@ -1,6 +1,5 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 // TypeScript may complain about missing type declarations for CSS imports.
 // @ts-ignore
 import "./styles.css";
@@ -11,63 +10,47 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
-import { firebaseAuth } from "./config/firebase";
-import { apiFetch, readApiError } from "./services/apiClient";
 import { FieldStationShell } from "./components/FieldStationShell";
-import { CleanerMobileApp } from "./features/cleaner/CleanerMobileApp";
+import { RoleIntegrationPendingPage } from "./components/RoleIntegrationPendingPage";
+import { SessionProvider, useSession } from "./session/SessionProvider";
+import { supervisorRouteFromHash, type SupervisorRoute } from "./services/v2/routing";
+import { deriveSupervisorCapabilities } from "./services/v2/session";
+import { sessionErrorCopy } from "./services/v2/errors";
 
 type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
-type Route = OperationsPage | "pipeline" | "playground" | "status" | "camera-registration" | "cleaner";
-type Supervisor = { uid: string; email: string; displayName: string };
 
-function routeFromHash(): Route {
-  const route = location.hash.replace(/^#\/?/, "").split("?")[0];
-  if (["alerts", "history", "placement", "cameras", "admin", "pipeline", "playground", "status", "camera-registration", "cleaner"].includes(route)) return route as Route;
-  return "dashboard";
+function SessionFailure({ error, onRetry, onLogout }: { error: unknown; onRetry: () => void; onLogout: () => void }) {
+  const copy = sessionErrorCopy(error);
+  return <main className="role-pending-page"><section className="role-pending-panel error">
+    <div className="login-brand"><b>LS</b><div><strong>LitterSpot</strong><span>Application session</span></div></div>
+    <h1>{copy.title}</h1><p>{copy.message}</p>
+    <div className="role-pending-actions"><button className="primary" type="button" onClick={onRetry}>Try again</button><button className="outline-button" type="button" onClick={onLogout}>Sign out</button></div>
+  </section></main>;
 }
 
 function App() {
-  const [authReady, setAuthReady] = useState(false);
-  const [supervisor, setSupervisor] = useState<Supervisor | null>(null);
-  const [profileError, setProfileError] = useState<string>();
-  const [route, setRoute] = useState<Route>(routeFromHash);
-  const [demoCleanerSession, setDemoCleanerSession] = useState(false);
+  const sessionState = useSession();
+  const [route, setRoute] = useState<SupervisorRoute>(() => supervisorRouteFromHash(location.hash));
   useEffect(() => {
-    const syncRoute = () => setRoute(routeFromHash());
+    const syncRoute = () => setRoute(supervisorRouteFromHash(location.hash));
     addEventListener("hashchange", syncRoute);
     return () => removeEventListener("hashchange", syncRoute);
   }, []);
 
-  useEffect(() => onAuthStateChanged(firebaseAuth, async (user) => {
-    setProfileError(undefined);
-    if (!user) {
-      setSupervisor(null);
-      setAuthReady(true);
-      return;
-    }
-    try {
-      const response = await apiFetch("/api/me");
-      if (!response.ok) throw new Error(await readApiError(response));
-      const body = await response.json() as { supervisor: Supervisor };
-      setSupervisor(body.supervisor);
-    } catch (error) {
-      setSupervisor(null);
-      setProfileError(error instanceof Error ? error.message : "Supervisor profile could not be loaded.");
-    } finally {
-      setAuthReady(true);
-    }
-  }), []);
+  if (sessionState.status === "checking") return <main className="ops-loading">Checking application session…</main>;
+  if (sessionState.status === "anonymous") return <LoginPage onLogin={sessionState.signIn} />;
+  if (sessionState.status === "error") return <SessionFailure error={sessionState.error} onRetry={() => { void sessionState.retry(); }} onLogout={() => { void sessionState.signOut(); }} />;
 
-  if (demoCleanerSession) return <CleanerMobileApp onLogout={() => { setDemoCleanerSession(false); location.hash = "/"; }} />;
-  if (!authReady) return <main className="ops-loading">Checking Supervisor session…</main>;
-  if (profileError && firebaseAuth.currentUser) return <main className="ops-loading"><p>{profileError}</p><button className="outline-button" onClick={() => void signOut(firebaseAuth)}>Sign out</button></main>;
-  if (!supervisor) return <LoginPage onLogin={async (email, password) => { await signInWithEmailAndPassword(firebaseAuth, email, password); }} onDemoCleaner={() => { setDemoCleanerSession(true); location.hash = "/cleaner"; }} />;
-  if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DetectionTestPage /></FieldStationShell>;
-  if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><PipelinePage /></FieldStationShell>;
-  if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><CameraRegistrationPage /></FieldStationShell>;
-  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void signOut(firebaseAuth); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
-  return <OperationsConsole supervisor={supervisor} page={route === "cleaner" ? "dashboard" : route} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void signOut(firebaseAuth); }} />;
+  const session = sessionState.session;
+  if (session.role !== "supervisor") return <RoleIntegrationPendingPage session={session} onLogout={() => { void sessionState.signOut(); }} />;
+
+  const supervisor = session.supervisor;
+  const capabilities = deriveSupervisorCapabilities(supervisor.authority);
+  if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DetectionTestPage /></FieldStationShell>;
+  if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><PipelinePage /></FieldStationShell>;
+  if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} /></FieldStationShell>;
+  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
+  return <OperationsConsole supervisor={supervisor} capabilities={capabilities} page={route as OperationsPage} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void sessionState.signOut(); }} />;
 }
 
-
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><SessionProvider><App /></SessionProvider></StrictMode>);

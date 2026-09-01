@@ -11,6 +11,13 @@ body:
   type: json
   content: '{}'
 scripts:
+  - type: beforeRequest
+    code: |-
+      if (pm.environment.get('v2BootstrapMapOnly') !== 'true') {
+        pm.execution.skipRequest();
+        console.warn('This bootstrap-only request is disabled. Publishing this draft replaces the Active Site Map.');
+      }
+    language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Draft published', () => pm.response.to.have.status(200));

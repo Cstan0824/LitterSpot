@@ -25,9 +25,16 @@ body:
         "sun":{"startMinute":0,"endMinute":0}
       },
       "stationPoint": {"xMeters":10,"yMeters":10},
-      "idempotencyKey": "postman-v2-cleaner-001"
+      "idempotencyKey": "{{v2CleanerCreateIdempotencyKey}}"
     }
 scripts:
+  - type: beforeRequest
+    code: |-
+      if (pm.environment.get('v2CleanerBootstrapOnly') !== 'true' || pm.environment.get('v2CleanerId')) {
+        pm.execution.skipRequest();
+        console.warn('Cleaner creation is disabled. Use a new email, staff code, and idempotency key only when intentionally creating another Cleaner.');
+      }
+    language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Cleaner created', () => pm.response.to.have.status(201));

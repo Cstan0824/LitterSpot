@@ -20,14 +20,19 @@ if (env.firebaseProjectId !== "litterspot-v2-database" || env.firebaseDatabaseId
 }
 
 const siteId = "sunway-theme-park";
-const mapRevisionId = "sunway-theme-park-initial";
-const zones = [
-  { id: "main-entrance", name: "Main Entrance", polygon: [{ xMeters: 5, yMeters: 5 }, { xMeters: 45, yMeters: 5 }, { xMeters: 45, yMeters: 45 }, { xMeters: 5, yMeters: 45 }] },
-  { id: "food-court", name: "Food Court", polygon: [{ xMeters: 55, yMeters: 5 }, { xMeters: 95, yMeters: 5 }, { xMeters: 95, yMeters: 45 }, { xMeters: 55, yMeters: 45 }] },
-];
 const site = await firestore.collection("sites").doc(siteId).get();
-if (!site.exists || site.data()?.schemaVersion !== 2 || site.data()?.status !== "active" || site.data()?.activeMapRevisionId !== mapRevisionId) {
+const mapRevisionId = String(site.data()?.activeMapRevisionId ?? "");
+if (!site.exists || site.data()?.schemaVersion !== 2 || site.data()?.status !== "active" || !mapRevisionId) {
   throw new Error("Run the V2 development bootstrap before seeding Phase 11.");
+}
+const geometry = await firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("zoneGeometry").get();
+const zones = geometry.docs.map((document) => ({
+  id: document.id,
+  name: String(document.data()?.zoneNameSnapshot ?? document.id),
+  polygon: document.data()?.polygon as Array<{ xMeters: number; yMeters: number }>,
+})).filter((zone) => Array.isArray(zone.polygon) && zone.polygon.length >= 3);
+if (!zones.some((zone) => zone.id === "main-entrance") || !zones.some((zone) => zone.id === "food-court")) {
+  throw new Error("The active V2 map must contain Main Entrance and Food Court geometry. Run v2:prepare-integration-baseline first.");
 }
 
 const timeZone = String(site.data()?.timeZone ?? "Asia/Kuala_Lumpur");
@@ -38,9 +43,7 @@ const batch = firestore.batch();
 for (const zone of zones) {
   const data = { schemaVersion: 2, siteId, zoneId: zone.id, name: zone.name, nameNormalized: zone.name.toLowerCase(), status: "active", activeMapRevisionId: mapRevisionId, retiredAt: null, updatedAt: FieldValue.serverTimestamp() };
   batch.set(firestore.collection("zones").doc(zone.id), { ...data, createdAt: FieldValue.serverTimestamp() }, { merge: true });
-  batch.set(firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("zones").doc(zone.id), { ...data, polygon: zone.polygon }, { merge: true });
 }
-batch.update(firestore.collection("siteMapRevisions").doc(mapRevisionId), { zoneCount: zones.length });
 
 for (const [dayIndex, date] of dates.entries()) {
   const noon = new Date(+siteMidnight(date, timeZone) + 12 * 3_600_000);

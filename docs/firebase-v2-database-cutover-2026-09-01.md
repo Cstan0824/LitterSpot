@@ -28,8 +28,10 @@ The former `litterspot-dev-jeremy/(default)` personal project and `litterspot/li
 - LitterSpot Superadmin Firebase identity and V2 account.
 - Sunway Root Supervisor Firebase identity and V2 profile.
 - Site `sunway-theme-park`, named Sunway Theme Park.
-- Active initial Site Map Revision `sunway-theme-park-initial`, 100 by 100 metres.
+- An active 100 by 100 metre V2 Site Map with Main Entrance and Food Court stored in the `zoneGeometry` subcollection.
 - Orchestrator configuration and V2 schema metadata.
+
+The active map revision changes whenever a Cleaner station or Camera placement is published. Do not assume the initial revision ID is active. Read `/api/site-map` or run the Phase 12 baseline preparation command before a manual test.
 
 Credentials remain in ignored local configuration/Postman Vault. Passwords, tokens, Web API keys and Admin private keys are not stored in this document.
 
@@ -41,7 +43,7 @@ The project-locked command is:
 npm --workspace=backend run v2:seed-phase11
 ```
 
-It refuses any cloud target except `litterspot-v2-database/(default)`. It creates idempotent development data for:
+It refuses any cloud target except `litterspot-v2-database/(default)`. It reads the current active V2 map and creates idempotent development data for:
 
 - Zones `main-entrance` and `food-court`;
 - completed Site-local dates 2026-08-29, 2026-08-30 and 2026-08-31;
@@ -65,7 +67,9 @@ Expected initial analytics state:
 | Eligible recommendation count | 2 |
 | Intervention count | 0 until the Supervisor tests Implement |
 
-The seed is development data. It does not claim that real Cameras produced those historical observations.
+The seed is development data. It does not claim that real Cameras produced those historical observations. It no longer writes map geometry or assumes a particular map-revision ID.
+
+For the ready-to-use frontend fixture set, use [Phase 12 integration baseline](phase-12-integration-baseline.md). It adds the second Cleaner, two registered Camera fixtures, and an open simulated Alert without resetting this data.
 
 ## Cloud acceptance result
 
