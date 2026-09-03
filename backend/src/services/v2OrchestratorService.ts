@@ -49,7 +49,7 @@ type AssignmentCleaner = {
   cleanerId: string;
   fullName: string;
   stationPoint: Point;
-  stationZoneId: string;
+  stationZoneId: string | null;
   availability: "available";
   recentWorkLocation: null | {
     workOrderId: string;
@@ -196,7 +196,7 @@ export async function getV2AssignmentContext(
       cleanerActive: data.status === "active",
       availabilityOverride: data.availabilityOverride === "unavailable" ? "unavailable" : "none",
       activeWorkOrderId: data.activeWorkOrderId == null ? null : String(data.activeWorkOrderId),
-      stationPointValid: Boolean(stationPoint && station.data()?.siteId === siteId && station.data()?.zoneId),
+      stationPointValid: Boolean(stationPoint && station.data()?.siteId === siteId),
       schedule: data.weeklySchedule ?? {},
       scheduleTimeZone: String(data.scheduleTimeZone ?? site.timeZone ?? "Asia/Kuala_Lumpur"),
       at: now,
@@ -226,7 +226,7 @@ export async function getV2AssignmentContext(
       cleanerId: document.id,
       fullName: String(data.fullName),
       stationPoint,
-      stationZoneId: String(station.data()?.zoneId),
+      stationZoneId: typeof station.data()?.zoneId === "string" ? String(station.data()?.zoneId) : null,
       availability: "available",
       recentWorkLocation,
     };

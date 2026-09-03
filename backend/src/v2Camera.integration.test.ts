@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
+import { Timestamp } from "firebase-admin/firestore";
 
 const run = process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 async function signIn(email: string, password: string) { const response = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=x`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) }); return (await response.json() as { idToken: string }).idToken; }
@@ -15,7 +16,7 @@ run("V2 composite Camera workflow", () => {
     await firebaseAuth.createUser({ uid, email, password, displayName: "Camera Root" });
     await firestore.collection("userAccounts").doc(uid).set({ schemaVersion: 2, uid, role: "supervisor", siteId, profileId: uid, authority: "root", emailNormalized: email, displayName: "Camera Root", status: "active", revision: 1 });
     await firestore.collection("supervisors").doc(uid).set({ schemaVersion: 2, uid, siteId, authority: "root", fullName: "Camera Root", status: "active", revision: 1 });
-    await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Camera Site", status: "active", rootSupervisorUid: uid, activeMapRevisionId: mapId, mapRevisionNumber: 1, firstCameraCreated: false, laptopCameraId: null, defaultSampleIntervalSeconds: 2, revision: 1 });
+    await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Camera Site", status: "active", rootSupervisorUid: uid, activeMapRevisionId: mapId, mapRevisionNumber: 1, firstCameraCreated: false, laptopCameraId: null, defaultSampleIntervalSeconds: 1, revision: 1 });
     const map = firestore.collection("siteMapRevisions").doc(mapId); await map.set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, cameraPlacementCount: 0, cleanerStationCount: 0 });
     await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 100, yMeters: 0 }, { xMeters: 100, yMeters: 100 }, { xMeters: 0, yMeters: 100 }] });
     for (const [id, mimeType] of [[reference1, "image/jpeg"], [reference2, "image/jpeg"], [video1, "video/mp4"]]) await firestore.collection("mediaAssets").doc(id).set({ schemaVersion: 2, mediaId: id, siteId, storageStatus: "available", mimeType });
@@ -59,5 +60,21 @@ run("V2 composite Camera workflow", () => {
     const replacement = await request(app).post("/api/camera-creation/drafts").set("Authorization", `Bearer ${token}`).send({ kind: "reconfigure", cameraId: loopCameraId, name: "Loop Camera", source: { type: "looped_video", sourceMediaId: video1 }, registration: registration(reference2) });
     expect((await request(app).post(`/api/camera-creation/drafts/${replacement.body.draft.id}/publish`).set("Authorization", `Bearer ${token}`)).status).toBe(200);
     expect((await firestore.collection("cameras").doc(loopCameraId).get()).data()?.monitoringEnabled).toBe(true);
+  });
+
+  it("returns a Camera detail read model with current Work, history, and safe Orchestrator trace", async () => {
+    const now = Timestamp.now();
+    const alertId = `camera-alert-${suffix}`; const workId = `camera-work-${suffix}`; const runId = `camera-run-${suffix}`;
+    await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, alertId, siteId, cameraId: loopCameraId, zoneId, zoneNameSnapshot: "Main", issueType: "bin_service", observedCondition: "overflow", status: "in_progress", severity: "critical", evidence: { mediaId: reference1 }, activeWorkOrderId: workId, createdAt: now, updatedAt: now, lastDetectedAt: now });
+    await firestore.collection("workOrders").doc(workId).set({ schemaVersion: 2, workOrderId: workId, siteId, cameraId: loopCameraId, alertId, origin: "alert", managementMode: "orchestrated", status: "in_progress", severity: "critical", issueType: "bin_service", cleanerNameSnapshot: "Camera Cleaner", createdAt: now, updatedAt: now });
+    await firestore.collection("orchestratorRuns").doc(runId).set({ schemaVersion: 2, siteId, type: "assignment", status: "succeeded", alertId, workOrderId: workId, selectedCleanerId: "camera-cleaner", decisionSummary: "Selected the nearest available Cleaner.", decisionFactors: { stationDistanceMeters: 12 }, provider: "fixture", model: "fixture-v1", createdAt: now, startedAt: now, completedAt: now });
+    await firestore.collection("auditEvents").doc(`camera-audit-${suffix}`).set({ schemaVersion: 2, siteId, resourceType: "WorkOrder", resourceId: workId, action: "work_order_assigned", outcome: "succeeded", occurredAt: now });
+    const response = await request(app).get(`/api/camera-creation/cameras/${loopCameraId}/detail`).set("Authorization", `Bearer ${token}`);
+    expect(response.status).toBe(200);
+    expect(response.body.camera.id).toBe(loopCameraId);
+    expect(response.body.currentAssignments).toEqual(expect.arrayContaining([expect.objectContaining({ id: workId, status: "in_progress" })]));
+    expect(response.body.recentHistory).toEqual(expect.arrayContaining([expect.objectContaining({ id: alertId, type: "alert", snapshot: { mediaId: reference1, contentUrl: `/api/media/${reference1}/content` } })]));
+    expect(response.body.orchestratorTrace).toEqual([expect.objectContaining({ id: runId, decisionSummary: "Selected the nearest available Cleaner." })]);
+    expect(response.body.orchestratorTrace[0]).not.toHaveProperty("inputSnapshot");
   });
 });

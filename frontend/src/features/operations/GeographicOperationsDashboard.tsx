@@ -35,7 +35,7 @@ function navigate(path: string, params?: Record<string, string>) {
 
 function zoneAlerts(zone: Zone, alerts: Alert[]) {
   const name = zone.name.toLowerCase();
-  return alerts.filter((alert) => alert.status === "active" && alert.zone.toLowerCase() === name);
+  return alerts.filter((alert) => !["resolved", "dismissed"].includes(alert.status) && alert.zone.toLowerCase() === name);
 }
 
 function zoneTone(zone: Zone, cameras: CameraRecord[], alerts: Alert[], recommendation?: BinReplacementRecommendation): Tone {
@@ -64,12 +64,15 @@ function relativeTime(value: string) {
   return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} hr`;
 }
 
-export function GeographicOperationsDashboard({ zones, cameras, alerts, cleaners, recommendations }: {
+export function GeographicOperationsDashboard({ zones, cameras, alerts, cleaners, recommendations, availabilityById = {}, busyZones, siteName = "Active site" }: {
   zones: Zone[];
   cameras: CameraRecord[];
   alerts: Alert[];
   cleaners: Cleaner[];
   recommendations: BinReplacementRecommendation[];
+  availabilityById?: Record<string, { available: boolean; reasons: string[] }>;
+  busyZones?: Array<{ zoneId: string; score: number; rank: number }>;
+  siteName?: string;
 }) {
   const zoneViews = useMemo<ZoneView[]>(() => zones.filter((zone) => zone.status === "active").map((zone, index) => {
     const recommendation = recommendations.find((item) => item.zoneId === zone.id);
@@ -82,18 +85,18 @@ export function GeographicOperationsDashboard({ zones, cameras, alerts, cleaners
   const selected = zoneViews.find((zone) => zone.id === selectedId) ?? zoneViews[0];
   const selectedCameras = cameras.filter((camera) => camera.zoneId === selected?.id && camera.status === "active");
   const selectedAlerts = selected ? zoneAlerts(selected, alerts) : [];
-  const selectedCleaner = cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.id && cleaner.status === "active") ?? cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.id);
-  const topAlerts = alerts.filter((alert) => alert.status === "active").sort((left, right) => Number(right.severity === "critical") - Number(left.severity === "critical") || right.createdAt.localeCompare(left.createdAt)).slice(0, 3);
-  const availableCleaners = cleaners.filter((cleaner) => cleaner.status === "active").slice(0, 4);
-  const busyZones = [...zoneViews].sort((left, right) => right.score - left.score).slice(0, 3);
+  const selectedCleaner = cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.id && availabilityById[cleaner.id]?.available) ?? cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.id);
+  const topAlerts = alerts.filter((alert) => !["resolved", "dismissed"].includes(alert.status)).sort((left, right) => Number(right.severity === "critical") - Number(left.severity === "critical") || right.createdAt.localeCompare(left.createdAt)).slice(0, 3);
+  const availableCleaners = cleaners.filter((cleaner) => availabilityById[cleaner.id]?.available).slice(0, 4);
+  const busiest = busyZones?.map((item) => ({ ...zoneViews.find((zone) => zone.id === item.zoneId)!, score: item.score })).filter(Boolean) ?? [...zoneViews].sort((left, right) => right.score - left.score).slice(0, 3);
   const exceptions = cameras.filter((camera) => camera.status === "active" && (camera.availability === "unavailable" || camera.registrationStatus !== "ready")).slice(0, 3);
   const responsibilities = zoneViews.slice(0, 4).map((zone) => ({ zone, cleaner: cleaners.find((person) => person.assignedZoneId === zone.id) }));
 
   return <section className="atlas-dashboard">
-    <header className="atlas-page-title"><div><span>BATU CAVES · LIVE SYSTEM STATUS</span><h1>{zoneViews.some((zone) => zone.tone === "action") ? "One zone needs action." : "Operations across every zone."}</h1><p>Monitor site conditions, current responsibility, camera evidence, and active response from one live view.</p></div><div className="atlas-live"><i />Live monitoring<small>Updated just now</small></div></header>
+    <header className="atlas-page-title"><div><span>{siteName} · LIVE SYSTEM STATUS</span><h1>{zoneViews.some((zone) => zone.tone === "action") ? "One zone needs action." : "Operations across every zone."}</h1><p>Monitor site conditions, current responsibility, camera evidence, and active response from one live view.</p></div><div className="atlas-live"><i />Live monitoring<small>Updated from V2</small></div></header>
 
     <div className="atlas-map-layout">
-      <section className="atlas-map" aria-label="Batu Caves monitored zones">
+      <section className="atlas-map" aria-label={`${siteName} monitored zones`}>
         <div className="atlas-map-layer" style={{ transform: `scale(${zoom})` }}>
           <div className="atlas-map-art" />
           {zoneViews.map((zone, index) => <button type="button" aria-pressed={selected?.id === zone.id} aria-label={`${zone.name}, ${zone.tone}`} className={`atlas-zone-marker ${zone.tone} ${selected?.id === zone.id ? "selected" : ""}`} style={{ left: `${zone.x}%`, top: `${zone.y}%`, "--marker-delay": `${index * 90}ms` } as React.CSSProperties} key={zone.id} onClick={() => setSelectedId(zone.id)}><i>{String(zones.findIndex((item) => item.id === zone.id) + 1).padStart(2, "0")}</i><span>{zone.name}<small>{zone.tone}</small></span></button>)}
@@ -114,7 +117,7 @@ export function GeographicOperationsDashboard({ zones, cameras, alerts, cleaners
     <section className="atlas-overview-grid">
       <OverviewCard title="Top alerts" action="View all alerts" onOpen={() => navigate("/alerts")} className="alerts"><ol>{topAlerts.map((alert) => <li key={alert.id}><i className={alert.severity === "critical" ? "action" : "watch"} /><button onClick={() => navigate("/alerts", { alert: String(alert.id) })}><strong>{label(alert.kind)}</strong><span>{alert.zone} · {relativeTime(alert.createdAt)} ago</span></button><b>{alert.severity}</b></li>)}</ol>{!topAlerts.length && <p className="atlas-empty">No active alerts.</p>}</OverviewCard>
       <OverviewCard title="Available cleaners" action="View all cleaners" onOpen={() => navigate("/admin")}><div className="atlas-cleaner-list">{availableCleaners.map((cleaner) => <div key={cleaner.id}><i>{initials(cleaner.fullName)}</i><p><strong>{cleaner.fullName}</strong><span>{cleaner.assignedZoneName}</span></p><b><i />Available</b></div>)}</div>{!availableCleaners.length && <p className="atlas-empty">No Cleaners are currently available.</p>}</OverviewCard>
-      <OverviewCard title="Top 3 busy zones" action="Open insights" onOpen={() => navigate("/placement")}><ol className="atlas-busy-list">{busyZones.map((zone, index) => <li key={zone.id}><b>{index + 1}</b><span>{zone.name}</span><i><em className={zone.tone} style={{ width: `${Math.max(7, zone.score)}%` }} /></i><strong>{zone.score}</strong></li>)}</ol></OverviewCard>
+      <OverviewCard title="Top 3 busy zones" action="Open insights" onOpen={() => navigate("/placement")}><ol className="atlas-busy-list">{busiest.map((zone, index) => <li key={zone.id}><b>{index + 1}</b><span>{zone.name}</span><i><em className={zone.tone} style={{ width: `${Math.max(7, zone.score)}%` }} /></i><strong>{Math.round(zone.score)}</strong></li>)}</ol></OverviewCard>
       <OverviewCard title="Evidence exceptions" action="Inspect cameras" onOpen={() => navigate("/cameras")}><div className="atlas-exception-list">{exceptions.map((camera) => <button key={camera.id} onClick={() => navigate("/cameras", { cameraId: camera.id })}><i className={camera.availability === "unavailable" ? "action" : "review"} /><span><strong>{camera.name}</strong><small>{camera.zoneName} · {camera.availability === "unavailable" ? "Camera offline" : `${camera.registrationStatus} registration`}</small></span></button>)}{!exceptions.length && <p className="atlas-empty">All current evidence sources are healthy.</p>}</div></OverviewCard>
       <OverviewCard title="Zone responsibility" action="View team" onOpen={() => navigate("/admin")} className="responsibility"><div className="atlas-responsibility-list">{responsibilities.map(({ zone, cleaner }) => <button key={zone.id} onClick={() => setSelectedId(zone.id)}><i className={zone.tone}>{String(zones.findIndex((item) => item.id === zone.id) + 1).padStart(2, "0")}</i><span><strong>{zone.name}</strong><small>{cleaner ? cleaner.fullName : "No Cleaner assigned"}</small></span><b>{zoneAlerts(zone, alerts).length ? "Work active" : "Monitoring"}</b></button>)}</div></OverviewCard>
     </section>

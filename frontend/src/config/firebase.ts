@@ -1,5 +1,6 @@
 import { getApps, initializeApp } from "firebase/app";
 import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,6 +18,7 @@ for (const [name, value] of Object.entries(firebaseConfig)) {
 const firebaseApp = getApps()[0] ?? initializeApp(firebaseConfig);
 
 export const firebaseAuth = getAuth(firebaseApp);
+export const firebaseDb = getFirestore(firebaseApp);
 
 // Local development stays opt-in: production still requires the complete web
 // config, while an explicit emulator URL lets the registration playground run

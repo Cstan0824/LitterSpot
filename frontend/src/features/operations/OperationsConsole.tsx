@@ -4,6 +4,7 @@ import { getLiveVideos, subscribeLiveVideo, type LiveVideo } from "../pipeline/l
 import { createCleaner, getCleaners, updateCleanerStatus, type Cleaner } from "../../services/cleanerAPI";
 import { createCamera, createSite, createZone, getCameras, getSites, getZones, updateCamera, updateSite, updateZone, type CameraRecord, type Site, type Zone } from "../../services/locationAPI";
 import { evaluateBinReplacement, type BinReplacementRecommendation } from "../../services/binReplacementAPI";
+import { assignV2Alert, createV2Cleaner, createV2ManualWork, dismissV2Alert, dismissV2Work, getV2OperationsReadModel, overrideV2Verification, reassignV2Work, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, verifyV2Work, type CreateV2CleanerInput, type V2Alert, type V2Cleaner, type V2OperationsReadModel, type V2Point, type V2WeeklySchedule, type V2WorkOrder } from "../../services/v2/operations";
 import { FieldStationNavigation } from "../../components/FieldStationNavigation";
 import { GeographicOperationsDashboard } from "./GeographicOperationsDashboard";
 import { CameraOperationsPage } from "./CameraOperationsPage";
@@ -19,12 +20,24 @@ const evidenceUrl = (_analysisId: number) => "/mock/spill.jpg";
 const formatTime = (value?: string | null) => value ? new Date(`${value.endsWith("Z") ? value : `${value}Z`}`).toLocaleString() : "—";
 const statusClass = (value: string) => value.replaceAll("_", "-");
 
-const demoAlerts: Alert[] = [
-  { id: 1042, analysisId: 2, cameraId: "cam-02", cameraName: "CAM-02", zone: "Food Court", kind: "bin_overflow", severity: "critical", confidence: .96, status: "active", createdAt: new Date(Date.now() - 8 * 60_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "food-court.jpg", peopleCount: 5, evidenceAvailable: true },
-  { id: 1041, analysisId: 3, cameraId: "cam-03", cameraName: "CAM-03", zone: "East Walkway", kind: "floor_litter", severity: "warning", confidence: .88, status: "active", createdAt: new Date(Date.now() - 28 * 60_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "east-walkway.jpg", peopleCount: 2, evidenceAvailable: true },
-  { id: 1040, analysisId: 5, cameraId: "cam-05", cameraName: "CAM-05", zone: "West Plaza", kind: "floor_spill", severity: "warning", confidence: .84, status: "resolved", createdAt: new Date(Date.now() - 74 * 60_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: new Date().toISOString(), imageName: "west-plaza.jpg", peopleCount: 4, evidenceAvailable: true },
-  { id: 1039, analysisId: 1, cameraId: "cam-01", cameraName: "CAM-01", zone: "North Entrance", kind: "bin_overflow", severity: "critical", confidence: .92, status: "dismissed", createdAt: new Date(Date.now() - 3.5 * 3_600_000).toISOString(), updatedAt: new Date().toISOString(), resolvedAt: null, imageName: "north-entrance.jpg", peopleCount: 3, evidenceAvailable: true },
-];
+const activeAlert = (status: string) => !["resolved", "dismissed"].includes(status);
+
+function adaptV2Operations(model: V2OperationsReadModel) {
+  const site: Site = { id: model.siteMap.siteId, name: model.siteMap.siteName, description: null, timezone: "Asia/Kuala_Lumpur", status: "active", createdAt: null, updatedAt: null };
+  const zoneName = new Map(model.siteMap.zones.map((zone) => [zone.id, zone.zoneNameSnapshot]));
+  const zones: Zone[] = model.siteMap.zones.map((zone) => ({ id: zone.id, siteId: model.siteMap.siteId, siteName: model.siteMap.siteName, name: zone.zoneNameSnapshot, code: null, description: null, status: "active", createdAt: null, updatedAt: null }));
+  const staff: Cleaner[] = model.cleaners.map((cleaner) => ({ id: cleaner.id, staffCode: cleaner.staffCode, fullName: cleaner.fullName, phone: cleaner.phone, assignedSiteId: model.siteMap.siteId, assignedZoneId: cleaner.stationZoneId ?? "", assignedZoneName: zoneName.get(cleaner.stationZoneId ?? "") ?? "No Station Point", status: cleaner.status, notes: cleaner.notes, createdAt: null, updatedAt: null, deactivatedAt: null }));
+  const cameras: CameraRecord[] = model.cameras.map((camera) => ({ id: camera.id, siteId: model.siteMap.siteId, siteName: model.siteMap.siteName, zoneId: camera.placement?.zoneId ?? "", zoneName: zoneName.get(camera.placement?.zoneId ?? "") ?? "Unplaced", code: camera.id.slice(0, 8).toUpperCase(), name: camera.name, sourceMode: camera.sourceType === "looped_video" ? "upload" : "stream", status: camera.status, availability: camera.runtime?.connectionStatus === "online" ? "available" : "unavailable", registrationStatus: camera.registration?.status === "ready" ? "ready" : "unregistered", registrationRevision: 0, registrationUpdatedAt: null, createdAt: null, updatedAt: null }));
+  const alerts: Alert[] = model.alerts.map((alert) => ({ id: alert.id, analysisId: 0, cameraId: alert.cameraId ?? "", cameraName: alert.cameraNameSnapshot, zone: alert.zoneNameSnapshot, kind: alert.issueType, severity: alert.severity, confidence: alert.evidence?.confidence ?? null, status: alert.status, createdAt: alert.createdAt ?? "", updatedAt: alert.updatedAt ?? "", resolvedAt: alert.status === "resolved" ? alert.updatedAt : null, imageName: "", peopleCount: 0, evidenceAvailable: Boolean(alert.evidence?.mediaId), evidenceMediaId: alert.evidence?.mediaId ?? null, activeWorkOrderId: alert.activeWorkOrderId }));
+  const availabilityById = Object.fromEntries(model.cleaners.map((cleaner) => [cleaner.id, cleaner.availability]));
+  const stationById = Object.fromEntries(model.cleaners.flatMap((cleaner) => cleaner.stationPoint ? [[cleaner.id, { x: cleaner.stationPoint.xMeters / model.siteMap.revision.widthMeters * 100, y: cleaner.stationPoint.yMeters / model.siteMap.revision.heightMeters * 100 }]] : []));
+  const scheduleSummaryById = Object.fromEntries(model.cleaners.map((cleaner) => {
+    const scheduled = Object.values(cleaner.weeklySchedule).filter((range): range is { startMinute: number; endMinute: number } => Boolean(range));
+    const allDay = scheduled.length === 7 && scheduled.every((range) => range.startMinute === range.endMinute);
+    return [cleaner.id, allDay ? "Every day · all day" : scheduled.length ? `${scheduled.length} scheduled day${scheduled.length === 1 ? "" : "s"}` : "No regular schedule"];
+  }));
+  return { sites: [site], zones, staff, cameras, alerts, availabilityById, stationById, scheduleSummaryById, dashboard: model.dashboard, workOrders: model.workOrders };
+}
 
 function percentBox(box: { x1: number; y1: number; x2: number; y2: number }, image: FrameResult["image"]) {
   const left = Math.max(0, Math.min(100, box.x1 / image.width * 100));
@@ -75,7 +88,7 @@ function UploadedVideoCard({ video }: { video: LiveVideo }) {
 }
 
 function AlertTable({ alerts, onStatus }: { alerts: Alert[]; onStatus: (alert: Alert, status: Alert["status"]) => void }) {
-  const [expanded, setExpanded] = useState<number>();
+  const [expanded, setExpanded] = useState<string>();
   return <div className="ops-table-wrap"><table className="ops-table"><thead><tr><th>Alert</th><th>Camera / zone</th><th>Detected</th><th>Confidence</th><th>Severity</th><th>Status</th></tr></thead><tbody>{alerts.map((alert) => <>
     <tr key={alert.id} className={expanded === alert.id ? "selected" : ""} onClick={() => setExpanded(expanded === alert.id ? undefined : alert.id)}><td><strong>EVT-{String(alert.id).padStart(4, "0")}</strong><span>{labelForKind(alert.kind)}</span></td><td>{alert.cameraName}<span>{alert.zone}</span></td><td>{formatTime(alert.createdAt)}</td><td>{alert.confidence ? `${(alert.confidence * 100).toFixed(1)}%` : "—"}</td><td><b className={`severity ${alert.severity}`}>{alert.severity}</b></td><td><span className={`status-pill ${statusClass(alert.status)}`}>{alert.status}</span></td></tr>
     {expanded === alert.id && <tr className="alert-detail" key={`${alert.id}-detail`}><td colSpan={6}><div>{alert.evidenceAvailable && <img src={evidenceUrl(alert.analysisId)} alt="Alert evidence" />}<section><p>{alert.peopleCount} people in frame · latest evidence retained</p><div className="status-actions">{(["active", "resolved", "dismissed"] as const).map((status) => <button className={status === alert.status ? "selected" : ""} key={status} onClick={(event) => { event.stopPropagation(); onStatus(alert, status); }}>{status}</button>)}</div></section></div></td></tr>}
@@ -168,6 +181,15 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
   const [placementRecommendations, setPlacementRecommendations] = useState<BinReplacementRecommendation[]>([]);
   const [placementError, setPlacementError] = useState<string>();
   const [placementLoading, setPlacementLoading] = useState(false);
+  const [availabilityById, setAvailabilityById] = useState<Record<string, { available: boolean; reasons: string[] }>>({});
+  const [stationById, setStationById] = useState<Record<string, { x: number; y: number }>>({});
+  const [scheduleSummaryById, setScheduleSummaryById] = useState<Record<string, string>>({});
+  const [v2Dashboard, setV2Dashboard] = useState<V2OperationsReadModel["dashboard"]>();
+  const [v2WorkOrders, setV2WorkOrders] = useState<V2OperationsReadModel["workOrders"]>([]);
+  const [v2Alerts, setV2Alerts] = useState<V2Alert[]>([]);
+  const [v2Model, setV2Model] = useState<V2OperationsReadModel>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
   useEffect(() => {
     if (!drawerOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -179,11 +201,21 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
     return () => removeEventListener("keydown", closeOnEscape);
   }, [drawerOpen]);
   useEffect(() => subscribeLiveVideo(() => setLiveVideos(getLiveVideos())), []);
-  useEffect(() => {
-    void Promise.all([getCleaners(), getSites(), getZones(), getCameras()])
-      .then(([cleaners, siteItems, zoneItems, cameraItems]) => { setStaff(cleaners); setSites(siteItems); setZones(zoneItems); setCameraRecords(cameraItems); setStaffError(undefined); setLocationError(undefined); })
-      .catch((error) => { const message = error instanceof Error ? error.message : "Cloud application data could not be loaded."; setStaffError(message); setLocationError(message); });
+  const load = useCallback(async () => {
+    setLoading(true); setError(undefined);
+    try {
+      const model = await getV2OperationsReadModel();
+      const data = adaptV2Operations(model);
+      setStaff(data.staff); setSites(data.sites); setZones(data.zones); setCameraRecords(data.cameras); setAllAlerts(data.alerts);
+      setAvailabilityById(data.availabilityById); setStationById(data.stationById); setScheduleSummaryById(data.scheduleSummaryById); setV2Dashboard(data.dashboard); setV2WorkOrders(data.workOrders); setV2Alerts(model.alerts);
+      setV2Model(model);
+      setStaffError(undefined); setLocationError(undefined);
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Cloud application data could not be loaded.";
+      setError(message); setStaffError(message); setLocationError(message);
+    } finally { setLoading(false); }
   }, []);
+  useEffect(() => { void load(); }, [load]);
   const refreshPlacement = useCallback(async () => {
     const activeZones = zones.filter((zone) => zone.status === "active");
     if (activeZones.length === 0) {
@@ -203,40 +235,45 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
     }
   }, [zones]);
   useEffect(() => {
-    if (page === "placement") void refreshPlacement();
-  }, [page, refreshPlacement]);
+    if (page === "placement") { setPlacementRecommendations([]); setPlacementError("Bin Analysis is connected in Phase 12.7."); }
+  }, [page]);
   const cameras = useMemo<Camera[]>(() => cameraRecords.filter((camera) => camera.status === "active").map((camera) => ({ id: camera.code, name: camera.name, zone: camera.zoneName, enabled: true, latest: null })), [cameraRecords]);
-  const [allAlerts, setAllAlerts] = useState<Alert[]>(demoAlerts);
-  const dashboard = useMemo(() => ({ cameras, summary: { activeAlerts: allAlerts.filter((item) => item.status === "active").length, resolvedAlerts: allAlerts.filter((item) => item.status === "resolved").length, configuredCameras: cameras.length } }), [allAlerts, cameras]);
+  const [allAlerts, setAllAlerts] = useState<Alert[]>([]);
+  const dashboard = useMemo(() => ({ cameras, summary: { activeAlerts: v2Dashboard?.counts.activeAlertCount ?? allAlerts.filter((item) => activeAlert(item.status)).length, resolvedAlerts: allAlerts.filter((item) => item.status === "resolved").length, configuredCameras: v2Dashboard?.counts.cameraCount ?? cameras.length } }), [allAlerts, cameras, v2Dashboard]);
   const [status, setStatus] = useState<string>("all");
   const [severity, setSeverity] = useState<string>("all");
   const [gridView, setGridView] = useState<"3x2" | "2x3" | "1x6">("3x2");
   const alerts = useMemo(() => allAlerts.filter((item) => (status === "all" || item.status === status) && (severity === "all" || item.severity === severity)), [allAlerts, severity, status]);
   const gridColumns = gridView === "3x2" ? 3 : gridView === "2x3" ? 2 : 1;
-  const loading = false;
-  const error: string | undefined = undefined;
+  const siteName = sites[0]?.name ?? "Active site";
   const refreshDashboard = () => undefined;
   const refreshAlerts = () => undefined;
-  const load = () => undefined;
 
-  function changeStatus(alert: Alert, next: Alert["status"]) {
-    if (alert.status === next) return;
-    setAllAlerts((items) => items.map((item) => item.id === alert.id ? { ...item, status: next, updatedAt: new Date().toISOString(), resolvedAt: next === "resolved" ? new Date().toISOString() : null } : item));
-  }
+  function changeStatus(_alert: Alert, _next: Alert["status"]) { /* Phase 12.3 owns Alert mutations. */ }
+  const actionError = (reason: unknown) => setError(reason instanceof Error ? reason.message : "The requested action could not be completed.");
+  const v2AlertFor = (alert: Alert) => v2Alerts.find((item) => item.id === alert.id);
+  const v2WorkFor = (id: string) => v2WorkOrders.find((item) => item.id === id);
+  async function assignAlert(alert: Alert, cleanerId: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before assigning it."); try { await assignV2Alert(current.id, cleanerId); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function dismissAlert(alert: Alert, reason: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before dismissing it."); try { await dismissV2Alert(current, reason); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function createManualWork(input: { title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: { type: "camera"; cameraId: string } | { type: "coordinate"; point: { xMeters: number; yMeters: number } } }) { try { await createV2ManualWork(input); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function actOnWork(id: string, action: "reassign" | "takeover" | "dismiss" | "verify" | "override", options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) { const work = v2WorkFor(id); if (!work) throw new Error("Refresh the Work Order before acting on it."); try { if (action === "reassign" && options.cleanerId) await reassignV2Work(work, options.cleanerId, options.reason); if (action === "takeover") await takeOverV2Work(work, options.reason); if (action === "dismiss") await dismissV2Work(work, options.reason); if (action === "verify" && options.outcome) await verifyV2Work(work, options.outcome, options.reason); if (action === "override" && options.outcome) await overrideV2Verification(work, options.outcome, options.reason); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function createCleanerV2(input: CreateV2CleanerInput) { try { await createV2Cleaner(input); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function updateCleanerV2(cleaner: V2Cleaner, input: { fullName: string; phone: string; weeklySchedule: V2WeeklySchedule }) { try { await updateV2Cleaner(cleaner, input); await load(); } catch (reason) { actionError(reason); throw reason; } }
+  async function moveCleanerStation(cleaner: V2Cleaner, point: V2Point) { try { await updateV2CleanerStation(cleaner.id, point); await load(); } catch (reason) { actionError(reason); throw reason; } }
 
   const content = useMemo(() => {
-    if (page === "dashboard") return <GeographicOperationsDashboard zones={zones} cameras={cameraRecords} alerts={allAlerts} cleaners={staff} recommendations={placementRecommendations} />;
-    if (page === "admin") return <TeamManagementPage staff={staff} zones={zones} />;
-    if (page === "cameras") return <CameraOperationsPage canManageCameraPlacement={capabilities.manageCameraPlacement} sites={sites} zones={zones} cameras={cameraRecords} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onCreateZone={async (siteId, name) => { const zone = await createZone({ siteId, name }); setZones((items) => [...items, zone].sort((left, right) => left.name.localeCompare(right.name))); setLocationError(undefined); return zone; }} onCreateCamera={async (zoneId, code, name, sourceMode) => { const camera = await createCamera({ zoneId, code, name, sourceMode }); setCameraRecords((items) => [...items, camera].sort((left, right) => left.code.localeCompare(right.code, undefined, { numeric: true }))); setLocationError(undefined); return camera; }} />;
-    if (page === "alerts") return <AlertManagementPage alerts={allAlerts} cameras={cameraRecords} cleaners={staff} onStatus={(alert, next) => changeStatus(alert, next)} />;
-    if (page === "history") return <WorkManagementPage cleaners={staff} zones={zones} alerts={allAlerts} />;
-    if (page === "placement") return <section className="ops-page"><header className="page-title"><div><span>REPORTS</span><h1>Bin replacement decision</h1><p>Firestore-backed, ten-minute evidence window with hysteresis to prevent one-frame recommendations.</p></div><button className="outline-button" onClick={() => void refreshPlacement()}>Refresh</button></header>{placementError && <p className="profile-feedback" role="alert">{placementError}</p>}{placementLoading ? <p className="ops-loading">Evaluating active zones…</p> : placementRecommendations.length === 0 ? <p className="empty-copy">No active zones have enough observations yet.</p> : <div className="placement-grid">{placementRecommendations.map((item) => <article className={`placement-tile ${item.recommended ? "recommended" : ""}`} key={item.zoneId}><div><span>{item.zoneId}</span><h2>{item.recommended ? "Replacement needed" : "Keep current bin"}</h2></div><b className={item.recommended ? "critical" : item.coverage.coverageReady ? "ok" : "warning"}>{item.decision.replaceAll("_", " ")}</b><dl><div><dt>Decision score</dt><dd>{item.score.toFixed(1)} / {item.scoreThreshold}</dd></div><div><dt>Capacity pressure</dt><dd>{item.signals.binPressure.toFixed(0)}%</dd></div><div><dt>Litter · spill</dt><dd>{item.litterEpisodes} · {item.spillEpisodes} episodes</dd></div><div><dt>Evidence</dt><dd>{item.coverage.validSamples}/{item.coverage.requiredValidSamples} minutes</dd></div></dl><p>{item.recommended ? `Raised by ${item.triggerReason?.replaceAll("_", " ") ?? "multiple signals"}.` : item.coverage.coverageReady ? "No replacement trigger in the current short window." : "Evidence is insufficient; the current decision is preserved."}</p></article>)}</div>}</section>;
+    if (page === "dashboard") return <GeographicOperationsDashboard zones={zones} cameras={cameraRecords} alerts={allAlerts} cleaners={staff} recommendations={placementRecommendations} availabilityById={availabilityById} busyZones={v2Dashboard?.busyZones} siteName={siteName} />;
+    if (page === "admin") return <TeamManagementPage staff={staff} zones={zones} v2Cleaners={v2Model?.cleaners ?? []} mapZones={v2Model?.siteMap.zones ?? []} mapSize={{ widthMeters: v2Model?.siteMap.revision.widthMeters ?? 1, heightMeters: v2Model?.siteMap.revision.heightMeters ?? 1 }} onCreate={createCleanerV2} onUpdate={updateCleanerV2} onMoveStation={moveCleanerStation} />;
+    if (page === "cameras") return <CameraOperationsPage readOnly allowWorkActions canManageCameraPlacement={capabilities.manageCameraPlacement} sites={sites} zones={zones} cameras={cameraRecords} v2Cameras={v2Model?.cameras} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onStartCreation={() => { location.hash = "/camera-registration"; }} onDismissCameraWork={(workId, reason) => actOnWork(workId, "dismiss", { reason })} onCreateZone={async () => { throw new Error("Camera and Zone creation begins in Phase 12.5."); }} onCreateCamera={async () => { throw new Error("Camera and Zone creation begins in Phase 12.5."); }} />;
+    if (page === "alerts") return <AlertManagementPage alerts={allAlerts} cameras={cameraRecords} cleaners={staff} workOrders={v2WorkOrders} availableCleaners={staff.filter((cleaner) => availabilityById[cleaner.id]?.available)} onAssign={assignAlert} onDismiss={dismissAlert} onStatus={(alert, next) => changeStatus(alert, next)} />;
+    if (page === "history") return <WorkManagementPage workOrders={v2WorkOrders} cleaners={staff} zones={zones} alerts={allAlerts} availableCleanerIds={staff.filter((cleaner) => availabilityById[cleaner.id]?.available).map((cleaner) => cleaner.id)} onCreateV2Work={createManualWork} onV2Action={actOnWork} />;
+    if (page === "placement") return <section className="ops-page"><header className="page-title"><div><span>BIN ANALYSIS</span><h1>Recommendation history is not connected yet.</h1><p>The delivered screen expects the retired ten-minute replacement evaluator. Phase 12.7 will wire it to the V2 daily recommendation and intervention APIs.</p></div></header><p className="profile-feedback">No V1 evaluation is run from this route.</p></section>;
     return <section className="ops-page"><header className="page-title"><div><span>DASHBOARD</span><h1>Live camera overview</h1><p>Latest analyzed snapshots from each registered camera.</p></div><button className="outline-button" onClick={() => void refreshDashboard()}>Refresh</button></header><div className="dashboard-statline"><span><b>{dashboard?.summary.activeAlerts ?? 0}</b> Active alerts</span><span><b>{dashboard?.summary.resolvedAlerts ?? 0}</b> Resolved</span><span><b>{dashboard?.summary.configuredCameras ?? 0}</b> Cameras configured</span></div><div className="camera-grid-toolbar"><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([['1x6', 'Single column', 1], ['2x3', 'Two columns', 2], ['3x2', 'Three columns', 6]] as const).map(([value, label, cells]) => <button className={gridView === value ? "active" : ""} aria-label={label} title={label} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div><section className="camera-grid camera-grid-adjustable" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{dashboard.cameras.map((camera) => { const uploaded = liveVideos.find((video) => video.cameraId === camera.id); return uploaded ? <UploadedVideoCard video={uploaded} key={camera.id} /> : <CameraCard camera={camera} key={camera.id} />; })}</section><section className="dashboard-empty"><h2>Need a fresh camera frame?</h2><p>Use the pipeline playground to upload the exact camera image, plot a floor-only ROI, and create a saved evidence record.</p><button className="primary" onClick={() => { location.hash = "/pipeline"; }}>Open pipeline playground</button></section></section>;
-  }, [alerts, allAlerts, cameraRecords, cameras, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, severity, sites, staff, staffError, status, supervisor, zones]);
+  }, [alerts, allAlerts, availabilityById, cameraRecords, cameras, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, scheduleSummaryById, severity, siteName, sites, staff, staffError, stationById, status, supervisor, v2Dashboard, v2Model, v2WorkOrders, zones]);
 
   const go = (target: Page) => { onNavigate(target); setDrawerOpen(false); };
   return <div className={`ops-shell ${drawerOpen ? "drawer-open" : ""}`}>
-    <FieldStationNavigation activeRoute={page} supervisor={supervisor} alertCount={dashboard.summary.activeAlerts} onLogout={onLogout} />
+    <FieldStationNavigation activeRoute={page} supervisor={supervisor} siteName={siteName} alertCount={dashboard.summary.activeAlerts} onLogout={onLogout} />
     <button className="drawer-backdrop" aria-label="Close navigation" onClick={() => { setDrawerOpen(false); document.querySelector<HTMLButtonElement>(".mobile-nav")?.focus(); }} />
     <aside className="ops-sidebar" aria-label="LitterSpot navigation"><button className="ops-brand field-brand" type="button" onClick={() => go("dashboard")}><b>LS</b><div><strong>LitterSpot</strong><span>Field Station</span></div></button><nav>
       <p>Site operations</p>{(["dashboard", "alerts", "history"] as Page[]).map((item) => <button type="button" className={page === item ? "current" : ""} aria-current={page === item ? "page" : undefined} key={item} onClick={() => go(item)}>{item === "history" ? "History log" : item}<i>{item === "alerts" && dashboard.summary.activeAlerts ? dashboard.summary.activeAlerts : ""}</i></button>)}
@@ -244,7 +281,7 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
       <button type="button" className={page === "admin" ? "current" : ""} aria-current={page === "admin" ? "page" : undefined} onClick={() => go("admin")}>Cleaner management</button>
       <button type="button" className={page === "placement" ? "current" : ""} aria-current={page === "placement" ? "page" : undefined} onClick={() => go("placement")}>Bin analysis</button>
       <p>Analysis tools</p><button type="button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button type="button" onClick={() => { location.hash = "/playground"; }}>Batch analysis</button><button type="button" onClick={() => { location.hash = "/status"; }}>Service status</button>
-    </nav><div className="sidebar-cameras"><p>Camera sources</p>{dashboard.cameras.map((camera) => <span key={camera.id}><i className={camera.latest ? "online" : "offline"} />{camera.name}<small>{camera.latest?.flags.length ?? 0}</small></span>)}</div><button className="field-site" type="button" onClick={() => go("cameras")}><small>Active site</small><strong>Batu Caves</strong></button><div className="sidebar-user"><b>{supervisor.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</b><span>{supervisor.displayName}<small>Supervisor</small></span></div></aside>
-    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>Batu Caves / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void load()}>Try again</button></div> : content}</main>
+    </nav><div className="sidebar-cameras"><p>Camera sources</p>{dashboard.cameras.map((camera) => <span key={camera.id}><i className={camera.latest ? "online" : "offline"} />{camera.name}<small>{camera.latest?.flags.length ?? 0}</small></span>)}</div><button className="field-site" type="button" onClick={() => go("cameras")}><small>Active site</small><strong>{siteName}</strong></button><div className="sidebar-user"><b>{supervisor.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</b><span>{supervisor.displayName}<small>Supervisor</small></span></div></aside>
+    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>{siteName} / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void load()}>Try again</button></div> : content}</main>
   </div>;
 }

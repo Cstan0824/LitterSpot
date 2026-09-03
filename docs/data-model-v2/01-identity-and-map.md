@@ -140,7 +140,7 @@ This is both the Cleaner profile and the atomic assignment lock. `cleanerId` rem
 | `startMinute` | integer 0..1439 | Minutes after local midnight on the weekday where the shift starts. |
 | `endMinute` | integer 0..1439 | Minutes after local midnight. A value less than or equal to `startMinute` means the range crosses midnight. |
 
-Station Point and containing Zone are not duplicated on the Cleaner document. Resolve them from `siteMapRevisions/{activeMapRevisionId}/cleanerStations/{cleanerId}`. API presentation may return derived `stationPoint`, `stationZoneId`, and `availability`.
+Station Point and optional containing Zone are not duplicated on the Cleaner document. Resolve them from `siteMapRevisions/{activeMapRevisionId}/cleanerStations/{cleanerId}`. A Station Point may be in an unzoned part of the Site Map, so `stationZoneId` may be null. API presentation may return derived `stationPoint`, `stationZoneId`, and `availability`; nearest-Zone display is calculated from current geometry and is not persisted as an assignment restriction.
 
 Cleaner availability is true only when all conditions pass:
 
@@ -188,7 +188,7 @@ The Site is the tenant and one physical venue.
 | `mapDraftExists` | boolean | yes | Cheap indicator for Root UI. The draft document remains authoritative. |
 | `firstCameraCreated` | boolean | yes | Enforces that the first Camera uses `laptop_camera`. |
 | `laptopCameraId` | string or null | yes | Enforces at most one laptop Camera. |
-| `defaultSampleIntervalSeconds` | number | yes | Starts at `2`; Site-level monitoring default. |
+| `defaultSampleIntervalSeconds` | number | yes | Starts at `1`; Site-level monitoring default. |
 | `fullBinAlertsEnabled` | boolean | yes | Can disable unreliable `full` without disabling overflow. |
 | `alertPolicyVersion` | string | yes | Active qualification/aging policy. |
 | `analyticsPolicyVersion` | string | yes | Active aggregation and ranking policy. |

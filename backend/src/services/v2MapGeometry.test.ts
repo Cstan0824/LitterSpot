@@ -29,6 +29,11 @@ describe("V2 map geometry", () => {
     expect(result.errors).toEqual(expect.arrayContaining(["zones_z1_z2_overlap", "camera_c1_outside_bounds", "camera_c1_not_in_exactly_one_zone"]));
   });
 
+  it("allows a Cleaner Station Point in an unzoned but in-bounds part of the Site Map", () => {
+    const result = validateMapGeometry({ widthMeters: 20, heightMeters: 20, zones: [{ id: "z1", polygon: square }], points: [{ label: "cleaner_c1", point: { xMeters: 15, yMeters: 15 }, requiresZone: false }] });
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
   it("detects crossing polygons even when neither contains another polygon's vertex", () => {
     const horizontal = [{ xMeters: 0, yMeters: 4 }, { xMeters: 10, yMeters: 4 }, { xMeters: 10, yMeters: 6 }, { xMeters: 0, yMeters: 6 }];
     const vertical = [{ xMeters: 4, yMeters: 0 }, { xMeters: 6, yMeters: 0 }, { xMeters: 6, yMeters: 10 }, { xMeters: 4, yMeters: 10 }];

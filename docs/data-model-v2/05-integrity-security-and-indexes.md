@@ -86,7 +86,7 @@ Superadmin access to selected-Site operational pages is read and structural in i
 - One editable Site Map Draft per Site.
 - Published revisions never mutate.
 - Active Zone polygons do not overlap.
-- Camera Placements, Cleaner Station Points and coordinate Work targets fall inside exactly one active Zone.
+- Camera Placements and coordinate Work targets fall inside exactly one active Zone. Cleaner Station Points fall inside the Site Map boundary and may be unzoned.
 - Operational and historical records snapshot their map revision, Zone label and point.
 
 ### Cameras

@@ -17,14 +17,20 @@ It requires the active Sunway map to already contain the V2 `zoneGeometry` polyg
 ## Fixture data
 
 - Existing Superadmin, Root Supervisor, Regular Supervisor, and Cleaner accounts remain unchanged.
-- `Integration Test Cleaner` is created only if missing. Their station is in Food Court and their all-day development schedule makes them available when they have no active Work Order.
+- Six named integration Cleaners are created only if missing, alongside the existing first Cleaner. Their all-day development schedules make them available whenever they do not have an active Work Order.
 - `Main Entrance Camera` is the first laptop-camera fixture. It is the only browser-camera source.
 - `Food Court Demo Camera` is a looped-video fixture with a registered bin. Its source is local development media and it is not a real CCTV feed.
-- One simulated Floor Litter Alert is created for Food Court Demo Camera. It stays open so alert, assignment, and work screens have a predictable item to render.
-- The existing Cleaner and in-progress coordinate Work Order remain untouched. They exercise busy-cleaner and active-work views.
+- A current waiting Alert is available for manual assignment. A separate simulated Alert is assigned by a deterministic development Orchestrator run, so the System page has a completed Run without calling a real model provider.
+- The Work list contains examples of `assigned`, `in_progress`, `awaiting_review`, `resolved`, and `dismissed`. One in-progress Work has a rework count. One resolved coordinate Work has real local completion-image metadata and Verification history.
+- Alert data includes waiting, assigned, in-progress, dismissed, and resolved examples. Work transitions create recipient notifications, so Cleaner notification screens have real inbox items.
+- The existing Cleaner and in-progress coordinate Work Order remain untouched. They provide a second busy-Cleaner example.
 - The Phase 11 development seed is refreshed against the current active map. It creates historical resolved simulation data, daily summaries, a Dashboard snapshot, and Bin Placement recommendations.
 
-The command records its result in `systemMetadata/integrationBaseline`. That marker is for development inspection only, not product behaviour.
+The command records its result in `systemMetadata/integrationBaseline`. It stores the fixture IDs needed for targeted manual testing. The marker is for development inspection only, not product behaviour.
+
+## What is deliberately not pre-created
+
+A live Monitoring Session, webcam stream, looped-video playback lease, sampled inference result, and a real alert-evidence frame only exist while a browser owns monitoring. Phase 12.6 must create and release those at runtime. The two published Cameras provide the laptop and looped-video sources needed for that test.
 
 ## Safe Postman use
 

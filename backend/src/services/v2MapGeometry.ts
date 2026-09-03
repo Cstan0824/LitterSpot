@@ -65,6 +65,11 @@ export function containingPolygon(point: MapPoint, polygons: Array<{ id: string;
   return matches.length === 1 ? matches[0].id : null;
 }
 
+export function pointInMapBounds(point: MapPoint, widthMeters: number, heightMeters: number) {
+  return Number.isFinite(point.xMeters) && Number.isFinite(point.yMeters)
+    && point.xMeters >= 0 && point.yMeters >= 0 && point.xMeters <= widthMeters && point.yMeters <= heightMeters;
+}
+
 export function polygonsOverlap(left: Polygon, right: Polygon) {
   if (left.some((point) => pointInPolygon(point, right)) || right.some((point) => pointInPolygon(point, left))) return true;
   for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
@@ -75,7 +80,7 @@ export function polygonsOverlap(left: Polygon, right: Polygon) {
   return false;
 }
 
-export function validateMapGeometry(input: { widthMeters: number; heightMeters: number; zones: Array<{ id: string; polygon: Polygon }>; points?: Array<{ point: MapPoint; label: string }> }) {
+export function validateMapGeometry(input: { widthMeters: number; heightMeters: number; zones: Array<{ id: string; polygon: Polygon }>; points?: Array<{ point: MapPoint; label: string; requiresZone?: boolean }> }) {
   const errors: string[] = [];
   if (!Number.isFinite(input.widthMeters) || input.widthMeters <= 0) errors.push("width_must_be_positive");
   if (!Number.isFinite(input.heightMeters) || input.heightMeters <= 0) errors.push("height_must_be_positive");
@@ -93,8 +98,8 @@ export function validateMapGeometry(input: { widthMeters: number; heightMeters: 
     }
   }
   for (const target of input.points ?? []) {
-    if (target.point.xMeters < 0 || target.point.yMeters < 0 || target.point.xMeters > input.widthMeters || target.point.yMeters > input.heightMeters) errors.push(`${target.label}_outside_bounds`);
-    if (!containingPolygon(target.point, input.zones)) errors.push(`${target.label}_not_in_exactly_one_zone`);
+    if (!pointInMapBounds(target.point, input.widthMeters, input.heightMeters)) errors.push(`${target.label}_outside_bounds`);
+    if (target.requiresZone !== false && !containingPolygon(target.point, input.zones)) errors.push(`${target.label}_not_in_exactly_one_zone`);
   }
   return { valid: errors.length === 0, errors };
 }

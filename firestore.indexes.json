@@ -428,6 +428,22 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "cameraId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
+        { "fieldPath": "cameraId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "workOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "siteId", "order": "ASCENDING" },
         { "fieldPath": "assignedCleanerId", "order": "ASCENDING" }
       ]
     },

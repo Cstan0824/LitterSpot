@@ -254,3 +254,19 @@ The 15-minute window remains configurable and can later become Site-specific.
 - Dismissed Work never updates the Recent Work Location.
 - Recent Work is ignored across incompatible Site Map revisions.
 - Exact walking-position interpolation remains out of scope.
+
+## 8. 2026-09-03 — Cleaner Station Point and nearest-Zone revision
+
+**Confirmed** A Cleaner Station Point may be anywhere inside the active Site Map boundary. It does not need to be inside a Zone.
+
+**Confirmed** Zone membership does not restrict Cleaner assignment. Every available Cleaner remains eligible for Work anywhere in the Site; the Orchestrator receives validated straight-line distances to the Work target.
+
+**Confirmed** Supervisor UI shows a derived **Nearest Zone** label for each Station Point. It is the active Zone with the shortest distance from the point to the Zone boundary. A Station Point inside a Zone has distance `0 m`. The value is display context only and is not stored as an assigned-Zone or eligibility rule.
+
+The backend continues to require a valid, in-boundary Station Point. Missing, malformed, or out-of-bound points still make a Cleaner ineligible for automated assignment.
+
+## 9. 2026-09-03 — Monitoring sample interval
+
+**Confirmed** The prototype monitoring default is one sampled frame per second. This is the Site default for newly created Cameras and the default interval for uploaded-video processing when no interval is supplied.
+
+The interval remains configurable. Existing Camera source revisions retain their recorded interval; changing the default does not rewrite published history.

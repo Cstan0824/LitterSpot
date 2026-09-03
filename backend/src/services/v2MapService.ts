@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
-import { containingPolygon, polygonArea, validateMapGeometry, type MapPoint, type Polygon } from "./v2MapGeometry.js";
+import { containingPolygon, pointInMapBounds, polygonArea, validateMapGeometry, type MapPoint, type Polygon } from "./v2MapGeometry.js";
 import { v2AuditEventData } from "./v2AuditService.js";
 
 type ZoneDraft = { zoneId: string; zoneNameSnapshot: string; polygon: Polygon };
@@ -32,7 +32,37 @@ export async function getV2Map(siteId: string) {
   const [zones, cameras, cleaners] = await Promise.all([
     revision.ref.collection("zoneGeometry").get(), revision.ref.collection("cameraPlacements").get(), revision.ref.collection("cleanerStations").get(),
   ]);
-  return { siteId, activeRevisionId: revision.id, revision: { id: revision.id, ...revision.data(), publishedAt: timestamp(revision.data()?.publishedAt) }, zones: zones.docs.map((doc) => ({ id: doc.id, ...doc.data() })), cameraPlacements: cameras.docs.map((doc) => ({ id: doc.id, ...doc.data() })), cleanerStations: cleaners.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
+  return { siteId, siteName: String(site.name ?? siteId), activeRevisionId: revision.id, revision: { id: revision.id, ...revision.data(), publishedAt: timestamp(revision.data()?.publishedAt) }, zones: zones.docs.map((doc) => ({ id: doc.id, ...doc.data() })), cameraPlacements: cameras.docs.map((doc) => ({ id: doc.id, ...doc.data() })), cleanerStations: cleaners.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
+}
+
+/**
+ * A deliberately narrow active-map projection for the authenticated Cleaner.
+ * It exposes the geometry needed to orient that Cleaner and their Coordinate
+ * Work without giving the browser any map-draft or other-personnel data.
+ */
+export async function getV2CleanerMap(siteId: string, cleanerId: string) {
+  const site = await firestore.collection("sites").doc(siteId).get();
+  if (!site.exists || site.data()?.status !== "active") throw new HttpError(404, "Active Site Map not found.");
+  const activeRevisionId = String(site.data()?.activeMapRevisionId ?? "");
+  if (!activeRevisionId) throw new HttpError(409, "The Site has no Active Map Revision.");
+  const revision = await firestore.collection("siteMapRevisions").doc(activeRevisionId).get();
+  if (!revision.exists || revision.data()?.siteId !== siteId) throw new HttpError(409, "The Active Site Map is unavailable.");
+  const [zones, station] = await Promise.all([
+    revision.ref.collection("zoneGeometry").get(),
+    revision.ref.collection("cleanerStations").doc(cleanerId).get(),
+  ]);
+  return {
+    siteId,
+    siteName: String(site.data()?.name ?? siteId),
+    activeRevisionId,
+    revision: {
+      widthMeters: Number(revision.data()?.widthMeters),
+      heightMeters: Number(revision.data()?.heightMeters),
+      gridSizeMeters: Number(revision.data()?.gridSizeMeters),
+    },
+    zones: zones.docs.map((document) => ({ id: document.id, zoneId: String(document.data()?.zoneId ?? document.id), zoneNameSnapshot: String(document.data()?.zoneNameSnapshot ?? document.id), polygon: document.data()?.polygon ?? [] })),
+    station: station.exists ? { point: station.data()?.point ?? null, zoneId: station.data()?.zoneId ?? null, mapRevisionId: activeRevisionId } : null,
+  };
 }
 
 export async function getV2MapDraft(siteId: string) { return readDraft(siteId); }
@@ -59,7 +89,7 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
   if (site.data()?.activeMapRevisionId !== input.baseRevisionId) throw new HttpError(409, "Map draft must start from the Active Map Revision.");
   const zoneIds = new Set(input.zones.map((zone) => zone.zoneId));
   if (zoneIds.size !== input.zones.length) throw new HttpError(400, "Zone IDs must be unique in a map draft.");
-  const points = [...(input.cameraPlacements ?? []), ...(input.cleanerStations ?? [])];
+  const points = [...(input.cameraPlacements ?? []).map((value) => ({ ...value, requiresZone: true })), ...(input.cleanerStations ?? []).map((value) => ({ ...value, requiresZone: false }))];
   const validation = validateMapGeometry({ widthMeters: input.widthMeters, heightMeters: input.heightMeters, zones: input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon })), points });
   const draftRef = firestore.collection("siteMapDrafts").doc(input.siteId);
   const [oldZones, oldCameras, oldCleaners] = await Promise.all([draftRef.collection("zoneGeometry").get(), draftRef.collection("cameraPlacements").get(), draftRef.collection("cleanerStations").get()]);
@@ -83,7 +113,7 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
 
 export async function validateV2MapDraft(siteId: string) {
   const { data, zones, cameraPlacements, cleanerStations } = await readDraft(siteId);
-  const validation = validateMapGeometry({ widthMeters: Number(data.widthMeters), heightMeters: Number(data.heightMeters), zones: zones.docs.map((doc) => ({ id: doc.id, polygon: (doc.data().polygon ?? []) as Polygon })), points: [...cameraPlacements.docs.map((doc) => ({ id: doc.id, point: doc.data().point as MapPoint, label: `camera_${doc.id}` })), ...cleanerStations.docs.map((doc) => ({ id: doc.id, point: doc.data().point as MapPoint, label: `cleaner_${doc.id}` }))] });
+  const validation = validateMapGeometry({ widthMeters: Number(data.widthMeters), heightMeters: Number(data.heightMeters), zones: zones.docs.map((doc) => ({ id: doc.id, polygon: (doc.data().polygon ?? []) as Polygon })), points: [...cameraPlacements.docs.map((doc) => ({ id: doc.id, point: doc.data().point as MapPoint, label: `camera_${doc.id}`, requiresZone: true })), ...cleanerStations.docs.map((doc) => ({ id: doc.id, point: doc.data().point as MapPoint, label: `cleaner_${doc.id}`, requiresZone: false }))] });
   await firestore.collection("siteMapDrafts").doc(siteId).update({ validationStatus: validation.valid ? "valid" : "invalid", validationErrors: validation.errors, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
   return validation;
 }
@@ -136,7 +166,7 @@ export async function publishV2CleanerStation(input: { siteId: string; cleanerId
   if (!sourceRevision.exists) throw new HttpError(409, "Active Site Map revision is missing.");
   const [zones, cameras, stations] = await Promise.all([sourceRevision.ref.collection("zoneGeometry").get(), sourceRevision.ref.collection("cameraPlacements").get(), sourceRevision.ref.collection("cleanerStations").get()]);
   const zoneId = containingPolygon(input.point, zones.docs.map((document) => ({ id: document.id, polygon: document.data().polygon as Polygon })));
-  if (!zoneId) throw new HttpError(400, "Cleaner Station Point must be inside exactly one active Zone.");
+  if (!pointInMapBounds(input.point, Number(sourceRevision.data()?.widthMeters), Number(sourceRevision.data()?.heightMeters))) throw new HttpError(400, "Cleaner Station Point must be inside the active Site Map boundary.");
   const revisionRef = firestore.collection("siteMapRevisions").doc();
   const auditRef = firestore.collection("auditEvents").doc();
   await firestore.runTransaction(async (transaction) => {

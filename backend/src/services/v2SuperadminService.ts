@@ -31,7 +31,7 @@ export async function createV2Site(input: {
         schemaVersion: V2_SCHEMA_VERSION, siteId: siteRef.id, name: input.name.trim(), nameNormalized: input.name.trim().toLowerCase(),
         description: input.description?.trim() || null, timeZone: input.timeZone, status: "active", rootSupervisorUid: rootUid,
         activeMapRevisionId: mapRef.id, mapDraftExists: false, firstCameraCreated: false, laptopCameraId: null,
-        defaultSampleIntervalSeconds: 2, fullBinAlertsEnabled: true, alertPolicyVersion: "cleanliness-v2", analyticsPolicyVersion: "analytics-v2",
+        defaultSampleIntervalSeconds: 1, fullBinAlertsEnabled: true, alertPolicyVersion: "cleanliness-v2", analyticsPolicyVersion: "analytics-v2",
         createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid,
         deactivatedAt: null, deactivatedByUid: null, deactivationOperationId: null, revision: 1,
       });

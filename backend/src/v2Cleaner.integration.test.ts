@@ -33,7 +33,7 @@ run("V2 Cleaner workflow", () => {
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Cleaner Site", timeZone: "Asia/Kuala_Lumpur", status: "active", rootSupervisorUid: rootUid, activeMapRevisionId: revisionId, mapRevisionNumber: 1, revision: 1 });
     const revision = firestore.collection("siteMapRevisions").doc(revisionId);
     await revision.set({ schemaVersion: 2, revisionId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, zoneCount: 1, cameraPlacementCount: 0, cleanerStationCount: 0 });
-    await revision.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 100, yMeters: 0 }, { xMeters: 100, yMeters: 100 }, { xMeters: 0, yMeters: 100 }] });
+    await revision.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 50, yMeters: 0 }, { xMeters: 50, yMeters: 50 }, { xMeters: 0, yMeters: 50 }] });
     rootToken = await signIn(rootEmail, password);
   });
 
@@ -42,16 +42,22 @@ run("V2 Cleaner workflow", () => {
   });
 
   it("creates a directly usable Cleaner account with schedule and Station Point", async () => {
-    const response = await request(app).post("/api/cleaners").set("Authorization", `Bearer ${rootToken}`).send({ staffCode: "CLN-001", fullName: "Test Cleaner", phone: "+60123456789", email: cleanerEmail, password, weeklySchedule: { mon: { startMinute: 0, endMinute: 0 }, tue: { startMinute: 0, endMinute: 0 }, wed: { startMinute: 0, endMinute: 0 }, thu: { startMinute: 0, endMinute: 0 }, fri: { startMinute: 0, endMinute: 0 }, sat: { startMinute: 0, endMinute: 0 }, sun: { startMinute: 0, endMinute: 0 } }, stationPoint: { xMeters: 20, yMeters: 30 }, idempotencyKey: `cleaner-create-${suffix}` });
+    const response = await request(app).post("/api/cleaners").set("Authorization", `Bearer ${rootToken}`).send({ staffCode: "CLN-001", fullName: "Test Cleaner", phone: "+60123456789", email: cleanerEmail, password, weeklySchedule: { mon: { startMinute: 0, endMinute: 0 }, tue: { startMinute: 0, endMinute: 0 }, wed: { startMinute: 0, endMinute: 0 }, thu: { startMinute: 0, endMinute: 0 }, fri: { startMinute: 0, endMinute: 0 }, sat: { startMinute: 0, endMinute: 0 }, sun: { startMinute: 0, endMinute: 0 } }, stationPoint: { xMeters: 70, yMeters: 70 }, idempotencyKey: `cleaner-create-${suffix}` });
     expect(response.status).toBe(201);
     cleanerId = response.body.cleaner.id;
-    expect(response.body.cleaner).toMatchObject({ siteId, staffCode: "CLN-001", stationZoneId: zoneId, availability: { available: true } });
+    expect(response.body.cleaner).toMatchObject({ siteId, staffCode: "CLN-001", stationZoneId: null, availability: { available: true } });
     expect(response.body.cleaner).not.toHaveProperty("assignedZoneId");
     expect(response.body.cleaner).not.toHaveProperty("capabilities");
     cleanerToken = await signIn(cleanerEmail, password);
     const me = await request(app).get("/api/cleaner/me").set("Authorization", `Bearer ${cleanerToken}`);
     expect(me.status).toBe(200);
     expect(me.body.cleaner.id).toBe(cleanerId);
+    const map = await request(app).get("/api/cleaner/map").set("Authorization", `Bearer ${cleanerToken}`);
+    expect(map.status).toBe(200);
+    expect(map.body.map).toMatchObject({ siteId, activeRevisionId: expect.any(String), revision: { widthMeters: 100, heightMeters: 100, gridSizeMeters: 5 }, station: { zoneId: null } });
+    expect(map.body.map.zones).toEqual([expect.objectContaining({ id: zoneId, zoneNameSnapshot: "Main Zone" })]);
+    expect(map.body.map).not.toHaveProperty("cleanerStations");
+    expect(map.body.map).not.toHaveProperty("cameraPlacements");
   });
 
   it("derives unavailability from Supervisor override and schedule", async () => {

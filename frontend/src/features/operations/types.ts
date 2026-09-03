@@ -17,9 +17,9 @@ export type FrameResult = {
 
 export type Camera = { id: string; name: string; zone: string; enabled: boolean; latest: FrameResult | null };
 export type Alert = {
-  id: number; analysisId: number; cameraId: string; cameraName: string; zone: string; kind: string;
-  severity: "critical" | "warning"; confidence: number | null; status: "active" | "resolved" | "dismissed";
-  createdAt: string; updatedAt: string; resolvedAt: string | null; imageName: string; peopleCount: number; evidenceAvailable: boolean;
+  id: string; analysisId: number; cameraId: string; cameraName: string; zone: string; kind: string;
+  severity: "critical" | "warning"; confidence: number | null; status: string;
+  createdAt: string; updatedAt: string; resolvedAt: string | null; imageName: string; peopleCount: number; evidenceAvailable: boolean; evidenceMediaId?: string | null; activeWorkOrderId?: string | null;
 };
 export type Placement = {
   cameraId: string; cameraName: string; zone: string; recommended: boolean; status: string;

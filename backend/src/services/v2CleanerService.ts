@@ -22,8 +22,8 @@ async function releaseStaffKeyIfOwned(reference: FirebaseFirestore.DocumentRefer
 
 async function stationForCleaner(siteId: string, cleanerId: string, activeRevisionId: string) {
   const station = await firestore.collection("siteMapRevisions").doc(activeRevisionId).collection("cleanerStations").doc(cleanerId).get();
-  if (!station.exists || station.data()?.siteId !== siteId || !station.data()?.zoneId) return null;
-  return { point: station.data()?.point, zoneId: String(station.data()?.zoneId), mapRevisionId: activeRevisionId };
+  if (!station.exists || station.data()?.siteId !== siteId || !station.data()?.point) return null;
+  return { point: station.data()?.point, zoneId: typeof station.data()?.zoneId === "string" ? String(station.data()?.zoneId) : null, mapRevisionId: activeRevisionId };
 }
 
 export async function presentV2Cleaner(cleanerId: string, expectedSiteId: string, at = new Date()) {

@@ -1773,7 +1773,7 @@ Firestore; the LLM still makes the final assignment choice.
 - Whether camera assignment is mandatory for every analytics-eligible upload. The current recommendation is yes.
 - Final calibration of the provisional alert magnitude, confidence, temporal,
   and severity rules.
-- Video sampling defaults are 2 seconds, at most 300 frames, 600 seconds, and
+- Video sampling defaults are 1 second, at most 300 frames, 600 seconds, and
   250 MiB; later field testing may tune these configurable limits.
 - Whether detailed person boxes must be retained long-term or only counts/evidence.
 - Retention period for original video, sampled frames, and evidence.

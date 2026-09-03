@@ -59,13 +59,15 @@ run("V2 Site Map workflow", () => {
     expect((await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "site_map_published").get()).size).toBe(1);
   });
 
-  it("allows a Regular Supervisor to publish one validated Cleaner Station-only revision", async () => {
+  it("allows a Regular Supervisor to publish an in-boundary Cleaner Station Point without a Zone", async () => {
     const before = (await firestore.collection("sites").doc(siteId).get()).data()?.activeMapRevisionId;
-    const response = await request(app).put(`/api/site-map/station-points/${cleanerId}`).set("Authorization", `Bearer ${regularToken}`).send({ point: { xMeters: 10, yMeters: 10 } });
+    const response = await request(app).put(`/api/site-map/station-points/${cleanerId}`).set("Authorization", `Bearer ${regularToken}`).send({ point: { xMeters: 10, yMeters: 80 } });
     expect(response.status).toBe(200);
-    expect(response.body.station.zoneId).toBe(`zone-a-${suffix}`);
+    expect(response.body.station.zoneId).toBeNull();
     expect(response.body.station.mapRevisionId).not.toBe(before);
-    expect((await firestore.collection("siteMapRevisions").doc(response.body.station.mapRevisionId).collection("cleanerStations").doc(cleanerId).get()).exists).toBe(true);
+    const station = await firestore.collection("siteMapRevisions").doc(response.body.station.mapRevisionId).collection("cleanerStations").doc(cleanerId).get();
+    expect(station.exists).toBe(true);
+    expect(station.data()?.zoneId).toBeNull();
   });
 
   it("blocks a Regular Supervisor from full Site Map draft mutations", async () => {

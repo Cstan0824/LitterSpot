@@ -22,6 +22,7 @@ import { getWorkOrder, listWorkOrders, transitionWorkOrder } from "../services/w
 import { submitCleanerForReview } from "../services/reviewService.js";
 import { HttpError } from "../shared/httpError.js";
 import { presentV2Cleaner } from "../services/v2CleanerService.js";
+import { getV2CleanerMap } from "../services/v2MapService.js";
 import { listV2Notifications } from "../services/v2NotificationService.js";
 import { getV2WorkOrder, listV2WorkOrders, transitionV2WorkOrder, uploadV2CompletionEvidence } from "../services/v2WorkOrderService.js";
 
@@ -32,6 +33,10 @@ const ACTIVE = ["assigned", "in_progress", "awaiting_review"];
 
 cleanerSelfRoutes.get("/me", async (req, res) => {
   return res.json({ cleaner: await presentV2Cleaner(req.cleaner!.cleanerId, String(req.authUser.siteId)) });
+});
+
+cleanerSelfRoutes.get("/map", async (req, res) => {
+  return res.json({ map: await getV2CleanerMap(String(req.authUser.siteId), req.cleaner!.cleanerId) });
 });
 
 cleanerSelfRoutes.get("/work-orders", async (req, res) => {

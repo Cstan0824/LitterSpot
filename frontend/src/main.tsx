@@ -12,6 +12,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { FieldStationShell } from "./components/FieldStationShell";
 import { RoleIntegrationPendingPage } from "./components/RoleIntegrationPendingPage";
+import { CleanerMobileApp } from "./features/cleaner/CleanerMobileApp";
 import { SessionProvider, useSession } from "./session/SessionProvider";
 import { supervisorRouteFromHash, type SupervisorRoute } from "./services/v2/routing";
 import { deriveSupervisorCapabilities } from "./services/v2/session";
@@ -42,13 +43,14 @@ function App() {
   if (sessionState.status === "error") return <SessionFailure error={sessionState.error} onRetry={() => { void sessionState.retry(); }} onLogout={() => { void sessionState.signOut(); }} />;
 
   const session = sessionState.session;
+  if (session.role === "cleaner") return <CleanerMobileApp session={session.cleaner} onLogout={() => { void sessionState.signOut(); }} />;
   if (session.role !== "supervisor") return <RoleIntegrationPendingPage session={session} onLogout={() => { void sessionState.signOut(); }} />;
 
   const supervisor = session.supervisor;
   const capabilities = deriveSupervisorCapabilities(supervisor.authority);
   if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DetectionTestPage /></FieldStationShell>;
   if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><PipelinePage /></FieldStationShell>;
-  if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} /></FieldStationShell>;
+  if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} canRegisterCamera={capabilities.registerCameras} /></FieldStationShell>;
   if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
   return <OperationsConsole supervisor={supervisor} capabilities={capabilities} page={route as OperationsPage} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void sessionState.signOut(); }} />;
 }

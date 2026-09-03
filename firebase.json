@@ -1,7 +1,7 @@
 {
   "firestore": [
     {
-      "database": "litterspot",
+      "database": "(default)",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }

@@ -54,7 +54,7 @@ await firestore.runTransaction(async (transaction) => {
     mapDraftExists: false,
     firstCameraCreated: false,
     laptopCameraId: null,
-    defaultSampleIntervalSeconds: 2,
+    defaultSampleIntervalSeconds: 1,
     fullBinAlertsEnabled: true,
     alertPolicyVersion: "cleanliness-v2",
     analyticsPolicyVersion: "analytics-v2",

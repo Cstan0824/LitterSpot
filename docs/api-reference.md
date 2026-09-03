@@ -529,7 +529,7 @@ Multipart fields:
 | `clientRequestId` | Yes | 8–128 safe characters; idempotency key scoped to the Supervisor |
 | `isTest` | No | Defaults to `true`; `false` makes every successful frame analytics-eligible |
 | `capturedAt` | No | ISO 8601 timestamp with offset for the start of capture; defaults to upload time |
-| `frameIntervalSeconds` | No | Sampling interval from `1`–`10`; defaults to `2` |
+| `frameIntervalSeconds` | No | Sampling interval from `1`–`10`; defaults to `1` |
 | `floorConfidence` | No | `0.01`–`0.99`; defaults to the frame-inference value |
 | `binLocalizerConfidence` | No | `0.01`–`0.99`; defaults to the frame-inference value |
 | `focusRegion` | No | JSON-encoded normalized floor polygon with at least three points |
@@ -542,7 +542,7 @@ a valid video stream, duration, and dimensions. `ffmpeg` and `ffprobe` must be o
 PATH, or `FFMPEG_PATH` and `FFPROBE_PATH` must point to the executables.
 
 The default limits are configurable with `VIDEO_MAX_BYTES` (250 MiB),
-`VIDEO_MAX_DURATION_SECONDS` (600), `VIDEO_FRAME_INTERVAL_SECONDS` (2), and
+`VIDEO_MAX_DURATION_SECONDS` (600), `VIDEO_FRAME_INTERVAL_SECONDS` (1), and
 `VIDEO_MAX_FRAMES` (300). The number of planned frames is
 `min(maximumFrames, ceil(duration / interval))`, with at least one frame.
 
@@ -1633,6 +1633,7 @@ The automatic worker finalizes only the previous Site-local day. Use the explici
 | GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, recent Runs and safe events |
 | GET | `/api/operations/v2/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
 | GET | `/api/cleaner/notifications?limit=50` | V2 Cleaner's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/map` | V2 Cleaner's active-map projection; `{ map }` containing dimensions, Zone polygons, and only that Cleaner's Station Point |
 | GET | `/api/operations/v2/audit-events` | Root's own Site only; `{ events }` |
 | GET | `/api/superadmin/sites/:siteId/operations/:operationId` | Superadmin; `{ operation }` |
 | POST | `/api/superadmin/sites/:siteId/operations/:operationId/reconcile` | Superadmin; processes one cleanup page and returns `{ operation }` |
@@ -1640,6 +1641,18 @@ The automatic worker finalizes only the previous Site-local day. Use the explici
 Site-status mutation returns `site.operationId`. Deactivation immediately blocks Site access and schedules cleanup. Reactivation returns `409` until cleanup completes. It never reopens dismissed work. See [the Phase 10 brief](phase-10-completed-brief.md) for safe Postman tests and development Firestore deployment commands.
 
 Notifications are immutable; no read receipts or direct frontend writes are supported. Client Firestore queries must filter both `recipientUid` and `siteId` and sort by `createdAt desc`.
+
+`GET /api/cleaner/map` deliberately excludes map drafts, Camera placements, and every other Cleaner's Station Point. A returned Station Point may have `zoneId: null` when it is in an unzoned but in-boundary part of the Site Map. Coordinate Work already carries its own target point; Camera-targeted Work is represented by its Camera reference until the live-monitoring integration is available.
+
+### V2 Camera detail API
+
+| Method | Route | Response |
+| --- | --- | --- |
+| GET | `/api/camera-creation/cameras/{cameraId}/detail` | `{ camera, currentAssignments, recentHistory, orchestratorTrace, auditEvents }` |
+
+The caller must be an active Supervisor for the Camera's Site. `camera` includes the active placement, runtime state, source, Registration, and active map revision. `currentAssignments` contains active Camera-targeted Work Orders. `recentHistory` combines Camera Alerts and Work Orders with status, Cleaner snapshot, time, and evidence media reference when one exists.
+
+`orchestratorTrace` is a safe audit view of related assignment/review Runs. It includes the structured decision summary, decision factors, selected Cleaner, provider/model identifiers, result, error code, and timestamps. It deliberately excludes raw provider output, internal tool input, and assignment context snapshots. `auditEvents` supplies related Supervisor/system audit entries.
 
 ### Development-only simulated Alerts
 

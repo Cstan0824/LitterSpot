@@ -150,6 +150,51 @@ Exit:
 - concurrent revisions return a visible refresh/review flow rather than silent overwrite;
 - Camera-linked Work navigates to Camera detail, while coordinate Work opens its own map detail.
 
+### 2026-09-03: Work-detail routing and control contract
+
+The following interaction contract comes from the current frontend direction and supersedes the earlier generic Work-drawer assumption.
+
+#### System-assigned Camera Work
+
+- A Work Order created by the Orchestrator for a Camera target opens that Camera's detail view.
+- The Camera detail view has a current-assignment section only while Work is active. It shows the assigned Cleaner and the current Work status without editable status controls.
+- A Supervisor may cancel the active Work to override the system decision. Cancellation requires a reason and dismisses the linked Alert as part of the same backend workflow.
+- The Camera detail includes recent Alert/Work history with status, Cleaner, date/time, and retained snapshots where evidence exists.
+- The Camera detail includes a safe, structured Orchestrator audit trace. It does not expose raw provider reasoning.
+
+#### Supervisor-created Camera Work
+
+- A Camera-targeted Manual Work Order opens the same Camera detail view.
+- The current-assignment section shows the assigned Cleaner and current status.
+- The Supervisor controls the final operational decision: resolve, request rework, or cancel/dismiss. Cancellation requires a reason.
+- The same history and structured Orchestrator trace surfaces remain available. A manually created Work may have no Orchestrator decision for its own creation.
+
+#### Supervisor-created coordinate Work
+
+- A Manual Work Order without a Camera opens a Work-detail modal instead of a Camera view.
+- It shows completion evidence when available. Before Cleaner evidence arrives, it shows an explicit waiting-for-evidence state.
+- Status controls remain disabled until the required Cleaner evidence exists.
+- Cancellation requires a reason.
+
+#### Backend alignment to preserve
+
+- A Camera target routes to a Camera detail. A coordinate target routes to Work detail/map context.
+- Current backend Work lifecycle requires a Work to reach `awaiting_review` before Supervisor verification resolves it or requests rework. The UI's “resolve” and “rework” labels must call the verification workflow, not write an arbitrary status.
+- The existing V2 API does not yet expose a direct Supervisor “resolve/rework now” mutation for Manual Camera Work that has not reached `awaiting_review`. If the desired UI means bypassing Cleaner submission entirely, add an explicit backend operation and audit rule before wiring that control.
+- `GET /api/camera-creation/cameras/{cameraId}/detail` now returns the combined current Work, recent Work/Alert history, protected snapshot references, structured Orchestrator decision trace, and related audit events. Integrate this read model into Camera detail before moving Camera-target Work actions there.
+
+### 2026-09-03: Camera creation interaction contract
+
+Camera creation is Camera registration. In one guided flow, the Supervisor may:
+
+1. select an existing Zone from the Site Map or draw a new Zone polygon directly on it;
+2. place the Camera point inside exactly one active Zone;
+3. choose the source, capture/upload the reference, plot floor/bin regions, validate, and publish.
+
+The first Camera still must use the laptop source. Later looped-video Cameras remain disabled for monitoring until deliberately enabled.
+
+The backend already validates a Camera placement against an active Zone. Drawing a new Zone within the same Camera flow requires the UI to publish the Map revision before starting the Camera Draft, or a future composite backend operation that performs both safely. This belongs to Phase 12.5.
+
 ### Phase 12.4: Cleaner management and Cleaner mobile
 
 Purpose: connect account creation, availability and the real Cleaner journey.
@@ -357,7 +402,7 @@ Wire one Camera creation journey: start Draft, place Camera, obtain reference im
 
 Use V2 monitoring claim, heartbeat, Camera start, sample and release routes. Own the monitoring session above page-level components if monitoring must survive navigation. Clean up webcam tracks, timers, media URLs and leases on stop/logout. Display local video plus the returned frame overlays; only alerted evidence is persisted by the business workflow.
 
-The current agreed backend samples periodically, initially every two seconds. The user's preference for the richer registration preview should be investigated separately. Do not silently increase inference rate, change alert qualification or make a new per-frame processing commitment during wiring.
+The current backend samples periodically, initially once per second. The user's preference for the richer registration preview should be investigated separately. Do not silently increase inference rate beyond this configuration, change alert qualification, or make a new per-frame processing commitment during wiring.
 
 Exit: real reference capture and plotting, validation/publish, loop playback and laptop stop all work. Monitoring creates real V2 observations and handles offline/conflicting-session responses.
 

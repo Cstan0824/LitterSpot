@@ -169,8 +169,8 @@ Confirmed capability matrix:
 Cleaner Station Point rules:
 
 - the point must lie inside the active Site Map boundary;
-- the point must lie inside exactly one active Zone;
-- the backend derives the station Zone through polygon containment;
+- the point may be inside a Zone or an unzoned part of the Site Map;
+- the backend may derive the nearest active Zone and its shortest boundary distance as display context only;
 - an invalid or missing Station Point makes the Cleaner ineligible for automated assignment;
 - Station Point changes are audited.
 
@@ -590,7 +590,7 @@ Zone rules:
 - active Zone polygons cannot overlap;
 - a Camera point belongs inside exactly one active Zone;
 - one Zone can contain multiple Cameras;
-- one Zone can contain multiple Cleaner Station Points;
+- Cleaner Station Points may be inside Zones or unzoned parts of the Site Map;
 - coordinate-targeted Work Orders must fall inside exactly one active Zone;
 - deactivated Zone geometry remains available for historical records;
 - deactivated Zones cannot receive new Cameras, Cleaner assignments, or Work Orders.
@@ -1133,7 +1133,7 @@ Manual work begins at Work Order creation and can target either a Camera or a co
 - One 2D grid per Site with approximate real-distance dimensions.
 - Optional plain or uploaded-image background.
 - Zones are non-overlapping polygons.
-- Cameras and coordinate-targeted Work Orders must fall inside exactly one active Zone.
+- Cameras and coordinate-targeted Work Orders must fall inside exactly one active Zone; Cleaner Station Points must only remain inside the Site Map boundary.
 - Dimension changes require Zone and Camera Placement reconfiguration while historical revisions remain available.
 
 ### 2026-08-29 — Camera monitoring and storage

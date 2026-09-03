@@ -83,7 +83,7 @@ export function PipelinePage() {
   const [mediaType, setMediaType] = useState<MediaType>("video");
   const [file, setFile] = useState<File>();
   const [previewUrl, setPreviewUrl] = useState<string>();
-  const [frameIntervalSeconds, setFrameIntervalSeconds] = useState(2);
+  const [frameIntervalSeconds, setFrameIntervalSeconds] = useState(1);
   const [phase, setPhase] = useState<RunPhase>("idle");
   const [job, setJob] = useState<ProcessingJob>();
   const [results, setResults] = useState<ProcessingJobResults>();

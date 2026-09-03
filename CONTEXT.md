@@ -46,6 +46,10 @@ _Avoid_: Site version, floor
 The one published Site Map Revision that defines the Site's current dimensions, Zones, Camera Placements, and Cleaner Station Points.
 _Avoid_: Current map cache, latest draft
 
+**Cleaner Map Projection**:
+The deliberately limited active-map view sent to one authenticated Cleaner: map dimensions, Zone geometry, and only that Cleaner's Station Point. Coordinate Work carries its own point separately; Camera Placements, map drafts, and other Cleaners' Station Points are excluded.
+_Avoid_: Full Site Map editor, Supervisor map read model, live location feed
+
 **Camera Draft**:
 A non-operational workspace for creating a Camera or replacing its source and Registration; only publication changes the operational Camera.
 _Avoid_: Incomplete Camera, temporary Camera
@@ -71,8 +75,12 @@ The Camera-view configuration containing a reference frame, visible walkable-flo
 _Avoid_: Camera placement, zone registration
 
 **Cleaner Station Point**:
-The fixed Site Map coordinate assigned to a Cleaner and their default assignment origin; a fresh Recent Work Location may temporarily supplement it while the Cleaner returns.
-_Avoid_: GPS location, live location, home address
+The fixed in-boundary Site Map coordinate assigned to a Cleaner and their default assignment origin; it may be inside a Zone or an unzoned part of the Site. A fresh Recent Work Location may temporarily supplement it while the Cleaner returns.
+_Avoid_: Assigned Zone, GPS location, live location, home address
+
+**Nearest Zone**:
+The active Zone whose boundary has the shortest straight-line map distance from a Cleaner Station Point. It is display context only; it does not determine Cleaner eligibility or restrict assignments.
+_Avoid_: Cleaner jurisdiction, assigned Zone, allowed Zone
 
 **Recent Work Location**:
 The target snapshot of a Cleaner's most recently resolved Work Order, used for a short period as an approximate returning-to-station assignment signal; it is not live tracking.
