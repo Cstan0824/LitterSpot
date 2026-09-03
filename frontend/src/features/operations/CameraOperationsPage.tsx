@@ -19,6 +19,22 @@ type Props = {
 
 type MapPoint = { x: number; y: number };
 
+function existingZoneMapRect(index: number) {
+  return { x: 12 + (index % 3) * 28, y: 18 + (Math.floor(index / 3) % 2) * 39, width: 25, height: 18 };
+}
+
+function pointIsInsideBoundary(point: MapPoint, boundary: MapPoint[]) {
+  if (boundary.length < 3) return false;
+  let inside = false;
+  for (let current = 0, previous = boundary.length - 1; current < boundary.length; previous = current++) {
+    const left = boundary[current];
+    const right = boundary[previous];
+    const crosses = (left.y > point.y) !== (right.y > point.y) && point.x < ((right.x - left.x) * (point.y - left.y)) / (right.y - left.y) + left.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
 class ZonePlannerBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
@@ -67,13 +83,15 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
   const [zoneName, setZoneName] = useState("");
   const [code, setCode] = useState(`CAM-${String(nextNumber).padStart(2, "0")}`);
   const [name, setName] = useState(`Camera ${String(nextNumber).padStart(2, "0")}`);
-  const [coverage, setCoverage] = useState("Area overview");
   const [zoneBoundary, setZoneBoundary] = useState<MapPoint[]>([]);
+  const [cameraPoint, setCameraPoint] = useState<MapPoint | null>(null);
+  const [locationPlotting, setLocationPlotting] = useState(false);
   const [draggingPoint, setDraggingPoint] = useState<number | null>(null);
   const mapSurface = useRef<HTMLDivElement>(null);
   const dragged = useRef(false);
   const [message, setMessage] = useState<string>();
   const [saving, setSaving] = useState(false);
+  const selectedZoneIndex = activeZones.findIndex((zone) => zone.id === zoneId);
 
   const pointFromScreen = (surface: HTMLDivElement, clientX: number, clientY: number): MapPoint => {
     const bounds = surface.getBoundingClientRect();
@@ -87,7 +105,22 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
     // Read the event coordinates before scheduling state work: React clears currentTarget
     // once the click handler has completed.
     const point = pointFromScreen(event.currentTarget, event.clientX, event.clientY);
-    setZoneBoundary((points) => [...points, point]);
+    if (locationPlotting) {
+      if (!pointIsInsideBoundary(point, zoneBoundary)) { setMessage("Place the camera pin inside the outlined zone."); return; }
+      setMessage(undefined);
+      setCameraPoint(point);
+    }
+    else setZoneBoundary((points) => [...points, point]);
+  };
+  const placeCameraPoint = (event: MouseEvent<HTMLDivElement>) => {
+    if (dragged.current) { dragged.current = false; return; }
+    if (!locationPlotting) { setMessage("Select the zone, then press Next: Plot camera location before placing the pin."); return; }
+    const point = pointFromScreen(event.currentTarget, event.clientX, event.clientY);
+    const area = existingZoneMapRect(selectedZoneIndex);
+    const insideSelectedZone = selectedZoneIndex >= 0 && point.x >= area.x && point.x <= area.x + area.width && point.y >= area.y && point.y <= area.y + area.height;
+    if (!insideSelectedZone) { setMessage("Place the camera pin inside the highlighted selected zone."); return; }
+    setMessage(undefined);
+    setCameraPoint(point);
   };
   const moveZonePoint = (event: PointerEvent<HTMLDivElement>) => {
     if (draggingPoint === null) return;
@@ -96,9 +129,11 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
     setZoneBoundary((points) => points.map((item, index) => index === draggingPoint ? point : item));
   };
   // Avoid Array.prototype.at so the planner also works in older embedded browsers.
-  const selectedMapPoint = zoneBoundary[zoneBoundary.length - 1];
+  const selectedMapPoint = cameraPoint;
   const latitude = selectedMapPoint ? `${(3.23846 - selectedMapPoint.y * .000016).toFixed(5)}° N` : "Place a point";
   const longitude = selectedMapPoint ? `${(101.68292 + selectedMapPoint.x * .000019).toFixed(5)}° E` : "Place a point";
+  const zoneReady = zoneMode === "existing" ? Boolean(zoneId) : Boolean(activeSite && zoneName.trim().length >= 2 && zoneBoundary.length >= 3);
+  const stepOneComplete = zoneMode === "existing" ? Boolean(zoneReady && cameraPoint) : Boolean(zoneReady && cameraPoint && pointIsInsideBoundary(cameraPoint, zoneBoundary));
 
   useEffect(() => {
     const previous = document.body.style.overflow;
@@ -126,17 +161,24 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
   }
 
   return <div className="camera-modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="camera-add-modal" role="dialog" aria-modal="true" aria-labelledby="add-camera-title" tabIndex={-1} ref={dialog}>
-      <header><div><span>{zoneMode === "new" ? "ZONE PLANNING · BATU CAVES" : "NEW CAMERA · BATU CAVES"}</span><h2 id="add-camera-title">{zoneMode === "new" ? "Create a new zone." : "Add a view to the wall."}</h2></div><button type="button" onClick={onClose} aria-label="Close camera registration">×</button></header>
+    <div className={`camera-add-modal ${locationPlotting ? "camera-location-plotting" : "camera-zone-selecting"}`} role="dialog" aria-modal="true" aria-labelledby="add-camera-title" tabIndex={-1} ref={dialog}>
+      <header><div><span>NEW CAMERA · BATU CAVES</span><h2 id="add-camera-title">Create a new camera.</h2></div><button type="button" onClick={onClose} aria-label="Close camera registration">×</button></header>
       <form onSubmit={submit}>
-        <div className={`camera-add-body ${zoneMode === "new" ? "with-zone-map" : ""}`}><section className="camera-modal-section camera-modal-location"><span className="camera-modal-step">{zoneMode === "new" ? "CREATE NEW ZONE" : "01 / LOCATION"}</span><div className="camera-zone-mode" role="group" aria-label="Choose zone setup">
-          <button type="button" className={zoneMode === "existing" ? "active" : ""} onClick={() => setZoneMode("existing")}><b>Existing zone</b><small>Place the camera in a registered area</small></button>
-          <button type="button" className={zoneMode === "new" ? "active" : ""} onClick={() => setZoneMode("new")}><b>Create new zone</b><small>Add an area without leaving this page</small></button>
+        <div className="camera-add-body with-zone-map">
+          <section className="camera-modal-section camera-modal-location">
+            <span className="camera-modal-step">01 / ZONE & LOCATION</span>
+            <div className="camera-zone-mode" role="group" aria-label="Choose zone setup">
+              <button type="button" className={zoneMode === "existing" ? "active" : ""} onClick={() => { setZoneMode("existing"); setCameraPoint(null); }}><b>Existing zone</b><small>Select a registered area on the map</small></button>
+              <button type="button" className={zoneMode === "new" ? "active" : ""} onClick={() => { setZoneMode("new"); setCameraPoint(null); }}><b>Create new zone</b><small>Name and outline a new area</small></button>
+            </div>
+            {zoneMode === "existing" ? <label>Cleaning zone<select value={zoneId} onChange={(event) => { setZoneId(event.target.value); setCameraPoint(null); }} required><option value="" disabled>Select a zone</option>{activeZones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name} · {zone.siteName}</option>)}</select></label> : <><label>New zone name<input value={zoneName} onChange={(event) => setZoneName(event.target.value)} placeholder="South concourse" minLength={2} required /></label><div className="camera-site-context"><span>Adding to site</span><strong>{activeSite?.name ?? "No active site"}</strong><small>The active site is applied automatically.</small></div></>}
+            <ZonePlannerBoundary><section className="camera-zone-planner" aria-labelledby="zone-planner-title"><header><div><span>{zoneMode === "existing" ? "SELECTED ZONE" : "ZONE BOUNDARY"}</span><strong id="zone-planner-title">{zoneMode === "existing" ? "Choose the camera position in the highlighted zone." : zoneBoundary.length >= 3 ? "Place the camera position on the map." : "Outline the new zone on the site map."}</strong></div><b className={stepOneComplete ? "ready" : ""}>{stepOneComplete ? "Ready" : "Step 1"}</b></header><div className="camera-zone-map" ref={mapSurface} onClick={zoneMode === "existing" ? placeCameraPoint : placeZonePoint} onPointerMove={moveZonePoint} onPointerUp={() => setDraggingPoint(null)} aria-label="Site map. Select a zone and place the camera location."><div className="camera-zone-map-art" />{zoneMode === "existing" && <div className="camera-existing-zones">{activeZones.map((zone, index) => <button type="button" key={zone.id} className={zone.id === zoneId ? "selected" : ""} style={{ left: `${12 + (index % 3) * 28}%`, top: `${18 + (Math.floor(index / 3) % 2) * 39}%` }} onClick={(event) => { event.stopPropagation(); setZoneId(zone.id); setCameraPoint(null); }}>{zone.name}</button>)}</div>}<div className="camera-zone-map-toolbar">{zoneMode === "new" && <><button type="button" onClick={(event) => { event.stopPropagation(); setZoneBoundary((points) => points.slice(0, -1)); setCameraPoint(null); }} disabled={!zoneBoundary.length}>Undo</button><button type="button" onClick={(event) => { event.stopPropagation(); setZoneBoundary([]); setCameraPoint(null); }} disabled={!zoneBoundary.length}>Clear</button></>}</div><svg className="camera-zone-boundary" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{zoneMode === "new" && zoneBoundary.length >= 3 && <polygon points={zoneBoundary.map((point) => `${point.x},${point.y}`).join(" ")} />}{zoneMode === "new" && zoneBoundary.length >= 2 && <polyline points={zoneBoundary.map((point) => `${point.x},${point.y}`).join(" ")} />}</svg>{zoneMode === "new" && zoneBoundary.map((point, index) => <button type="button" className={`camera-zone-vertex ${index === zoneBoundary.length - 1 ? "latest" : ""}`} key={`${point.x}-${point.y}-${index}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} aria-label={`Boundary point ${index + 1}. Drag to adjust.`} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); mapSurface.current?.setPointerCapture(event.pointerId); setDraggingPoint(index); }} />)}{cameraPoint && <i className="camera-location-pin" style={{ left: `${cameraPoint.x}%`, top: `${cameraPoint.y}%` }} aria-label="Selected camera location" />}<p className="camera-zone-map-instruction">{zoneMode === "new" && zoneBoundary.length < 3 ? "Click to outline the zone · Plot at least 3 points" : "Click the map to place the camera location"}</p></div><div className="camera-zone-readout"><div><span>CAMERA COORDINATES</span><strong>{latitude}</strong><small>{longitude}</small></div><div><span>STEP 1 STATUS</span><strong>{stepOneComplete ? "Zone and location ready" : "Complete the zone and location"}</strong><small>{zoneMode === "new" && zoneBoundary.length < 3 ? `${Math.max(0, 3 - zoneBoundary.length)} more boundary point${3 - zoneBoundary.length === 1 ? "" : "s"} needed` : cameraPoint ? "Camera pin selected" : "Place the camera pin on the map"}</small></div></div></section></ZonePlannerBoundary>
+          </section>
+          {!locationPlotting && <div className={`camera-location-next ${zoneMode}`}><button type="button" className="primary" disabled={!zoneReady} onClick={() => { setMessage(undefined); setLocationPlotting(true); }}>Next: Plot camera location →</button></div>}
+          <section className={`camera-modal-section camera-modal-details ${stepOneComplete ? "ready" : "locked"}`}><span className="camera-modal-step">02 / CAMERA DETAILS</span><div className="camera-modal-fields"><label>Camera name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} required disabled={!stepOneComplete} /></label><label>Camera ID<input value={code} disabled /></label><label>Coordinate X<input value={cameraPoint ? cameraPoint.x.toFixed(1) : "Set from map"} disabled /></label><label>Coordinate Y<input value={cameraPoint ? cameraPoint.y.toFixed(1) : "Set from map"} disabled /></label></div><small className="camera-coverage-hint">Coordinates are defined automatically from the selected location on the map.</small></section>
         </div>
-        {zoneMode === "existing" ? <label>Cleaning zone<select value={zoneId} onChange={(event) => setZoneId(event.target.value)} required><option value="" disabled>Select a zone</option>{activeZones.map((zone) => <option key={zone.id} value={zone.id}>{zone.name} · {zone.siteName}</option>)}</select></label> : <><label>New zone name<input value={zoneName} onChange={(event) => setZoneName(event.target.value)} placeholder="South concourse" minLength={2} required /></label><div className="camera-site-context"><span>Adding to site</span><strong>{activeSite?.name ?? "No active site"}</strong><small>The active site is applied automatically.</small></div><ZonePlannerBoundary><section className="camera-zone-planner" aria-labelledby="zone-planner-title"><header><div><span>ZONE BOUNDARY</span><strong id="zone-planner-title">Plot the area on the site map.</strong></div><b className={zoneBoundary.length >= 3 ? "ready" : ""}>{zoneBoundary.length} {zoneBoundary.length === 1 ? "point" : "points"}</b></header><div className="camera-zone-map" ref={mapSurface} onClick={placeZonePoint} onPointerMove={moveZonePoint} onPointerUp={() => setDraggingPoint(null)} aria-label="Site map. Click to plot the zone boundary."><div className="camera-zone-map-art" /><div className="camera-zone-map-toolbar"><span>DRAW BOUNDARY</span><button type="button" onClick={(event) => { event.stopPropagation(); setZoneBoundary((points) => points.slice(0, -1)); }} disabled={!zoneBoundary.length}>Undo</button><button type="button" onClick={(event) => { event.stopPropagation(); setZoneBoundary([]); }} disabled={!zoneBoundary.length}>Clear</button></div><svg className="camera-zone-boundary" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{zoneBoundary.length >= 3 && <polygon points={zoneBoundary.map((point) => `${point.x},${point.y}`).join(" ")} />}{zoneBoundary.length >= 2 && <polyline points={zoneBoundary.map((point) => `${point.x},${point.y}`).join(" ")} />}</svg>{zoneBoundary.map((point, index) => <button type="button" className={`camera-zone-vertex ${index === zoneBoundary.length - 1 ? "latest" : ""}`} key={`${point.x}-${point.y}-${index}`} style={{ left: `${point.x}%`, top: `${point.y}%` }} aria-label={`Boundary point ${index + 1}. Drag to adjust.`} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); mapSurface.current?.setPointerCapture(event.pointerId); setDraggingPoint(index); }} />)}<p className="camera-zone-map-instruction">Click to place points · Drag points to refine · Plot at least 3 points</p></div><div className="camera-zone-readout"><div><span>LAST POINT</span><strong>{latitude}</strong><small>{longitude}</small></div><div><span>BOUNDARY STATUS</span><strong>{zoneBoundary.length >= 3 ? "Ready to save" : "Keep plotting"}</strong><small>{zoneBoundary.length >= 3 ? "Area is outlined" : `${Math.max(0, 3 - zoneBoundary.length)} more point${3 - zoneBoundary.length === 1 ? "" : "s"} needed`}</small></div></div></section></ZonePlannerBoundary></>}</section>
-          <section className="camera-modal-section camera-modal-details"><span className="camera-modal-step">02 / CAMERA DETAILS</span><div className="camera-modal-fields"><label>Camera ID<input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} minLength={2} required /></label><label>Display name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} required /></label></div><label>Camera coverage<select value={coverage} onChange={(event) => setCoverage(event.target.value)}><option>Area overview</option><option>Entrance / exit</option><option>Walkway / stairway</option><option>Waste point</option></select><small className="camera-coverage-hint">Helps supervisors understand what this view is intended to cover.</small></label></section></div>
         {message && <p className="camera-modal-error" role="alert">{message}</p>}
-        <footer><p>{zoneMode === "new" ? "Draw at least three points to outline the new zone. The plotted boundary is shown here for frontend review." : "Detection areas and bin regions can be calibrated after the camera is created."}</p><div><button type="button" className="outline-button" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={saving || (zoneMode === "existing" ? !zoneId : !activeSite || zoneName.trim().length < 2 || zoneBoundary.length < 3)}>{saving ? "Adding camera…" : zoneMode === "new" ? "Save zone & camera →" : "Add camera →"}</button></div></footer>
+        <footer><p>{locationPlotting ? "Click inside the selected zone to place the Camera pin. Camera details unlock once the location is set." : "Select an existing zone or finish the new zone boundary, then continue below to plot the Camera location."}</p><div><button type="button" className="outline-button" onClick={onClose}>Cancel</button><button type="submit" className="primary" disabled={saving || !locationPlotting || !stepOneComplete}>{saving ? "Saving…" : "Save zone & camera →"}</button></div></footer>
       </form>
     </div>
   </div>;
@@ -150,11 +192,36 @@ export function CameraOperationsPage({ sites, zones, cameras, feeds, liveVideos,
   const [createdId, setCreatedId] = useState<string | undefined>(initialQuery.get("created") === "1" ? initialQuery.get("cameraId") ?? undefined : undefined);
   const [gridView, setGridView] = useState<"3x2" | "2x3" | "1x6">("3x2");
   const [showAdd, setShowAdd] = useState(false);
+  const [supervisionStatus, setSupervisionStatus] = useState(initialQuery.get("workStatus") ?? "Assigned");
+  const [showCancellation, setShowCancellation] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
   const filterRail = useRef<HTMLElement>(null);
-  const supervision = initialQuery.get("workId") ? { id: initialQuery.get("workId")!, issue: initialQuery.get("workIssue") ?? "Cleaning task", status: initialQuery.get("workStatus") ?? "Assigned", priority: initialQuery.get("workPriority") ?? "Medium", cleaner: initialQuery.get("workCleaner") ?? "", updated: initialQuery.get("workUpdated") ?? "" } : undefined;
+  const supervision = initialQuery.get("workId") ? { id: initialQuery.get("workId")!, issue: initialQuery.get("workIssue") ?? "Cleaning task", status: supervisionStatus, priority: initialQuery.get("workPriority") ?? "Medium", cleaner: initialQuery.get("workCleaner") ?? "", updated: initialQuery.get("workUpdated") ?? "", origin: initialQuery.get("workOrigin") === "manual" ? "manual" as const : "automated" as const, alertId: initialQuery.get("workAlertId") ?? "" } : undefined;
   const nextNumber = Math.max(0, ...cameras.map((camera) => Number(camera.code.match(/\d+$/)?.[0] ?? 0))) + 1;
   const filtered = activeCameras.filter((camera) => zoneId === "all" || camera.zoneId === zoneId);
-  const selected = cameras.find((camera) => camera.id === selectedId || camera.code === selectedId || camera.name === selectedId || camera.name === initialQuery.get("cameraName"));
+  const requestedCameraId = selectedId ?? initialQuery.get("cameraId");
+  const requestedZone = zones.find((zone) => zone.id === initialQuery.get("zoneId"));
+  const registeredSelection = cameras.find((camera) => camera.id === requestedCameraId || camera.code === requestedCameraId || camera.name === requestedCameraId || camera.name === initialQuery.get("cameraName"));
+  // Work Order review must remain navigable in this frontend prototype even when
+  // the camera registry has not been connected yet. The deep link supplies the
+  // same camera identity used in the Work queue, then real records take over once available.
+  const selected = registeredSelection ?? (initialQuery.get("workId") && requestedCameraId ? {
+    id: requestedCameraId,
+    siteId: requestedZone?.siteId ?? "frontend-demo-site",
+    siteName: requestedZone?.siteName ?? "Batu Caves",
+    zoneId: requestedZone?.id ?? initialQuery.get("zoneId") ?? "frontend-demo-zone",
+    zoneName: requestedZone?.name ?? "Assigned work location",
+    code: requestedCameraId.toUpperCase(),
+    name: initialQuery.get("cameraName") || requestedCameraId.toUpperCase(),
+    sourceMode: "stream" as const,
+    status: "active" as const,
+    availability: "available" as const,
+    registrationStatus: "ready" as const,
+    registrationRevision: 1,
+    registrationUpdatedAt: null,
+    createdAt: null,
+    updatedAt: null,
+  } satisfies CameraRecord : undefined);
   const selectedAlerts = selected ? cameraAlerts(selected, alerts) : [];
   const selectedCleaner = cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.zoneId && cleaner.status === "active") ?? cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.zoneId);
   const selectedFeed = selected ? feeds.find((feed) => feed.id === selected.id || feed.id === selected.code || feed.name === selected.name) : undefined;
@@ -169,6 +236,9 @@ export function CameraOperationsPage({ sites, zones, cameras, feeds, liveVideos,
       setSelectedId(query.get("cameraId") ?? undefined);
       setZoneId(query.get("zoneId") ?? "all");
       setCreatedId(query.get("created") === "1" ? query.get("cameraId") ?? undefined : undefined);
+      setSupervisionStatus(query.get("workStatus") ?? "Assigned");
+      setShowCancellation(false);
+      setCancellationReason("");
     };
     addEventListener("hashchange", syncQuery);
     return () => removeEventListener("hashchange", syncQuery);
@@ -186,9 +256,22 @@ export function CameraOperationsPage({ sites, zones, cameras, feeds, liveVideos,
     {createdId === selected.id && <div className="camera-created-banner"><b>Camera added</b><span>This new view is ready for registration and calibration.</span><button type="button" onClick={() => setCreatedId(undefined)}>Dismiss</button></div>}
     <div className="camera-reference-layout"><section className="camera-reference-visual"><CameraPreview record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} /><footer><div><h1>{selected.name}</h1><p>{selected.zoneName} · {selected.sourceMode === "stream" ? "Live camera feed" : "Uploaded camera frame"}</p></div><p>All imagery is synthetic demonstration evidence. No identity recognition is performed.</p></footer></section>
       <aside className="camera-reference-sidebar"><section className="camera-reference-info"><header><span>CAMERA INFORMATION</span><b className={selected.availability === "unavailable" ? "offline" : "online"}><i />{selected.availability === "unavailable" ? "Offline" : "Online"}</b></header><dl><div><dt>Camera name</dt><dd>{selected.code}</dd></div><div><dt>Zone</dt><dd>{selected.zoneName}</dd></div><div><dt>Source</dt><dd>{selected.sourceMode === "stream" ? "Live stream" : "Uploaded frame"}</dd></div><div><dt>Frame freshness</dt><dd>{selectedVideo ? when(selectedVideo.uploadedAt) : "Not reported"}</dd></div></dl></section>
-        <section className="camera-reference-assignment"><header><span>{supervision ? "LIVE SUPERVISION" : "CURRENT ASSIGNMENT"}</span><h2>{supervision ? `${supervision.id} · ${supervision.issue}` : currentWorkOrder ? `${currentWorkOrder} · ${alertLabel(selectedAlerts[0].kind)}` : "No active Work Order"}</h2></header>{supervision ? <><div className="camera-supervision-meta"><span className={`work-priority ${supervision.priority.toLowerCase()}`}>{supervision.priority} priority</span><span className={`work-record-status ${supervision.status.toLowerCase().replaceAll(" ", "-")}`}>{supervision.status}</span></div><p><i aria-hidden="true" /><strong>{supervision.cleaner || selectedCleaner?.fullName || "No Cleaner available"}</strong><span>{supervision.status === "Resolved" ? "Cleaner marked the Work Order resolved" : "Live response in progress"}</span></p><small className="camera-supervision-note">{supervision.status === "Resolved" ? "Use the live view to confirm the area is clean before resolving this Work Order." : "Monitor the live view to supervise the response and confirm the clean-up."}</small><button type="button" onClick={() => { location.hash = "/history"; }}>Back to Work Orders <b>→</b></button></> : selectedCleaner ? <><p><i aria-hidden="true" /><strong>{selectedCleaner.fullName}</strong><span>{selectedCleaner.status === "active" ? "Travelling · 4 min away" : "Unavailable · assignment on hold"}</span></p><button type="button" onClick={() => { location.hash = `/history?camera=${encodeURIComponent(selected.code)}`; }}>View Assignment <b>→</b></button></> : <p className="camera-reference-empty">No active cleaning assignment.</p>}</section>
-        <section className="camera-reference-history"><header><span>RECENT HISTORY</span><button type="button" onClick={() => { location.hash = `/history?camera=${encodeURIComponent(selected.code)}`; }}>View all →</button></header><div className="camera-history-thumbnails" aria-label="Recent evidence thumbnails">{Array.from({ length: Math.max(3, Math.min(5, selectedAlerts.length || 3)) }, (_, index) => <button type="button" key={index} onClick={() => selectedAlerts[index] && (location.hash = `/alerts?alert=${selectedAlerts[index].id}`)}><img src="/mock/spill.jpg" alt={selectedAlerts[index] ? `${alertLabel(selectedAlerts[index].kind)} evidence` : "Recent camera evidence"} /><i className={selectedAlerts[index]?.severity ?? "system"} /></button>)}</div><ol>{selectedAlerts.slice(0, 3).map((alert) => <li key={alert.id}><time>{new Date(alert.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><p><strong>{alertLabel(alert.kind)}</strong><span>{alert.status === "active" ? "Open for review" : alert.status}</span></p></li>)}{!selectedAlerts.length && <li className="empty"><p><strong>No recent alerts</strong><span>New camera events will appear here.</span></p></li>}</ol></section></aside>
+        <section className="camera-reference-assignment">
+          <header><span>CURRENT ASSIGNMENT</span><h2>{supervision ? `${supervision.id} · ${supervision.issue}` : currentWorkOrder ? `${currentWorkOrder} · ${alertLabel(selectedAlerts[0].kind)}` : "No active Work Order"}</h2></header>
+          {supervision ? <>
+            <div className="camera-supervision-meta"><span className={`work-priority ${supervision.priority.toLowerCase()}`}><small>Priority</small>{supervision.priority}</span><span className={`work-record-status ${supervision.status.toLowerCase().replaceAll(" ", "-")}`}><small>Current status</small>{supervision.status}</span></div>
+            <p><i aria-hidden="true" /><strong>{supervision.cleaner || selectedCleaner?.fullName || "No Cleaner available"}</strong><span>{supervision.status === "Resolved" ? "Cleaner marked the Work Order resolved" : "Current response is being supervised"}</span></p>
+            {supervision.origin === "automated" && <small className="camera-supervision-note">The Orchestrator will verify the fresh camera evidence and record its decision below.</small>}
+            {supervision.origin === "manual" && <div className="camera-assignment-actions" aria-label="Supervisor outcome actions"><span>REVIEW ACTION</span><button type="button" className="resolve" onClick={() => setSupervisionStatus("Resolved")}>Resolve</button><button type="button" className="rework" onClick={() => setSupervisionStatus("Rework Required")}>Request rework</button><button type="button" className="cancel" onClick={() => setShowCancellation(true)}>Cancel work</button></div>}
+            {showCancellation && <div className="camera-cancellation-form"><label>Cancellation reason<textarea value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder="Explain why this Work Order is cancelled" /></label><div><button type="button" onClick={() => setShowCancellation(false)}>Keep work</button><button type="button" disabled={!cancellationReason.trim()} onClick={() => { setSupervisionStatus("Dismissed"); setShowCancellation(false); }}>Confirm cancellation</button></div></div>}
+            {!showCancellation && supervision.origin === "automated" && <button className="camera-cancel-trigger" type="button" onClick={() => setShowCancellation(true)}>Cancel Work Order</button>}
+            <button type="button" onClick={() => { location.hash = "/history"; }}>Back to Work Orders <b>→</b></button>
+          </> : selectedCleaner ? <><p><i aria-hidden="true" /><strong>{selectedCleaner.fullName}</strong><span>{selectedCleaner.status === "active" ? "Travelling · 4 min away" : "Unavailable · assignment on hold"}</span></p><button type="button" onClick={() => { location.hash = `/history?camera=${encodeURIComponent(selected.code)}`; }}>View Assignment <b>→</b></button></> : <p className="camera-reference-empty">No active cleaning assignment.</p>}
+        </section>
+        <section className="camera-reference-history"><header><span>RECENT ALERT & WORK HISTORY</span></header><div className="camera-history-thumbnails" aria-label="Recent alert snapshots">{Array.from({ length: 3 }, (_, index) => <button type="button" key={index} onClick={() => selectedAlerts[index] && (location.hash = `/alerts?alert=${selectedAlerts[index].id}`)}><img src="/mock/spill.jpg" alt={selectedAlerts[index] ? `${alertLabel(selectedAlerts[index].kind)} alert snapshot` : "Recent alert snapshot"} /><i className={selectedAlerts[index]?.severity ?? "system"} /></button>)}</div><ol>{selectedAlerts.slice(0, 3).map((alert, index) => { const state = index === 0 && supervision ? supervision.status : alert.status === "resolved" ? "Resolved" : alert.status === "active" ? "Awaiting Review" : "Recorded"; return <li key={alert.id}><strong>{index === 0 && supervision ? supervision.id : `WO-${String(alert.id).padStart(4, "0")}`}</strong><span>{alertLabel(alert.kind)}</span><time>{new Date(alert.createdAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time><em className={`camera-history-status ${state.toLowerCase().replaceAll(" ", "-")}`}>{state}</em></li>; })}{!selectedAlerts.length && <li className="empty"><p><strong>No recent alerts or Work Orders</strong><span>New camera events will appear here.</span></p></li>}</ol></section>{supervision?.origin === "automated" && <section className="camera-orchestrator-log"><header><span>ORCHESTRATOR DECISION LOG</span><b>Audit trace</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>Decision</th><th>Reason</th></tr></thead><tbody><tr><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner selected</td><td>Closest eligible Cleaner with no active Work Order</td></tr><tr><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh evidence is required after cleaning</td></tr><tr><td>Pending</td><td>Outcome review</td><td>Orchestrator will resolve or request rework</td></tr></tbody></table></div></section>}</aside>
     </div>
+    {supervision?.origin === "automated" && <section className="camera-orchestrator-log camera-orchestrator-log-full"><header><div><strong>SYSTEM LOG</strong><span>AUTOMATED CAMERA WORK · AUDIT TRAIL</span></div><b>Read only</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>System action</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr className="assigned"><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner auto-assigned</td><td>Closest eligible Cleaner with no active Work Order</td><td><span className="system-log-status assigned">Assigned</span></td></tr><tr className="in-progress"><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh Camera evidence is required after cleaning</td><td><span className="system-log-status in-progress">In progress</span></td></tr><tr className="awaiting-review"><td>Pending</td><td>Automated outcome review</td><td>System will resolve or request rework after reviewing fresh evidence</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr></tbody></table></div></section>}
+    {supervision?.origin === "manual" && <section className="camera-orchestrator-log camera-orchestrator-log-full"><header><div><strong>SYSTEM LOG</strong><span>MANUAL CAMERA WORK · AUDIT TRAIL</span></div><b>Read only</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>System action</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr className="assigned"><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner assigned by supervisor</td><td>{supervision.cleaner ? `${supervision.cleaner} was selected for this Camera Work` : "Supervisor selected a Cleaner for this Camera Work"}</td><td><span className="system-log-status assigned">Assigned</span></td></tr><tr className="awaiting-review"><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh Camera evidence is available for supervisor review</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr><tr className="awaiting-review"><td>Pending</td><td>Supervisor outcome review</td><td>Resolve, request rework, or cancel after checking the live Camera view</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr></tbody></table></div></section>}
   </section>;
 
   return <section className="ops-page camera-operations-page">
