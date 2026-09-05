@@ -6,7 +6,7 @@ import "./styles.css";
 import "./field-station.css";
 import { OperationsConsole } from "./features/operations/OperationsConsole";
 import { DetectionTestPage } from "./pages/DetectionTestPage";
-import { DashboardPage } from "./pages/DashboardPage";
+import { SystemPage } from "./pages/SystemPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
@@ -51,7 +51,7 @@ function App() {
   if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DetectionTestPage /></FieldStationShell>;
   if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><PipelinePage /></FieldStationShell>;
   if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} canRegisterCamera={capabilities.registerCameras} /></FieldStationShell>;
-  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DashboardPage onOpenPlayground={() => { location.hash = "/playground"; }} /></FieldStationShell>;
+  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><SystemPage /></FieldStationShell>;
   return <OperationsConsole supervisor={supervisor} capabilities={capabilities} page={route as OperationsPage} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void sessionState.signOut(); }} />;
 }
 

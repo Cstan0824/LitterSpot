@@ -1,5 +1,12 @@
 # Phase 12.3 completed brief
 
+## Work queue display follow-up
+
+- Removed the internal Work Order UUID column from the Supervisor table.
+- Widened the Work title and instruction column.
+- Added **Next action**, derived from status and management mode, with relative latest activity time.
+- Work IDs remain internal and continue to drive navigation, mutations, and audit records.
+
 Status: implemented locally against the canonical V2 database.
 
 ## What is wired

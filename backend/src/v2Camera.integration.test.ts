@@ -18,7 +18,7 @@ run("V2 composite Camera workflow", () => {
     await firestore.collection("supervisors").doc(uid).set({ schemaVersion: 2, uid, siteId, authority: "root", fullName: "Camera Root", status: "active", revision: 1 });
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Camera Site", status: "active", rootSupervisorUid: uid, activeMapRevisionId: mapId, mapRevisionNumber: 1, firstCameraCreated: false, laptopCameraId: null, defaultSampleIntervalSeconds: 1, revision: 1 });
     const map = firestore.collection("siteMapRevisions").doc(mapId); await map.set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, cameraPlacementCount: 0, cleanerStationCount: 0 });
-    await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 100, yMeters: 0 }, { xMeters: 100, yMeters: 100 }, { xMeters: 0, yMeters: 100 }] });
+    await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 50, yMeters: 0 }, { xMeters: 50, yMeters: 50 }, { xMeters: 0, yMeters: 50 }] });
     for (const [id, mimeType] of [[reference1, "image/jpeg"], [reference2, "image/jpeg"], [video1, "video/mp4"]]) await firestore.collection("mediaAssets").doc(id).set({ schemaVersion: 2, mediaId: id, siteId, storageStatus: "available", mimeType });
     token = await signIn(email, password);
   });
@@ -47,6 +47,42 @@ run("V2 composite Camera workflow", () => {
     expect(validation.status).toBe(200); expect(validation.body).toEqual({ valid: true, errors: [] });
     const published = await request(app).post(`/api/camera-creation/drafts/${draftId}/publish`).set("Authorization", `Bearer ${token}`).send({});
     expect(published.status).toBe(200);
+  });
+
+  it("keeps a new Zone provisional until the Camera publishes", async () => {
+    const provisionalZoneId = `provisional-zone-${suffix}`;
+    const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({
+      kind: "create",
+      name: "Provisional Zone Camera",
+      sourceType: "looped_video",
+      placement: { point: { xMeters: 70, yMeters: 70 } },
+      provisionalZone: { zoneId: provisionalZoneId, zoneNameSnapshot: "New Court", polygon: [{ xMeters: 60, yMeters: 60 }, { xMeters: 90, yMeters: 60 }, { xMeters: 90, yMeters: 90 }, { xMeters: 60, yMeters: 90 }] },
+    });
+    expect(started.status).toBe(201);
+    expect((await firestore.collection("zones").doc(provisionalZoneId).get()).exists).toBe(false);
+    const draftId = started.body.draft.id;
+    await firestore.collection("cameraDrafts").doc(draftId).update({ "source.sourceMediaId": video1, referenceMediaId: reference2 });
+    expect((await request(app).put(`/api/camera-creation/drafts/${draftId}/registration`).set("Authorization", `Bearer ${token}`).send({ sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: registration(reference2).walkableFloorPolygon, bins: [] })).status).toBe(200);
+    expect((await request(app).post(`/api/camera-creation/drafts/${draftId}/validate`).set("Authorization", `Bearer ${token}`).send({})).body.valid).toBe(true);
+    expect((await request(app).post(`/api/camera-creation/drafts/${draftId}/publish`).set("Authorization", `Bearer ${token}`).send({})).status).toBe(200);
+    expect((await firestore.collection("zones").doc(provisionalZoneId).get()).data()).toMatchObject({ lifecycleStatus: "active", name: "New Court" });
+    const site = await firestore.collection("sites").doc(siteId).get();
+    expect((await firestore.collection("siteMapRevisions").doc(site.data()?.activeMapRevisionId).collection("zoneGeometry").doc(provisionalZoneId).get()).exists).toBe(true);
+  });
+
+  it("deletes an unfinished Camera Draft and its uploaded configuration media when cancelled", async () => {
+    const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({ kind: "create", name: "Cancelled Camera", sourceType: "looped_video", placement: { point: { xMeters: 20, yMeters: 20 } } });
+    expect(started.status).toBe(201);
+    const draftId = started.body.draft.id;
+    const cancelledReferenceId = `cancel-reference-${suffix}`;
+    const cancelledSourceId = `cancel-source-${suffix}`;
+    await firestore.collection("mediaAssets").doc(cancelledReferenceId).set({ schemaVersion: 2, mediaId: cancelledReferenceId, siteId, ownerType: "camera_draft", ownerId: draftId, storageStatus: "available", mimeType: "image/jpeg" });
+    await firestore.collection("mediaAssets").doc(cancelledSourceId).set({ schemaVersion: 2, mediaId: cancelledSourceId, siteId, ownerType: "camera_draft", ownerId: draftId, storageStatus: "available", mimeType: "video/mp4" });
+    await firestore.collection("cameraDrafts").doc(draftId).update({ referenceMediaId: cancelledReferenceId, "source.sourceMediaId": cancelledSourceId });
+    expect((await request(app).delete(`/api/camera-creation/drafts/${draftId}`).set("Authorization", `Bearer ${token}`)).status).toBe(204);
+    expect((await firestore.collection("cameraDrafts").doc(draftId).get()).exists).toBe(false);
+    expect((await firestore.collection("mediaAssets").doc(cancelledReferenceId).get()).exists).toBe(false);
+    expect((await firestore.collection("mediaAssets").doc(cancelledSourceId).get()).exists).toBe(false);
   });
 
   it("publishes later looped Cameras disabled and preserves monitoring across replacement", async () => {

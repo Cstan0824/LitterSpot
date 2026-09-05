@@ -55,7 +55,7 @@ A non-operational workspace for creating a Camera or replacing its source and Re
 _Avoid_: Incomplete Camera, temporary Camera
 
 **Zone**:
-A non-overlapping polygon inside one Site Map Revision that groups Cameras, Cleaners, observations, Alerts, and Work Orders.
+A non-overlapping polygon inside one Site Map Revision that groups Camera Placements, observations, Alerts, and Work Orders. A Cleaner may have a nearest Zone for display context, but does not belong to or become restricted by a Zone.
 _Avoid_: Area, region
 
 **Camera Placement**:
@@ -69,6 +69,10 @@ _Avoid_: Bare camera record, create-then-register
 **Simulation Camera**:
 A structurally active Camera backed by a looped video whose monitoring remains disabled until deliberately enabled for a demonstration.
 _Avoid_: Live CCTV camera, automatically active test source
+
+**Demo Source Scene**:
+A developer-controlled prerecorded view for a Simulation Camera, used to visibly mimic the same live view changing between clean and issue conditions without changing the Camera Registration or interrupting monitoring continuity. The selected scene appears in normal Camera views, but its selection control is not part of the Supervisor product.
+_Avoid_: Camera reconfiguration, live Camera source, System page feature
 
 **Camera Registration**:
 The Camera-view configuration containing a reference frame, visible walkable-floor polygon, and optional physical-bin polygons; initial Registration is mandatory within Camera Creation.
@@ -103,7 +107,7 @@ An immutable record of a privileged Superadmin access or action against a select
 _Avoid_: Root Supervisor history, editable activity log
 
 **Monitoring Session**:
-A browser-owned prototype session that plays or captures Camera sources and periodically submits sampled frames while the monitoring page is open.
+A Supervisor-console-owned prototype session that plays or captures enabled Camera sources and periodically submits sampled frames while at least one authenticated Supervisor console is open. It continues across page navigation and stops after the last Supervisor console disappears. Cleaner mobile sessions never own or keep it alive.
 _Avoid_: Camera stream, processing job
 
 **Camera Runtime State**:
@@ -129,7 +133,7 @@ An active Alert with no Work Order because no eligible Cleaner is currently avai
 _Avoid_: Unassigned work, queued task
 
 **Alert Evidence**:
-The highest-confidence qualifying frame and geometry retained to explain an Alert.
+The highest-confidence qualifying frame retained to explain an Alert, together with the complete model detection geometry needed to reconstruct every overlay from that frame.
 _Avoid_: Continuous footage, annotated image
 
 **Completion Evidence**:

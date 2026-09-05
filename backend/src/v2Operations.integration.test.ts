@@ -19,29 +19,42 @@ run("V2 platform operations", () => {
   const siteId = `ops-site-${suffix}`;
   const uid = `ops-root-${suffix}`;
   const email = `${uid}@example.test`;
+  const regularUid = `ops-regular-${suffix}`;
+  const regularEmail = `${regularUid}@example.test`;
   const password = "ops-test-password-123";
   const sdk = initializeApp({ projectId: env.firebaseProjectId, apiKey: "emulator-key" }, `ops-${suffix}`);
+  const regularSdk = initializeApp({ projectId: env.firebaseProjectId, apiKey: "emulator-key" }, `ops-regular-${suffix}`);
   const auth = getAuth(sdk);
+  const regularAuth = getAuth(regularSdk);
   const db = getFirestore(sdk, env.firebaseDatabaseId);
   let token = "";
+  let regularToken = "";
   const notification = {
     siteId, recipientUid: uid, recipientRole: "supervisor" as const, type: "assignment_failed", eventKey: "test-event",
     title: "Assignment needs attention", body: "No Cleaner available", entityType: "orchestrator_run" as const, entityId: "test-run",
     cameraId: null, alertId: null, workOrderId: null, severity: null, isSimulation: true,
   };
   beforeAll(async () => {
-    await firebaseAuth.createUser({ uid, email, password });
+    await Promise.all([
+      firebaseAuth.createUser({ uid, email, password }),
+      firebaseAuth.createUser({ uid: regularUid, email: regularEmail, password }),
+    ]);
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Operations Site", status: "active", revision: 1 });
     await firestore.collection("userAccounts").doc(uid).set({ schemaVersion: 2, uid, profileId: uid, role: "supervisor", authority: "root", siteId, status: "active" });
     await firestore.collection("supervisors").doc(uid).set({ schemaVersion: 2, uid, siteId, authority: "root", status: "active" });
+    await firestore.collection("userAccounts").doc(regularUid).set({ schemaVersion: 2, uid: regularUid, profileId: regularUid, role: "supervisor", authority: "regular", siteId, status: "active" });
+    await firestore.collection("supervisors").doc(regularUid).set({ schemaVersion: 2, uid: regularUid, siteId, authority: "regular", fullName: "Regular Supervisor", status: "active" });
     await firestore.collection("orchestratorConfigs").doc(siteId).set({ schemaVersion: 2, siteId, status: "running", assignmentEnabled: true, reviewEnabled: true });
     const [host, port] = process.env.FIRESTORE_EMULATOR_HOST!.split(":");
     connectFirestoreEmulator(db, host, Number(port));
     connectAuthEmulator(auth, `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`, { disableWarnings: true });
+    connectAuthEmulator(regularAuth, `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}`, { disableWarnings: true });
     const credential = await signInWithEmailAndPassword(auth, email, password);
     token = await credential.user.getIdToken();
+    const regularCredential = await signInWithEmailAndPassword(regularAuth, regularEmail, password);
+    regularToken = await regularCredential.user.getIdToken();
   });
-  afterAll(async () => { await terminate(db); await deleteApp(sdk); await firebaseAuth.deleteUser(uid); });
+  afterAll(async () => { await terminate(db); await Promise.all([deleteApp(sdk), deleteApp(regularSdk)]); await Promise.all([firebaseAuth.deleteUser(uid), firebaseAuth.deleteUser(regularUid)]); });
 
   it("delivers an immutable event to the client listener and reloads the persisted inbox", async () => {
     let unsubscribe = () => {};
@@ -143,5 +156,53 @@ run("V2 platform operations", () => {
     const result = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${token}`);
     expect(result.status).toBe(200);
     expect(result.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ code: "assignment_failed", status: "recovered", occurrenceCount: 2 })]));
+  });
+
+  it("returns a bounded operational view to a Regular Supervisor", async () => {
+    const alertId = `system-alert-${suffix}`;
+    const cleanerId = `system-cleaner-${suffix}`;
+    const workOrderId = `system-work-${suffix}`;
+    const runId = `system-run-${suffix}`;
+    await firestore.collection("orchestratorConfigs").doc(siteId).update({ status: "running", revision: 10 });
+    const paused = await request(app).post("/api/orchestrator/v2/status")
+      .set("Authorization", `Bearer ${regularToken}`)
+      .send({ status: "paused", reason: "Testing the safe System view" });
+    expect(paused.status).toBe(200);
+    await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, siteId, status: "waiting_for_cleaner" });
+    await firestore.collection("workOrders").doc(workOrderId).set({ schemaVersion: 2, siteId, status: "awaiting_review" });
+    await firestore.collection("orchestratorRuns").doc(runId).set({
+      schemaVersion: 2,
+      runId,
+      siteId,
+      type: "assignment",
+      status: "succeeded",
+      selectedAlertId: alertId,
+      selectedCleanerId: cleanerId,
+      workOrderId,
+      providerRequestCount: 2,
+      candidateAttemptCount: 1,
+      toolCallCount: 2,
+      inputSnapshot: {
+        alerts: [{ alertId, issueType: "floor_litter", observedCondition: "litter", severity: "warning", zoneId: "zone-1", zoneName: "Main Entrance", cameraId: "camera-1", cameraName: "Entrance Camera" }],
+        cleaners: [{ cleanerId, fullName: "Aina Rahman" }],
+      },
+      commandResult: { workOrder: { id: workOrderId, title: "Clean floor litter at Entrance Camera, Main Entrance", status: "assigned", target: { type: "camera" } } },
+      createdAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    const result = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${regularToken}`);
+    expect(result.status).toBe(200);
+    expect(result.body.runtime.backlog).toEqual({ waitingAlertCount: 1, awaitingReviewWorkOrderCount: 1 });
+    expect(result.body.controlHistory[0]).toMatchObject({ status: "paused", actorUid: regularUid, actorNameSnapshot: "Regular Supervisor", reason: "Testing the safe System view" });
+    expect(result.body.recentRuns).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: runId,
+      retryCount: 1,
+      references: {
+        alert: expect.objectContaining({ id: alertId, zoneName: "Main Entrance", cameraName: "Entrance Camera" }),
+        cleaner: { id: cleanerId, name: "Aina Rahman" },
+        workOrder: expect.objectContaining({ id: workOrderId, title: "Clean floor litter at Entrance Camera, Main Entrance" }),
+      },
+    })]));
   });
 });

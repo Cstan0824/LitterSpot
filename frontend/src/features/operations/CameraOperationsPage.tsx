@@ -6,6 +6,7 @@ import type { Alert, Camera } from "./types";
 import { getV2CameraDetail, type V2Camera, type V2CameraDetail } from "../../services/v2/operations";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
 import { V2CameraMonitor } from "./V2CameraMonitor";
+import { V2CameraCreationPage } from "../../pages/V2CameraCreationPage";
 
 type Props = {
   readOnly?: boolean;
@@ -21,7 +22,7 @@ type Props = {
   error?: string;
   onCreateZone: (siteId: string, name: string) => Promise<Zone>;
   onCreateCamera: (zoneId: string, code: string, name: string, sourceMode: "upload" | "stream") => Promise<CameraRecord>;
-  onStartCreation?: () => void;
+  onCameraPublished?: (cameraId: string) => void | Promise<void>;
   v2Cameras?: V2Camera[];
   onDismissCameraWork?: (workId: string, reason: string) => Promise<void>;
 };
@@ -224,7 +225,7 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
   </div>;
 }
 
-export function CameraOperationsPage({ readOnly = false, allowWorkActions = false, canManageCameraPlacement, sites, zones, cameras, feeds, liveVideos, alerts, cleaners, error, onCreateZone, onCreateCamera, onStartCreation, onDismissCameraWork, v2Cameras = [] }: Props) {
+export function CameraOperationsPage({ readOnly = false, allowWorkActions = false, canManageCameraPlacement, sites, zones, cameras, feeds, liveVideos, alerts, cleaners, error, onCreateZone, onCreateCamera, onCameraPublished, onDismissCameraWork, v2Cameras = [] }: Props) {
   const activeCameras = cameras.filter((camera) => camera.status === "active");
   const initialQuery = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const [zoneId, setZoneId] = useState(initialQuery.get("zoneId") ?? "all");
@@ -286,7 +287,7 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
   </section>;
 
   return <section className="ops-page camera-operations-page">
-    <header className="camera-wall-header"><div><span>CAMERAS · LIVE OPERATIONS</span><h1>See every zone.<br />Open the evidence.</h1><p>Monitor registered camera views, then select one to inspect its alerts, assigned Cleaner, and recent history.</p></div>{canManageCameraPlacement && <button className="camera-add-button" type="button" onClick={onStartCreation ?? (() => setShowAdd(true))}><span>+</span>Add camera</button>}</header>{readOnly && !onStartCreation && <p className="profile-feedback">Read-only V2 Camera data. Camera creation and monitoring begin in Phase 12.5 and 12.6.</p>}
+    <header className="camera-wall-header"><div><span>CAMERAS · LIVE OPERATIONS</span><h1>See every zone.<br />Open the evidence.</h1><p>Monitor registered camera views, then select one to inspect its alerts, assigned Cleaner, and recent history.</p></div>{canManageCameraPlacement && <button className="camera-add-button" type="button" onClick={() => setShowAdd(true)}><span>+</span>Add camera</button>}</header>{readOnly && !canManageCameraPlacement && <p className="profile-feedback">Camera creation requires the Root Supervisor account.</p>}
     {error && <p className="profile-feedback" role="alert">{error}</p>}
     <div className="camera-zone-slider">
       <button type="button" aria-label="Previous zones" onClick={() => filterRail.current?.scrollBy({ left: -320, behavior: "smooth" })}>←</button>
@@ -306,6 +307,6 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
     <div className="camera-wall-summary"><p><i />{activeCameras.filter((camera) => camera.availability !== "unavailable").length} available</p><p>{alerts.filter((alert) => alert.status === "active").length} unresolved alerts</p><p>{zoneId === "all" ? "Showing all registered zones" : `Filtered to ${zones.find((zone) => zone.id === zoneId)?.name ?? "selected zone"}`}</p></div>
     <div className="camera-grid-toolbar atlas-camera-grid-toolbar"><span>Camera grid</span><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([["1x6", "Single column", 1], ["2x3", "Two columns", 2], ["3x2", "Three columns", 6]] as const).map(([value, gridLabel, cells]) => <button className={gridView === value ? "active" : ""} aria-label={gridLabel} title={gridLabel} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div>
     <section className="camera-wall-grid" aria-label="Camera views" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{filtered.map((record) => { const cameraFeed = feeds.find((feed) => feed.id === record.id || feed.id === record.code || feed.name === record.name); const video = liveVideos.find((item) => item.cameraId === record.id || item.cameraId === record.code); const related = cameraAlerts(record, alerts); const monitored = v2Cameras.find((camera) => camera.id === record.id); const open = related.filter((alert) => !["resolved", "dismissed"].includes(alert.status)); const status = record.availability === "unavailable" ? { label: "Offline", tone: "offline" } : open.some((alert) => alert.severity === "critical") ? { label: "Action", tone: "action" } : open.length ? { label: "Watch", tone: "watch" } : { label: "Clear", tone: "clear" }; return <button type="button" className="camera-wall-card" key={record.id} onClick={() => openCamera(record)}><CameraPreview record={record} feed={cameraFeed} video={video} latestAlert={related[0]} monitoringCamera={monitored} /><footer><div><strong>{record.name}</strong><span>{record.code} · {record.zoneName}</span></div><b className={`camera-card-status ${status.tone}`}><i />{status.label}</b></footer></button>; })}{!filtered.length && <div className="camera-wall-empty"><span>NO CAMERAS IN THIS ZONE</span><p>{!readOnly && canManageCameraPlacement ? "Add a camera or choose another registered zone." : "Choose another registered zone."}</p>{!readOnly && canManageCameraPlacement && <button type="button" onClick={() => setShowAdd(true)}>+ Add camera</button>}</div>}</section>
-    {!readOnly && canManageCameraPlacement && showAdd && <AddCameraModal sites={sites} zones={zones} nextNumber={nextNumber} onClose={() => setShowAdd(false)} onCreated={(camera) => openCamera(camera, true)} onCreateZone={onCreateZone} onCreateCamera={onCreateCamera} />}
+    {canManageCameraPlacement && showAdd && <V2CameraCreationPage canCreateCamera onClose={() => setShowAdd(false)} onPublished={async (cameraId) => { setShowAdd(false); await onCameraPublished?.(cameraId); location.hash = `/cameras?cameraId=${encodeURIComponent(cameraId)}&created=1`; }} />}
   </section>;
 }

@@ -16,6 +16,8 @@ Status: notification delivery, Site cleanup and System read APIs are implemented
 - Small Sites finish cleanup during the status request. Larger Sites resume through a five-second maintenance tick or a Superadmin reconciliation request.
 - Reactivation is blocked until cleanup completes. It does not reopen Work or resume the Orchestrator automatically.
 - System API reports configuration, process worker-enabled state, recent decisions and safe aggregated events.
+- A later System-page readiness pass added waiting-Alert and awaiting-review counts, a bounded pause/resume history for both Supervisor authorities, human-readable Run references, and specific safe Orchestrator failure codes.
+- System polling does not perform one Firestore lookup per Run. Names and location labels come from each Run's frozen input/result snapshot.
 - Run attempt/action timestamps now use ISO strings. Completed assignment Runs inherit the selected Alert's simulation flag.
 - New persisted provider errors are generic. Raw provider exceptions are not added to the System-page response.
 
@@ -50,7 +52,7 @@ There are no V2 push-token, mark-read, unread-count or notification acknowledgem
 6. Complete or dismiss Work through existing Phase 8 controls and inspect the corresponding Cleaner event.
 7. Repeat inbox reads. Reading does not mark events read or remove them.
 
-The System response deliberately uses `providerConnectivity: not_probed`. A running configuration does not prove that Ollama is reachable.
+The System response deliberately uses `providerConnectivity: not_probed`. A running configuration does not prove that Ollama is reachable. When configuration says `running` but `ORCHESTRATOR_WORKER_ENABLED=false`, the response adds a derived `orchestrator_worker_disabled` warning without writing a Firestore event on every poll.
 
 ### Optional destructive Site test
 

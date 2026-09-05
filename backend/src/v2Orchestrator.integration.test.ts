@@ -108,6 +108,11 @@ run("V2 Orchestrator integration", () => {
     };
     const result = await runV2AssignmentCycle(scenario.siteId, { selector, now: scenario.now, workerId: `worker-${randomUUID()}`, sleep: async () => undefined });
     expect(result.run).toMatchObject({ status: "succeeded", selectedAlertId: scenario.alertIds[1], selectedCleanerId: scenario.cleanerIds[0], resultCode: "assigned" });
+    expect(result.run.references).toMatchObject({
+      alert: { id: scenario.alertIds[1], zoneName: "Main Zone", cameraName: "Camera 2" },
+      cleaner: { id: scenario.cleanerIds[0], name: "Cleaner 1" },
+      workOrder: { id: result.run.workOrderId, status: "assigned", targetType: "camera" },
+    });
     expect(result.run.isSimulation).toBe(true);
     expect(result.attempts[0].startedAt).toEqual(expect.any(String));
     expect((await firestore.collection("alerts").doc(scenario.alertIds[0]).get()).data()?.status).toBe("waiting_for_cleaner");
@@ -127,6 +132,7 @@ run("V2 Orchestrator integration", () => {
     expect(result.run).toMatchObject({ status: "failed", resultCode: "provider_failed", errorCode: "provider_failed" });
     expect((await firestore.collection("workOrders").where("siteId", "==", scenario.siteId).get()).empty).toBe(true);
     expect((await firestore.collection("notifications").where("siteId", "==", scenario.siteId).get()).docs.some((document) => document.data().type === "assignment_failed")).toBe(true);
+    expect((await firestore.collection("systemEvents").where("siteId", "==", scenario.siteId).get()).docs.some((document) => document.data().code === "orchestrator_provider_unavailable")).toBe(true);
     await Promise.all(scenario.cleanerUids.map((uid) => firebaseAuth.deleteUser(uid).catch(() => undefined)));
   });
 
@@ -158,6 +164,7 @@ run("V2 Orchestrator integration", () => {
     expect(result.run).toMatchObject({ status: "exhausted", resultCode: "no_candidates" });
     expect((await firestore.collection("alerts").doc(scenario.alertIds[0]).get()).data()?.status).toBe("waiting_for_cleaner");
     expect((await firestore.collection("workOrders").where("siteId", "==", scenario.siteId).get()).empty).toBe(true);
+    expect((await firestore.collection("systemEvents").where("siteId", "==", scenario.siteId).get()).docs.some((document) => document.data().code === "orchestrator_no_available_cleaner")).toBe(true);
     await Promise.all(scenario.cleanerUids.map((uid) => firebaseAuth.deleteUser(uid).catch(() => undefined)));
   });
 
@@ -168,6 +175,7 @@ run("V2 Orchestrator integration", () => {
     const result = await runV2AssignmentCycle(scenario.siteId, { selector, now: scenario.now, sleep: async () => undefined });
     expect(calls).toBe(4);
     expect(result.run).toMatchObject({ status: "failed", resultCode: "provider_failed", selectedCleanerId: null });
+    expect((await firestore.collection("systemEvents").where("siteId", "==", scenario.siteId).get()).docs.some((document) => document.data().code === "orchestrator_invalid_selection")).toBe(true);
     expect((await firestore.collection("workOrders").where("siteId", "==", scenario.siteId).get()).empty).toBe(true);
     await Promise.all(scenario.cleanerUids.map(uid => firebaseAuth.deleteUser(uid)));
   });

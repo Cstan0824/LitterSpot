@@ -23,7 +23,7 @@ import {
 import { enqueueV2ImmediateAssignmentTrigger } from "./v2OrchestratorTriggers.js";
 import { writeV2AuditEvent, type AuditActor } from "./v2AuditService.js";
 import { v2Json } from "./v2Presentation.js";
-import { recordV2SystemEvent } from "./v2SystemService.js";
+import { recordV2SystemEvent, recoverV2OrchestratorSystemEvents, type V2SystemEventCode } from "./v2SystemService.js";
 import { notifyV2SiteSupervisors } from "./v2NotificationService.js";
 import { assignmentContextHash, OrchestrationConflict, type OrchestrationCommand } from "./v2OrchestratorCommit.js";
 
@@ -101,15 +101,49 @@ const point = (value: unknown): Point | null => {
 const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 function presentRun(id: string, data: DocumentData): Record<string, any> {
-  return {
+  const snapshot = data.inputSnapshot && typeof data.inputSnapshot === "object" ? data.inputSnapshot as Record<string, any> : {};
+  const snapshotAlerts = Array.isArray(snapshot.alerts) ? snapshot.alerts : [];
+  const snapshotCleaners = Array.isArray(snapshot.cleaners) ? snapshot.cleaners : [];
+  const resultWork = data.commandResult?.workOrder && typeof data.commandResult.workOrder === "object"
+    ? data.commandResult.workOrder as Record<string, any>
+    : snapshot.workOrder && typeof snapshot.workOrder === "object"
+      ? snapshot.workOrder as Record<string, any>
+      : null;
+  const alertId = String(data.selectedAlertId ?? data.alertId ?? resultWork?.alertId ?? "") || null;
+  const cleanerId = String(data.selectedCleanerId ?? resultWork?.assignedCleanerId ?? "") || null;
+  const snapshotAlert = alertId ? snapshotAlerts.find((item: Record<string, unknown>) => item.alertId === alertId) : null;
+  const snapshotCleaner = cleanerId ? snapshotCleaners.find((item: Record<string, unknown>) => item.cleanerId === cleanerId) : null;
+  return v2Json({
     id,
     ...data,
+    references: {
+      alert: alertId ? {
+        id: alertId,
+        issueType: snapshotAlert?.issueType ?? resultWork?.issueType ?? null,
+        observedCondition: snapshotAlert?.observedCondition ?? null,
+        severity: snapshotAlert?.severity ?? resultWork?.severity ?? null,
+        zoneId: snapshotAlert?.zoneId ?? resultWork?.zoneId ?? resultWork?.target?.zoneId ?? null,
+        zoneName: snapshotAlert?.zoneName ?? resultWork?.target?.zoneNameSnapshot ?? null,
+        cameraId: snapshotAlert?.cameraId ?? resultWork?.cameraId ?? resultWork?.target?.cameraId ?? null,
+        cameraName: snapshotAlert?.cameraName ?? resultWork?.target?.cameraNameSnapshot ?? null,
+      } : null,
+      cleaner: cleanerId ? {
+        id: cleanerId,
+        name: snapshotCleaner?.fullName ?? resultWork?.cleanerNameSnapshot ?? null,
+      } : null,
+      workOrder: resultWork || data.workOrderId ? {
+        id: String(resultWork?.id ?? data.workOrderId),
+        title: resultWork?.title ?? null,
+        status: resultWork?.status ?? null,
+        targetType: resultWork?.target?.type ?? null,
+      } : null,
+    },
     leaseExpiresAt: timestamp(data.leaseExpiresAt),
     startedAt: timestamp(data.startedAt),
     completedAt: timestamp(data.completedAt),
     createdAt: timestamp(data.createdAt),
     updatedAt: timestamp(data.updatedAt),
-  };
+  });
 }
 
 async function readExecutionConfig(siteId: string, requireAssignment = true) {
@@ -271,11 +305,27 @@ async function createRun(siteId: string, type: "assignment" | "review", workerId
       if (prior.data()?.status === "running") throw new OrchestrationConflict("site_run_busy");
     }
     let verificationId: string | null = null;
+    let reviewInputSnapshot: Record<string, unknown> | null = null;
     if (type === "review") {
       const work = await transaction.get(firestore.collection("workOrders").doc(input.workOrderId!));
       if (work.data()?.siteId !== siteId || work.data()?.status !== "awaiting_review" || work.data()?.managementMode !== "orchestrated") throw new OrchestrationConflict("review_changed");
       verificationId = String(work.data()?.latestVerificationId ?? "");
       if (!verificationId) throw new OrchestrationConflict("review_not_ready");
+      reviewInputSnapshot = {
+        workOrder: {
+          id: work.id,
+          alertId: work.data()?.alertId ?? null,
+          assignedCleanerId: work.data()?.assignedCleanerId ?? null,
+          cleanerNameSnapshot: work.data()?.cleanerNameSnapshot ?? null,
+          title: work.data()?.title ?? null,
+          status: work.data()?.status ?? null,
+          severity: work.data()?.severity ?? null,
+          issueType: work.data()?.issueType ?? null,
+          zoneId: work.data()?.zoneId ?? work.data()?.target?.zoneId ?? null,
+          cameraId: work.data()?.cameraId ?? work.data()?.target?.cameraId ?? null,
+          target: work.data()?.target ?? null,
+        },
+      };
     }
     if (input.sourceEventId) {
       const sourceRef = firestore.collection("orchestratorOutbox").doc(input.sourceEventId);
@@ -317,7 +367,7 @@ async function createRun(siteId: string, type: "assignment" | "review", workerId
       requestedWorkerId: workerId,
       configRevision: Number(config.revision ?? 0),
       verificationId,
-      inputSnapshot: null,
+      inputSnapshot: reviewInputSnapshot,
       candidateCount: 0,
       inputAlertCount: type === "assignment" ? 0 : 1,
       candidatePairCount: 0,
@@ -449,8 +499,8 @@ async function finishRun(runId: string, input: { status: "succeeded" | "failed" 
   });
 }
 
-async function notifySupervisors(siteId: string, runId: string, type: "assignment_failed", body: string, alertId: string | null = null, stableKey = runId) {
-  await recordV2SystemEvent(siteId, "assignment_failed");
+async function notifySupervisors(siteId: string, runId: string, type: "assignment_failed", body: string, alertId: string | null = null, stableKey = runId, systemEventCode: V2SystemEventCode = "orchestrator_assignment_failed") {
+  await recordV2SystemEvent(siteId, systemEventCode);
   const supervisors = await firestore.collection("supervisors").where("siteId", "==", siteId).where("status", "==", "active").get();
   const expiresAt = Timestamp.fromMillis(Date.now() + 90 * 24 * 60 * 60 * 1000);
   await Promise.all(supervisors.docs.map((supervisor) => {
@@ -529,14 +579,23 @@ export async function listV2OrchestratorRuns(siteId: string, limit = 50) {
 export async function getV2OrchestratorConfig(siteId: string) {
   const config = await firestore.collection("orchestratorConfigs").doc(siteId).get();
   if (!config.exists || config.data()?.schemaVersion !== 2) throw new HttpError(404, "Orchestrator configuration not found.");
-  return { id: config.id, ...config.data(), pausedAt: timestamp(config.data()?.pausedAt), lastRunAt: timestamp(config.data()?.lastRunAt), lastSuccessfulRunAt: timestamp(config.data()?.lastSuccessfulRunAt), lastFailureAt: timestamp(config.data()?.lastFailureAt), updatedAt: timestamp(config.data()?.updatedAt) };
+  return v2Json({ id: config.id, ...config.data() });
 }
 
 export async function setV2OrchestratorStatus(siteId: string, status: "running" | "paused", actor: AuditActor, reason: string | null, requestId: string) {
   const configRef = firestore.collection("orchestratorConfigs").doc(siteId);
   const config = await configRef.get();
   if (!config.exists || config.data()?.schemaVersion !== 2) throw new HttpError(404, "Orchestrator configuration not found.");
-  await configRef.update({ status, pausedAt: status === "paused" ? FieldValue.serverTimestamp() : null, pausedByUid: status === "paused" ? actor.uid : null, pauseReason: status === "paused" ? reason : null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
+  const controlHistory = Array.isArray(config.data()?.controlHistory) ? config.data()!.controlHistory.slice(-19) : [];
+  controlHistory.push({
+    status,
+    actorUid: actor.uid,
+    actorNameSnapshot: actor.displayName,
+    actorAuthority: actor.authority ?? null,
+    reason,
+    occurredAt: Timestamp.now(),
+  });
+  await configRef.update({ status, pausedAt: status === "paused" ? FieldValue.serverTimestamp() : null, pausedByUid: status === "paused" ? actor.uid : null, pauseReason: status === "paused" ? reason : null, controlHistory, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
   if (status === "running") await enqueueV2ImmediateAssignmentTrigger(siteId, "orchestrator_resumed", `resume:${Date.now()}`);
   await writeV2AuditEvent({ actor, siteId, action: status === "paused" ? "orchestrator_paused" : "orchestrator_resumed", resourceType: "OrchestratorConfig", resourceId: siteId, outcome: "succeeded", reason, before: { status: config.data()?.status }, after: { status }, requestId });
   return getV2OrchestratorConfig(siteId);
@@ -550,9 +609,11 @@ export async function assignV2CleanerTool(input: { siteId: string; runId: string
     rationaleSummary: decision.rationaleSummary, provider: decision.provider, model: decision.model,
     fingerprint: canonicalHash("assignment-command", input.runId, decision.alertId, decision.cleanerId, decision.rationaleSummary),
   };
-  return createV2AlertWorkOrder({ siteId: input.siteId, alertId: decision.alertId, assignedCleanerId: decision.cleanerId,
+  const workOrder = await createV2AlertWorkOrder({ siteId: input.siteId, alertId: decision.alertId, assignedCleanerId: decision.cleanerId,
     idempotencyKey: `orchestrator:${input.runId}` },
     { uid: input.workerId, role: "supervisor", authority: null, displayName: "LitterSpot Orchestrator", type: "orchestrator" }, input.requestId, command);
+  await recoverV2OrchestratorSystemEvents(input.siteId, "assignment").catch(() => undefined);
+  return workOrder;
 }
 
 export async function assignV2CleanerByIdsTool(input: { siteId: string; runId: string; workerId: string; alertId: string; cleanerId: string; rationaleSummary: string; requestId: string }) {
@@ -582,10 +643,11 @@ export async function runV2AssignmentCycle(siteId: string, options: RunOptions =
       if (!context.alerts.length || !context.eligiblePairs.length) {
         const code = !context.alerts.length ? "no_waiting_alerts" : excludedCleanerIds.size ? "all_candidates_conflicted" : "no_candidates";
         await finishRun(runId, { status: "exhausted", resultCode: code });
-        if (context.alerts.length) await notifySupervisors(siteId, runId, "assignment_failed", "No Cleaner could be reserved. Alerts remain waiting.", context.alerts[0].alertId, `${code}:${context.alerts[0].alertId}`);
+        if (context.alerts.length) await notifySupervisors(siteId, runId, "assignment_failed", "No Cleaner could be reserved. Alerts remain waiting.", context.alerts[0].alertId, `${code}:${context.alerts[0].alertId}`, "orchestrator_no_available_cleaner");
         return getV2OrchestratorRun(siteId, runId);
       }
       let selection: AssignmentDecision | null = null;
+      let terminalProviderErrorCode: "invalid_selection" | "provider_error" = "provider_error";
       const retries = technicalRetryDelays(Math.min(3, Math.max(0, Number(config.technicalRetryLimit ?? 3))));
       for (let attempt = 0; attempt <= retries.length; attempt++) {
         await assertRun(runId, workerId, "assignment", siteId);
@@ -596,7 +658,8 @@ export async function runV2AssignmentCycle(siteId: string, options: RunOptions =
           if (!isEligibleAssignmentPair(context.eligiblePairs, selection.alertId, selection.cleanerId)) throw new Error("invalid_selection");
         } catch (error) {
           selection = null;
-          errorCode = error instanceof Error && error.message === "invalid_selection" ? "invalid_selection" : "provider_error";
+          terminalProviderErrorCode = error instanceof Error && error.message === "invalid_selection" ? "invalid_selection" : "provider_error";
+          errorCode = terminalProviderErrorCode;
         }
         await assertRun(runId, workerId, "assignment", siteId);
         await writeAttempt(runId, { siteId, sequence: ++attemptSequence, kind: "provider_request",
@@ -610,7 +673,15 @@ export async function runV2AssignmentCycle(siteId: string, options: RunOptions =
       }
       if (!selection) {
         await finishRun(runId, { status: "failed", resultCode: "provider_failed", errorCode: "provider_failed" });
-        await notifySupervisors(siteId, runId, "assignment_failed", "The assignment model could not produce a valid decision. Alerts remain waiting.", context.alerts[0].alertId);
+        await notifySupervisors(
+          siteId,
+          runId,
+          "assignment_failed",
+          "The assignment model could not produce a valid decision. Alerts remain waiting.",
+          context.alerts[0].alertId,
+          runId,
+          terminalProviderErrorCode === "invalid_selection" ? "orchestrator_invalid_selection" : "orchestrator_provider_unavailable",
+        );
         return getV2OrchestratorRun(siteId, runId);
       }
       try {
@@ -631,8 +702,10 @@ export async function runV2AssignmentCycle(siteId: string, options: RunOptions =
     }
     throw new OrchestrationConflict("candidate_budget_exhausted");
   } catch (error) {
-    await finishRun(runId, { status: error instanceof HttpError ? "cancelled" : "failed",
+    const status = error instanceof HttpError ? "cancelled" : "failed";
+    await finishRun(runId, { status,
       resultCode: error instanceof OrchestrationConflict ? error.code : error instanceof Error && /paused|disabled/.test(error.message) ? "automation_paused" : "execution_stopped", errorCode: "execution_stopped" });
+    if (status === "failed") await recordV2SystemEvent(siteId, "orchestrator_assignment_failed");
     return getV2OrchestratorRun(siteId, runId);
   }
 }
@@ -680,11 +753,14 @@ export async function runV2ReviewCycle(siteId: string, workOrderId: string, opti
         title: "Cleaning review needs attention", body: "Evidence is inconclusive. A Supervisor must review this task.", entityType: "work_order",
         entityId: workOrderId, cameraId: null, alertId: context.alertId, workOrderId, severity: null, isSimulation: false });
       await finishRun(runId, { status: "exhausted", resultCode: "needs_supervisor", workOrderId });
+      await recordV2SystemEvent(siteId, "orchestrator_review_inconclusive");
     } else {
       await applyReviewTool({ siteId, runId, workOrderId, workerId, outcome: context.verificationOutcome, requestId: options.requestId ?? runId });
+      await recoverV2OrchestratorSystemEvents(siteId, "review").catch(() => undefined);
     }
   } catch (error) {
     await finishRun(runId, { status: "cancelled", resultCode: error instanceof OrchestrationConflict ? error.code : "review_stopped" });
+    if (!(error instanceof OrchestrationConflict)) await recordV2SystemEvent(siteId, "orchestrator_review_failed");
   }
   return getV2OrchestratorRun(siteId, runId);
 }

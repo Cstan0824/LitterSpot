@@ -174,7 +174,7 @@ The content workspace is wide, light, map-oriented, and uses thin structural lin
 These require dedicated UI work rather than quiet integration substitutions.
 
 - A true V2 Site Map renderer for real Zone polygons, metre coordinates, Camera placement, Cleaner stations, and optional plan imagery.
-- Bin Analysis page design using V2 daily recommendations, factor coverage, interventions, and comparisons.
+- Bin Analysis is now wired to V2 daily recommendations, factor coverage, interventions, and comparisons while retaining the delivered Insights layout.
 - System page design for Orchestrator state, pause/resume, structured runs, and safe system events.
 - Superadmin product area and Root Supervisor account-management surfaces.
 

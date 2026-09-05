@@ -18,6 +18,7 @@ const alertStates = ["waiting_for_cleaner", ...activeWork, "resolved", "dismisse
 const byName = (a: string, b: string) => a.localeCompare(b);
 const safe = (data: any) => v2Json(data);
 const severityRank = (s: string) => s === "critical" ? 2 : 1;
+const activeZone = (data: Record<string, unknown>) => data.lifecycleStatus === "active" || (data.lifecycleStatus == null && data.status === "active");
 
 export async function buildDashboard(siteId: string, now = new Date()) {
   await requireAnalyticsSite(siteId);
@@ -28,7 +29,7 @@ export async function buildDashboard(siteId: string, now = new Date()) {
     allDocuments(firestore.collection("analyticsMinuteBuckets").where("siteId", "==", siteId)
       .where("bucketStart", ">=", Timestamp.fromDate(start)).where("bucketStart", "<", Timestamp.fromDate(end)).orderBy("bucketStart")),
   ]);
-  const zones = zoneDocs.filter(d => d.data().status === "active"), cameras = cameraDocs.filter(d => d.data().status === "active");
+  const zones = zoneDocs.filter(d => activeZone(d.data())), cameras = cameraDocs.filter(d => d.data().status === "active");
   const cleaners = await Promise.all(cleanerDocs.filter(d => d.data().status === "active").map(d => presentV2Cleaner(d.id, siteId, now)));
   const available = cleaners.filter(c => c.availability.available);
   const alerts = alertDocs.map(d => ({ ...d.data(), id: d.id } as any));
@@ -90,7 +91,7 @@ async function rankingInput(siteId: string, days: number, now: Date) {
   const [all, zones, interventions] = await Promise.all([getDailySummaries(siteId,from,to),siteDocuments("zones",siteId),listInterventions(siteId)]);
   const summaries = all.filter(s => s.status === "final" && s.coverage?.hasSourceData);
   const excluded = new Set(interventions.filter(i=>millis(i.exclusionEndsAt)>+now).map(i=>i.zoneId));
-  const activeZones = zones.filter(z=>z.data().status==="active" && !excluded.has(z.id));
+  const activeZones = zones.filter(z=>activeZone(z.data()) && !excluded.has(z.id));
   const fingerprint = canonicalHash("ranking-input",summaries.map(s=>[s.id,s.generatedAt]),activeZones.map(z=>z.id),interventions.map(i=>[i.id,i.exclusionEndsAt]),site.activeMapRevisionId ?? null,days,from,to);
   return { site,tz,from,to,summaries,activeZones,fingerprint };
 }
@@ -137,7 +138,7 @@ export async function implementBinPlacement(siteId:string,zoneId:string,actor:an
   const ref=firestore.collection("binPlacementSnapshots").doc(siteId);
   const id=await firestore.runTransaction(async tx=>{
     const [snap,site,zone]=await Promise.all([tx.get(ref),tx.get(firestore.collection("sites").doc(siteId)),tx.get(firestore.collection("zones").doc(zoneId))]);
-    if(site.data()?.status!=="active" || zone.data()?.siteId!==siteId || zone.data()?.status!=="active") throw new HttpError(404,"Active Zone not found.");
+    if(site.data()?.status!=="active" || zone.data()?.siteId!==siteId || !activeZone(zone.data() ?? {})) throw new HttpError(404,"Active Zone not found.");
     const s=snap.data();
     if (expectedSnapshotCalculatedAt && millis(s?.calculatedAt) !== Date.parse(expectedSnapshotCalculatedAt)) throw new HttpError(409,"The recommendation changed. Refresh and review it before implementing.");
     if(!s || s.policyVersion!=="bin-placement-v3" || millis(s.nextScheduledRefreshAt)<=+now || s.mapRevisionId!==(site.data()?.activeMapRevisionId??null)) throw new HttpError(409,"Refresh recommendations before implementing.");

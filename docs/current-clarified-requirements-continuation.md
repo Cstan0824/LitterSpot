@@ -20,15 +20,21 @@ Labels:
 
 An incomplete creation is a non-operational draft. Cancelling it creates no operational Camera.
 
+**Confirmed** A Zone drawn inside Camera Creation remains provisional inside the Camera Draft. It is not added to the Active Site Map until Page 4 publishes the Camera. Cancelling the flow deletes the Camera Draft, its draft-owned reference/source media, and the provisional Zone.
+
 ### 2.2 Source types
 
-**Confirmed** The first Camera created for a Site is forced to use the laptop webcam source. Later prototype Cameras use looped simulation videos.
+**Superseded 2026-09-05** Camera source type is no longer chosen by creation order. The first Camera does not have to use the laptop webcam.
+
+**Confirmed** Any Camera may be registered with a laptop webcam or looped-video source. Multiple Cameras may retain laptop-source configuration, but at most one laptop-source Camera per Site may have monitoring enabled at a time. Enabling one must be rejected if another laptop-source Camera is already enabled.
 
 **Confirmed** The prototype assumes operation on one laptop. The product does not enforce a designated-device identity. If the laptop or webcam view changes, a Supervisor reconfigures the reference and replots the Camera Registration.
 
 ### 2.3 Camera status and monitoring control
 
-**Confirmed** Completing laptop Camera Creation automatically activates that Camera.
+**Superseded 2026-09-05** A newly published laptop Camera no longer starts monitoring automatically.
+
+**Confirmed** Completing Camera Creation publishes the Camera as structurally active with `monitoringEnabled=false`, regardless of source type. A Root or Regular Supervisor deliberately enables monitoring afterward.
 
 **Confirmed** Structural Camera status and temporary monitoring control are separate:
 
@@ -85,11 +91,29 @@ Simulation records participate in the normal prototype workflow and analytics. T
 
 Source replacement preserves both structural `status` and `monitoringEnabled`. Replacement never silently enables a simulation Camera.
 
+**Confirmed 2026-09-05** Looped-video Cameras may have developer-configured Demo Source Scenes that use the same physical viewpoint and Camera Registration. This supports switching between clean and issue videos during a demonstration without running Camera reconfiguration each time.
+
+Demo Source Scene selection is not shown in the Supervisor product UI or the System page. A developer operates it through a separate development-only control.
+
+**Confirmed 2026-09-05** The selected scene itself is visible everywhere the Camera feed is normally shown. Camera wall and Camera Details update to the new video and continue showing the real inference overlays and Camera state. Only the scene-selection control and developer diagnostics remain outside the product UI.
+
+**Corrected 2026-09-05** A scene switch represents the same Camera view changing in real time. It does not end the Monitoring Episode, reset sample sequence, clear temporal qualification windows, clear current workflow state, or mark the Camera offline. The selected video starts from time zero and subsequent frames continue through the same monitoring and evaluation flow. Existing clean or positive observations leave rolling windows naturally as new observations arrive.
+
+Alert Evidence candidates must be time-bounded by the normal rolling evaluation window or Alert lifecycle rather than cleared because a scene changed. This prevents an old dirty frame from becoming evidence for a later unrelated Alert while preserving realistic continuity.
+
 ### 2.6 Monitoring ownership
 
 **Confirmed** One lease-protected browser Monitoring Session owns Site Camera capture and frame submission. Other Supervisor browsers are viewers and do not submit duplicate frames.
 
 **Confirmed** If the owner disappears, another open browser may claim the expired lease. The prototype assumes those browser sessions run on the same laptop. Device identity enforcement is out of scope.
+
+**Confirmed 2026-09-05** Monitoring is owned at the authenticated application-session level, not by the Camera list or Camera detail page. Enabled Cameras keep playing and sampling while the user navigates anywhere in LitterSpot. Monitoring may stop after the final connected client/browser session closes.
+
+Only authenticated Supervisor console sessions count toward that lifecycle. Cleaner mobile sessions neither own monitoring nor keep Site Camera processing alive.
+
+### 2.7 Alert Evidence overlays
+
+**Confirmed 2026-09-05** Continue retaining one selected Alert Evidence frame rather than ordinary sampled frames or continuous footage. For now, retain the complete set of model detections belonging to that selected frame so its annotated snapshot can show people, registered-bin results, and floor issues, even when only one issue type caused the Alert.
 
 ## 3. Open decisions
 
@@ -149,8 +173,8 @@ The sandbox:
 
 ### 2026-08-30 — Camera activation and replacement
 
-- Laptop Camera activates automatically after complete Camera Creation.
-- Looped-video Cameras are structurally active but start with monitoring disabled until a Root or Regular Supervisor enables them for a demonstration.
+- **Superseded 2026-09-05:** Laptop Camera monitoring no longer starts automatically after Camera Creation.
+- Every newly published Camera is structurally active but starts with monitoring disabled until a Root or Regular Supervisor enables it.
 - Monitoring-disabled simulation Cameras do not sample or generate repeated artificial Alerts.
 - Turning monitoring off leaves existing Alerts and Work Orders unchanged.
 - Enabling a simulation Camera restarts its video at time zero and clears only in-memory temporal state for a fresh demo episode.
@@ -270,3 +294,19 @@ The backend continues to require a valid, in-boundary Station Point. Missing, ma
 **Confirmed** The prototype monitoring default is one sampled frame per second. This is the Site default for newly created Cameras and the default interval for uploaded-video processing when no interval is supplied.
 
 The interval remains configurable. Existing Camera source revisions retain their recorded interval; changing the default does not rewrite published history.
+
+## 10. 2026-09-04 — Read-first Cleaner details
+
+**Confirmed** Clicking a Cleaner row opens a read-only Cleaner detail modal. It does not open the edit wizard directly.
+
+The detail modal shows the Cleaner profile, effective availability and reason, current Work Order, read-only Station Point map with nearest Zone and metre coordinates, and all seven recurring schedule days.
+
+**Confirmed** **Edit Cleaner** replaces the detail modal with the existing four-page edit wizard. The UI never stacks both modals. Saving returns to the refreshed detail view.
+
+**Confirmed** Availability Override is a separate operational control in the detail modal. An active Cleaner without active Work can be marked unavailable or returned to schedule. Active Work continues to control busy availability and cannot be bypassed from this modal.
+
+## 11. 2026-09-04 — Supervisor Work queue columns
+
+**Confirmed** The Supervisor Work queue does not display the internal Work Order UUID. IDs remain available to API routing, audit logs, and developer tools.
+
+The table uses that space for a **Next action** column derived from Work status and management mode. It shows who or what the Work is waiting for, plus the latest activity time. The Work title and instruction remain the primary row identity.

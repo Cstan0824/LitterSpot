@@ -16,6 +16,7 @@ A Camera Draft supports both initial Camera Creation and later source/Registrati
 | `name` | string | yes | Proposed Camera name. |
 | `description` | string or null | yes | Optional metadata. |
 | `placement` | map or null | yes | `{point, zoneId}` for create or structural move. `zoneId` is server-derived. |
+| `provisionalZone` | map or null | yes | Optional `{zoneId, zoneNameSnapshot, polygon}` created inside Camera registration. It is copied into the Active Map only when this Camera Draft publishes. |
 | `source` | map | yes | Proposed source settings. |
 | `registration` | map or null | yes | Reference, floor polygon, bins and quality settings. |
 | `validationStatus` | enum | yes | `not_validated`, `valid`, or `invalid`. |
@@ -34,7 +35,7 @@ A Camera Draft supports both initial Camera Creation and later source/Registrati
 | `type` | enum | `laptop_camera` or `looped_video`. |
 | `sourceMediaId` | string or null | Required for looped video; null for laptop Camera. |
 | `browserDeviceHint` | string or null | Non-secret best-effort webcam label. It is not stable identity. |
-| `sampleIntervalSeconds` | number | Camera override or Site default, initially 2. |
+| `sampleIntervalSeconds` | number | Camera override or Site default, initially 1. |
 | `isSimulation` | boolean | True exactly when source type is looped video. |
 
 ### Registration draft

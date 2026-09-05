@@ -1558,8 +1558,8 @@ Supervisor routes:
 | --- | --- | --- |
 | `GET` | `/api/orchestrator/v2/config` | Read configuration and health timestamps |
 | `POST` | `/api/orchestrator/v2/status` | Pause or resume with `{ "status": "running" | "paused", "reason": null }` |
-| `GET` | `/api/orchestrator/v2/runs?limit=50` | List Site-scoped V2 Runs |
-| `GET` | `/api/orchestrator/v2/runs/{runId}` | Read Run, provider attempts and Node tool actions |
+| `GET` | `/api/orchestrator/v2/runs?limit=50` | List Site-scoped V2 Runs. Each Run includes display-safe `references` for its Alert, Cleaner, and Work when known. |
+| `GET` | `/api/orchestrator/v2/runs/{runId}` | Read Run, display-safe references, provider attempts, and Node tool actions. |
 | `POST` | `/api/orchestrator/v2/assignment-cycle` | Run one real provider-backed cycle |
 
 Private routes require `X-Orchestrator-Token` and `X-Orchestrator-Worker-ID`:
@@ -1630,7 +1630,7 @@ The automatic worker finalizes only the previous Site-local day. Use the explici
 
 | Method | Route | Access and response |
 | --- | --- | --- |
-| GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, recent Runs and safe events |
+| GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, backlog counts, recent control history, 20 recent Runs, and safe events |
 | GET | `/api/operations/v2/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
 | GET | `/api/cleaner/notifications?limit=50` | V2 Cleaner's own inbox; `{ notifications }` |
 | GET | `/api/cleaner/map` | V2 Cleaner's active-map projection; `{ map }` containing dimensions, Zone polygons, and only that Cleaner's Station Point |
@@ -1641,6 +1641,19 @@ The automatic worker finalizes only the previous Site-local day. Use the explici
 Site-status mutation returns `site.operationId`. Deactivation immediately blocks Site access and schedules cleanup. Reactivation returns `409` until cleanup completes. It never reopens dismissed work. See [the Phase 10 brief](phase-10-completed-brief.md) for safe Postman tests and development Firestore deployment commands.
 
 Notifications are immutable; no read receipts or direct frontend writes are supported. Client Firestore queries must filter both `recipientUid` and `siteId` and sort by `createdAt desc`.
+
+The System response separates process state from Site configuration:
+
+- `configuration.status` is the Site's saved `running` or `paused` state;
+- `runtime.backgroundWorkerEnabled` reports whether this Node process starts the Orchestrator worker;
+- `runtime.providerConnectivity` stays `not_probed`; the endpoint does not call Ollama merely to paint the page;
+- `runtime.backlog.waitingAlertCount` counts V2 Alerts still waiting for a Cleaner;
+- `runtime.backlog.awaitingReviewWorkOrderCount` counts V2 Work awaiting review;
+- `controlHistory` contains up to 20 recent pause/resume actions, newest first;
+- `recentRuns` contains at most 20 Runs with display-safe references and retry/tool counts;
+- `events` contains persisted safe fault summaries plus a response-only `orchestrator_worker_disabled` warning when configuration and process settings disagree.
+
+`recentRuns[].references` is built from the Run's frozen input/result snapshot. Polling the System page does not fetch each referenced Alert, Cleaner, and Work document. Older failed review Runs created before this snapshot field was added can still have a null display name; their UUID remains available for diagnosis.
 
 `GET /api/cleaner/map` deliberately excludes map drafts, Camera placements, and every other Cleaner's Station Point. A returned Station Point may have `zoneId: null` when it is in an unzoned but in-boundary part of the Site Map. Coordinate Work already carries its own target point; Camera-targeted Work is represented by its Camera reference until the live-monitoring integration is available.
 
@@ -1653,6 +1666,14 @@ Notifications are immutable; no read receipts or direct frontend writes are supp
 The caller must be an active Supervisor for the Camera's Site. `camera` includes the active placement, runtime state, source, Registration, and active map revision. `currentAssignments` contains active Camera-targeted Work Orders. `recentHistory` combines Camera Alerts and Work Orders with status, Cleaner snapshot, time, and evidence media reference when one exists.
 
 `orchestratorTrace` is a safe audit view of related assignment/review Runs. It includes the structured decision summary, decision factors, selected Cleaner, provider/model identifiers, result, error code, and timestamps. It deliberately excludes raw provider output, internal tool input, and assignment context snapshots. `auditEvents` supplies related Supervisor/system audit entries.
+
+### V2 Camera registration lifecycle
+
+`POST /api/camera-creation/drafts/start` may include a `provisionalZone` alongside the Camera placement. The backend validates that Zone against the active Site Map, stores it only in the Camera Draft, and accepts the Camera point only when it falls inside exactly that active or provisional Zone.
+
+`POST /api/camera-creation/drafts/{draftId}/publish` publishes a provisional Zone, Camera placement, source and Registration in one transaction. The active Site Map does not change before this call.
+
+`DELETE /api/camera-creation/drafts/{draftId}` cancels unfinished registration. It deletes the Camera Draft and its draft-owned reference/source media. A provisional Zone inside that draft is never published.
 
 ### Development-only simulated Alerts
 

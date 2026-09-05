@@ -18,6 +18,10 @@ Status: implemented locally against the V2 API. The frontend build and automated
 - The Station Point screen renders the active V2 Zone polygons over the delivered site-plan image. Any point inside the Site Map can be saved; the displayed Nearest Zone is calculated from the shortest distance to a Zone boundary and never restricts assignment. The request is converted to the Site Map's real metre coordinates.
 - Editing a Cleaner updates profile and schedule through `PATCH /api/cleaners/{id}`, then publishes a new Station Point revision through `PUT /api/site-map/station-points/{id}`.
 - The roster, metrics, schedule summary, and availability labels refresh from the V2 read model after a successful mutation.
+- Clicking a roster row now opens a read-only Cleaner detail modal instead of the edit wizard.
+- The detail modal shows profile data, effective availability and reason, active Work, read-only Station Point geometry, nearest Zone, metre coordinates, and the full seven-day schedule.
+- **Edit Cleaner** replaces the detail view with the existing four-page wizard. Saving returns to the refreshed detail view.
+- An active Cleaner without active Work can be marked unavailable or returned to schedule directly from the detail view. Busy availability remains controlled by active Work.
 
 ### Cleaner: mobile web app
 
@@ -49,11 +53,13 @@ The added request-client test verifies the V2 Cleaner create, update, and Statio
 1. Start the normal V2 stack, then open the frontend at `http://127.0.0.1:5173`.
 2. Sign in as the Root Supervisor and open **Cleaner management**.
 3. Create a Cleaner using a unique email and an 8+ character password. Put the Station Point anywhere inside the Site Map and save. Confirm its nearest Zone and distance appear after refresh.
-4. Open the Cleaner row, alter one schedule time and move the Station Point into an unzoned part of the map. Save and refresh. Confirm it remains available when its schedule permits it.
-5. Sign out and sign in with the newly created Cleaner credentials. Confirm the mobile workspace loads rather than a pending-role page.
-6. For the seeded Coordinate Work: open it, start it, select one image, submit for review, and confirm it becomes `awaiting_review`.
-7. For Camera-linked Work: start it and submit without a photo. Confirm it becomes `awaiting_review`.
-8. Trigger or use an existing Cleaner notification. Confirm it appears in Updates without a full page reload.
+4. Open a Cleaner row. Confirm it first shows the read-only detail view, including Station Point, nearest Zone, effective availability, current Work, and all seven schedule days.
+5. Press **Edit Cleaner**, alter one schedule time, and move the Station Point into an unzoned part of the map. Save and confirm the refreshed detail view returns.
+6. For an active Cleaner without active Work, test **Set unavailable**, then **Return to schedule**. Confirm both changes survive refresh.
+7. Sign out and sign in with the newly created Cleaner credentials. Confirm the mobile workspace loads rather than a pending-role page.
+8. For the seeded Coordinate Work: open it, start it, select one image, submit for review, and confirm it becomes `awaiting_review`.
+9. For Camera-linked Work: start it and submit without a photo. Confirm it becomes `awaiting_review`.
+10. Trigger or use an existing Cleaner notification. Confirm it appears in Updates without a full page reload.
 
 ## UI/backend mismatches found
 

@@ -8,10 +8,29 @@ import { getV2OrchestratorConfig, listV2OrchestratorRuns } from "./v2Orchestrato
 /** Text comes from this catalogue, never a provider exception or raw model response. */
 const catalogue = {
   assignment_failed: { component: "orchestrator", message: "Automatic assignment needs attention." },
+  orchestrator_no_available_cleaner: { component: "orchestrator", message: "Alerts are waiting because no Cleaner is currently available." },
+  orchestrator_provider_unavailable: { component: "orchestrator", message: "The assignment provider did not respond successfully after its retries." },
+  orchestrator_invalid_selection: { component: "orchestrator", message: "The assignment provider repeatedly selected an invalid Alert and Cleaner pair." },
+  orchestrator_assignment_failed: { component: "orchestrator", message: "Automatic assignment stopped before it could create Work." },
+  orchestrator_review_inconclusive: { component: "orchestrator", message: "A cleaning review needs a Supervisor decision." },
+  orchestrator_review_failed: { component: "orchestrator", message: "Automatic cleaning review stopped before it could decide the Work outcome." },
   site_operation_failed: { component: "site_operations", message: "Site cleanup needs to be retried." },
 } as const;
 
-export async function recordV2SystemEvent(siteId: string, code: keyof typeof catalogue, recovered = false) {
+export type V2SystemEventCode = keyof typeof catalogue;
+const assignmentFailureCodes: V2SystemEventCode[] = [
+  "assignment_failed",
+  "orchestrator_no_available_cleaner",
+  "orchestrator_provider_unavailable",
+  "orchestrator_invalid_selection",
+  "orchestrator_assignment_failed",
+];
+const reviewFailureCodes: V2SystemEventCode[] = [
+  "orchestrator_review_inconclusive",
+  "orchestrator_review_failed",
+];
+
+export async function recordV2SystemEvent(siteId: string, code: V2SystemEventCode, recovered = false) {
   const ref = firestore.collection("systemEvents").doc(canonicalHash("v2-system-event", siteId, code));
   await firestore.runTransaction(async (tx) => {
     const current = await tx.get(ref);
@@ -25,20 +44,59 @@ export async function recordV2SystemEvent(siteId: string, code: keyof typeof cat
   });
 }
 
+export async function recoverV2OrchestratorSystemEvents(siteId: string, runType: "assignment" | "review") {
+  const codes = runType === "assignment" ? assignmentFailureCodes : reviewFailureCodes;
+  await Promise.all(codes.map((code) => recordV2SystemEvent(siteId, code, true)));
+}
+
 export async function getV2SystemView(siteId: string) {
-  const [config, runs, events] = await Promise.all([
+  const [config, runs, events, waitingAlerts, awaitingReviewWork] = await Promise.all([
     getV2OrchestratorConfig(siteId), listV2OrchestratorRuns(siteId, 20),
     firestore.collection("systemEvents").where("siteId", "==", siteId).where("schemaVersion", "==", 2).get(),
+    firestore.collection("alerts").where("siteId", "==", siteId).where("schemaVersion", "==", 2).where("status", "==", "waiting_for_cleaner").count().get(),
+    firestore.collection("workOrders").where("siteId", "==", siteId).where("schemaVersion", "==", 2).where("status", "==", "awaiting_review").count().get(),
   ]);
+  const observedAt = new Date().toISOString();
+  const persistedEvents = events.docs.map(doc => v2Json({ id: doc.id, ...doc.data() }));
+  const runtimeEvents = config.status === "running" && !env.orchestratorWorkerEnabled ? [{
+    id: `runtime-worker-disabled:${siteId}`,
+    schemaVersion: 2,
+    siteId,
+    code: "orchestrator_worker_disabled",
+    component: "orchestrator",
+    severity: "warning",
+    status: "open",
+    occurrenceCount: 1,
+    message: "The Site Orchestrator is running, but this Node process has its background worker disabled.",
+    firstOccurredAt: observedAt,
+    lastOccurredAt: observedAt,
+    recoveredAt: null,
+    updatedAt: observedAt,
+    derivedFromRuntime: true,
+  }] : [];
   return {
     configuration: config,
-    runtime: { backgroundWorkerEnabled: env.orchestratorWorkerEnabled, observedAt: new Date().toISOString(), providerConnectivity: "not_probed" },
+    runtime: {
+      backgroundWorkerEnabled: env.orchestratorWorkerEnabled,
+      observedAt,
+      providerConnectivity: "not_probed",
+      backlog: {
+        waitingAlertCount: waitingAlerts.data().count,
+        awaitingReviewWorkOrderCount: awaitingReviewWork.data().count,
+      },
+    },
+    controlHistory: Array.isArray(config.controlHistory) ? [...config.controlHistory].reverse() : [],
     recentRuns: runs.slice(0, 20).map(run => ({
       id: run.id, type: run.type, status: run.status, resultCode: run.resultCode, selectedAlertId: run.selectedAlertId,
       selectedCleanerId: run.selectedCleanerId, workOrderId: run.workOrderId, provider: run.provider, model: run.model,
       decisionSummary: run.decisionSummary, decisionFactors: run.decisionFactors, isSimulation: run.isSimulation,
-      errorCode: run.errorCode, startedAt: run.startedAt, completedAt: run.completedAt,
+      references: run.references,
+      providerRequestCount: Number(run.providerRequestCount ?? 0),
+      retryCount: Math.max(0, Number(run.providerRequestCount ?? 0) - 1),
+      candidateAttemptCount: Number(run.candidateAttemptCount ?? 0),
+      toolCallCount: Number(run.toolCallCount ?? 0),
+      errorCode: run.errorCode, startedAt: run.startedAt, completedAt: run.completedAt, createdAt: run.createdAt,
     })),
-    events: events.docs.map(doc => v2Json({ id: doc.id, ...doc.data() })),
+    events: [...runtimeEvents, ...persistedEvents].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? ""))),
   };
 }

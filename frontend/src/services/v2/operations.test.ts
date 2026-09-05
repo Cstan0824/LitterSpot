@@ -39,6 +39,8 @@ describe("V2 Supervisor action client", () => {
     const cleaner = { id: "cleaner-1", revision: 3 } as any;
     await updateV2Cleaner(cleaner, { fullName: "Aina R.", weeklySchedule: { mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null } });
     expect(request).toHaveBeenLastCalledWith("/api/cleaners/cleaner-1", expect.objectContaining({ method: "PATCH", json: expect.objectContaining({ expectedRevision: 3, fullName: "Aina R." }) }));
+    await updateV2Cleaner(cleaner, { availabilityOverride: "unavailable" });
+    expect(request).toHaveBeenLastCalledWith("/api/cleaners/cleaner-1", expect.objectContaining({ method: "PATCH", json: { availabilityOverride: "unavailable", expectedRevision: 3 } }));
     await updateV2CleanerStation("cleaner-1", { xMeters: 20, yMeters: 30 });
     expect(request).toHaveBeenLastCalledWith("/api/site-map/station-points/cleaner-1", expect.objectContaining({ method: "PUT", json: { point: { xMeters: 20, yMeters: 30 } } }));
   });

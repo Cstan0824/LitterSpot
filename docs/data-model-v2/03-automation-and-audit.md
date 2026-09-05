@@ -12,6 +12,7 @@ One mutable Site configuration controls automation.
 | `pausedAt` | timestamp or null | yes | Current pause time. |
 | `pausedByUid` | string or null | yes | Root or Regular Supervisor. |
 | `pauseReason` | string or null | yes | Bounded optional operational note. |
+| `controlHistory` | array, maximum 20 | no | Recent pause/resume actions for the System page. Each entry stores the new status, Supervisor UID/name/authority, optional reason, and server-side occurrence time. This is a safe projection for Root and Regular Supervisors; the immutable full record remains in `auditEvents`. |
 | `assignmentEnabled` | boolean | yes | Allows assignment runs. |
 | `reviewEnabled` | boolean | yes | Allows deterministic review application runs. |
 | `provider` | string | yes | Configured LLM provider key, such as `ollama`. |
@@ -30,7 +31,7 @@ One mutable Site configuration controls automation.
 | `updatedByUid` | string or null | yes | Supervisor or system. |
 | `revision` | integer | yes | Concurrency counter. |
 
-Pause/resume writes an `auditEvents` document. When paused, unassigned Alerts remain waiting and Supervisors receive notifications instead of assignment runs.
+Pause/resume writes an `auditEvents` document and appends the bounded `controlHistory` projection. When paused, unassigned Alerts remain waiting and Supervisors receive notifications instead of assignment runs.
 
 ## `orchestratorOutbox/{eventId}`
 
@@ -78,7 +79,7 @@ Each assignment or review episode receives a new Run. A prior run does not block
 | `requestedWorkerId` | string | yes | Worker identity fixed when the Run starts. |
 | `configRevision` | integer | yes | Orchestrator configuration revision required at commit. |
 | `verificationId` | string or null | yes | Exact Verification owned by a review Run. |
-| `inputSnapshot` | map | yes | Bounded structured issue, target, availability and Verification context. No private notes. |
+| `inputSnapshot` | map | yes | Bounded structured issue, target, availability and Verification context. Assignment Runs freeze offered Alerts, Cleaners and valid pairs. Review Runs freeze a display-safe Work snapshot. No private notes. |
 | `contextHash` | string or null | yes | Canonical hash of the saved assignment snapshot used as its pair allowlist. |
 | `candidateCount` | integer | yes | Available Cleaner count at first assignment context. |
 | `inputAlertCount` | integer | yes | Waiting Alerts offered to the assignment decision, maximum 10. |
@@ -228,6 +229,18 @@ System Events aggregate recurring dependency/runtime faults without flooding Fir
 | `updatedAt` | timestamp | yes | Latest state. |
 
 Optional `occurrences` and `recoveries` subcollections retain bounded recent transitions for support. No stack traces, raw headers, tokens, credentials or paths are stored.
+
+The V2 System page currently uses these persisted codes:
+
+- `orchestrator_no_available_cleaner` when Alerts remain waiting because Node found no assignable Cleaner;
+- `orchestrator_provider_unavailable` when provider requests fail through the retry limit;
+- `orchestrator_invalid_selection` when every returned Alert/Cleaner pair fails Node validation;
+- `orchestrator_assignment_failed` when assignment stops for another internal reason;
+- `orchestrator_review_inconclusive` when a Supervisor must decide the review;
+- `orchestrator_review_failed` when automatic review stops unexpectedly;
+- `site_operation_failed` for failed Site cleanup reconciliation.
+
+`orchestrator_worker_disabled` is a response-only runtime warning. Node derives it during `GET /api/operations/v2/system` when Site configuration says `running` but this process has the background worker disabled. It is not stored as a Firestore event.
 
 ## `systemMetadata/schema`
 

@@ -14,7 +14,8 @@ export type V2Camera = {
 export type V2Cleaner = {
   id: string; fullName: string; staffCode: string; phone: string; status: "active" | "inactive"; notes: string | null;
   stationPoint: V2Point | null; stationZoneId: string | null; weeklySchedule: Record<string, { startMinute: number; endMinute: number } | null>;
-  availability: { available: boolean; reasons: string[] }; activeWorkOrderId: string | null; revision: number;
+  availability: { available: boolean; reasons: string[] }; availabilityOverride?: "none" | "unavailable"; activeWorkOrderId: string | null;
+  scheduleTimeZone?: string; profileMediaId?: string | null; createdAt?: string | null; updatedAt?: string | null; revision: number;
 };
 export type V2Alert = {
   id: string; issueType: string; observedCondition: string; status: string; severity: "warning" | "critical"; priorityScore: number;
@@ -25,7 +26,7 @@ export type V2WorkOrder = {
   id: string; origin: "alert" | "manual"; alertId: string | null; managementMode: string; status: string; severity: "warning" | "critical";
   issueType: string; title: string; instructions: string; assignedCleanerId: string; cleanerNameSnapshot: string;
   zoneId: string; cameraId: string | null; target: { type: "camera" | "coordinate"; zoneNameSnapshot: string; point: V2Point | null; cameraNameSnapshot?: string | null };
-  createdAt: string | null; updatedAt: string | null; submittedAt: string | null; resolvedAt: string | null; completionEvidenceMediaId: string | null;
+  assignedAt?: string | null; createdAt: string | null; updatedAt: string | null; submittedAt: string | null; resolvedAt: string | null; completionEvidenceMediaId: string | null;
   latestVerificationId: string | null; latestVerificationOutcome: string | null; reworkCount: number; revision: number;
 };
 export type V2Dashboard = {
@@ -126,6 +127,7 @@ export type V2CameraDraft = {
   description: string | null;
   baseMapRevisionId: string;
   placement: { point: V2Point; zoneId: string } | null;
+  provisionalZone?: { zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] } | null;
   source: { type: "laptop_camera" | "looped_video"; sourceMediaId: string | null; sampleIntervalSeconds: number; isSimulation: boolean };
   referenceMediaId?: string;
   registration: { referenceMediaId: string; sourceWidth: number; sourceHeight: number; walkableFloorPolygon: Array<{ x: number; y: number }>; bins: V2RegisteredBin[] } | null;
@@ -139,7 +141,7 @@ export type V2CameraReference = { mediaId: string; contentUrl: string; mimeType:
 export type V2CameraSource = V2CameraReference & { durationSeconds: number; width: number; height: number };
 export type V2CameraRegistrationInput = { sourceWidth: number; sourceHeight: number; walkableFloorPolygon: Array<{ x: number; y: number }>; bins: V2RegisteredBin[] };
 
-export const startV2CameraDraft = (input: { kind: "create" | "reconfigure"; cameraId?: string; name: string; description?: string | null; sourceType: "laptop_camera" | "looped_video"; placement?: { point: V2Point } | null }) => v2Request<{ draft: V2CameraDraft }>("/api/camera-creation/drafts/start", { method: "POST", json: input });
+export const startV2CameraDraft = (input: { kind: "create" | "reconfigure"; cameraId?: string; name: string; description?: string | null; sourceType: "laptop_camera" | "looped_video"; placement?: { point: V2Point } | null; provisionalZone?: { zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] } | null }) => v2Request<{ draft: V2CameraDraft }>("/api/camera-creation/drafts/start", { method: "POST", json: input });
 export const getV2CameraDraft = (draftId: string) => v2Request<{ draft: V2CameraDraft }>(`/api/camera-creation/drafts/${encodeURIComponent(draftId)}`);
 export const uploadV2CameraDraftReference = (draftId: string, image: File) => { const body = new FormData(); body.append("image", image, image.name); return v2Request<{ reference: V2CameraReference }>(`/api/camera-creation/drafts/${encodeURIComponent(draftId)}/reference`, { method: "POST", body }); };
 export const uploadV2CameraDraftSourceVideo = (draftId: string, video: File) => { const body = new FormData(); body.append("video", video, video.name); return v2Request<{ source: V2CameraSource }>(`/api/camera-creation/drafts/${encodeURIComponent(draftId)}/source-video`, { method: "POST", body }); };

@@ -2,6 +2,8 @@
 
 Status: execution-ready plan, updated 2026-09-01 after the full frontend source audit. No frontend runtime code changed for this update.
 
+The post-Phase-12 Camera monitoring redesign is defined in [`camera-monitoring-redesign-plan-2026-09-05.md`](camera-monitoring-redesign-plan-2026-09-05.md). Its confirmed source, enablement, monitoring-lifecycle, scene-switching, overlay, and evidence rules supersede conflicting Camera assumptions below.
+
 ## Baseline and scope
 
 - Working branch: `jeremy`.
@@ -191,9 +193,9 @@ Camera creation is Camera registration. In one guided flow, the Supervisor may:
 2. place the Camera point inside exactly one active Zone;
 3. choose the source, capture/upload the reference, plot floor/bin regions, validate, and publish.
 
-The first Camera still must use the laptop source. Later looped-video Cameras remain disabled for monitoring until deliberately enabled.
+Camera creation order no longer determines source type. Every newly published Camera starts with monitoring disabled, and only one laptop-source Camera may be enabled at a time.
 
-The backend already validates a Camera placement against an active Zone. Drawing a new Zone within the same Camera flow requires the UI to publish the Map revision before starting the Camera Draft, or a future composite backend operation that performs both safely. This belongs to Phase 12.5.
+The backend validates Camera placement against an active Zone or one provisional Zone embedded in the Camera Draft. A provisional Zone and its Camera placement publish together on Page 4. Cancelling the flow deletes the Camera Draft and leaves the Active Site Map unchanged.
 
 ### Phase 12.4: Cleaner management and Cleaner mobile
 
@@ -238,11 +240,12 @@ Purpose: reuse the advanced plotting UI with the composite V2 Camera lifecycle.
 
 Reuse:
 
-- `CameraRegistrationPrototype` step navigation;
+- Melissa's Add Camera modal as the visual and interaction pattern for all four pages;
+- one persistent modal whose body changes between Place Camera, Reference, Plot regions, and Validate and publish;
 - reference image/video capture;
 - walkable-floor and physical-bin polygon drawing;
 - sequential video validation and result overlay;
-- the Camera management modal’s Zone polygon interaction.
+- the Camera management modal's Zone polygon interaction.
 
 Replace:
 
@@ -254,13 +257,13 @@ Replace:
 Required UI addition inside the existing flow:
 
 - a Camera Placement point inside exactly one active Zone;
-- source selection between required first laptop Camera and later looped-video Cameras;
-- looped source upload and initial `monitoringEnabled=false` state;
+- source selection between laptop Camera and looped-video Camera without a creation-order restriction;
+- source upload or capture and initial `monitoringEnabled=false` state for every Camera;
 - reconfiguration warning that source replacement requires new floor/bin plotting.
 
 Exit:
 
-- the first Camera is forced to laptop source;
+- the first Camera may use either supported source type;
 - one Camera Draft carries identity, placement, source, reference and Registration;
 - invalid geometry/source cannot publish;
 - published placement and normalized Camera-view polygons round-trip correctly;
@@ -278,7 +281,7 @@ Build:
 - laptop Camera capture and looped-video playback;
 - local live preview with returned people/bin/litter/spill overlays;
 - source/runtime/offline/conflict error presentation;
-- page-hide, logout and unmount cleanup for webcam tracks, timers, object URLs and leases;
+- logout, final-owner loss, and disablement cleanup for webcam tracks, timers, object URLs and leases;
 - Camera detail history, current cleanliness/connection status and linked active Work.
 
 Do not reuse the legacy pipeline’s one-second temporal business logic. It remains a developer analysis tool until retired.
@@ -287,13 +290,15 @@ Exit:
 
 - only one browser owns the Site Monitoring Session;
 - operational samples create V2 observations/Flags/Alerts through Node;
-- leaving monitoring stops sampling and eventually marks the Camera offline;
+- route navigation does not stop sampling; owner loss or disablement eventually marks the affected Camera offline;
 - simulation video does not start monitoring automatically;
 - only Alert Evidence is retained as imagery.
 
 ### Phase 12.7: Dashboard completion, Bin Analysis and System
 
 Purpose: wire the remaining delivered routes after operational data is real.
+
+Status: Bin Analysis is complete. Dashboard and System completion remain.
 
 Dashboard:
 
@@ -314,6 +319,7 @@ System:
 - replace the health-only sample with `/api/operations/v2/system`;
 - wire Orchestrator status, pause/resume, structured Run list/detail and safe failures;
 - keep raw provider output outside the product UI.
+- defer the standalone Model Playground until the main System page is complete. The playground will accept a temporary image or video, let the Supervisor draw temporary floor and bin polygons, run floor-litter and bin-state inference, and display overlays. It will not require a registered Camera and will never create Alerts, Work Orders, monitoring history, or analytics data.
 
 Exit:
 
@@ -398,7 +404,7 @@ Exit: configuration survives reload, overlapping Zones are rejected, Station Poi
 
 ### 12.4 Camera creation, plotting and monitoring
 
-Wire one Camera creation journey: start Draft, place Camera, obtain reference image/source video, plot floor and bins, save registration, validate, publish. Display validation failures without claiming success. Preserve laptop-first and looped-video monitoring-off defaults.
+Wire one Camera creation journey: start Draft, place Camera, obtain reference image/source video, plot floor and bins, save registration, validate, publish. Display validation failures without claiming success. Every new Camera starts with monitoring disabled; creation order does not determine source type.
 
 Use V2 monitoring claim, heartbeat, Camera start, sample and release routes. Own the monitoring session above page-level components if monitoring must survive navigation. Clean up webcam tracks, timers, media URLs and leases on stop/logout. Display local video plus the returned frame overlays; only alerted evidence is persisted by the business workflow.
 
@@ -419,6 +425,8 @@ Exit: Alert waits with no available Cleaner and no Work; assignment creates one 
 Wire Phase 11 Dashboard after the operational flows produce meaningful data. Respect its cache and 15-minute window. Bind Bin Analysis to the three equal factors, per-Zone sufficiency, refresh, snapshot-aware implementation and selected-intervention comparison. Show missing/partial dates honestly.
 
 Wire System to Phase 10 status and Phase 9 pause/resume and structured Runs. Distinguish Site configuration from local worker enablement and dependency health. Raw provider reasoning remains developer-only outside the application database.
+
+Current checkpoint: the approved System prototype is wired to the V2 System, Orchestrator status, Run-detail, and service-health endpoints. The summary refreshes once per minute only while the page is visible; Run detail loads on expansion. The Model Playground remains deferred.
 
 Exit: UI matches Postman for the same account/data, insufficient analytics do not become fake charts, stale implementations are handled, and regular Supervisors can pause/resume within the existing contract.
 

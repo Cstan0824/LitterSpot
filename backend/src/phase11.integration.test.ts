@@ -18,7 +18,7 @@ async function setup() {
   const put=(collection:string,id:string,data:object)=>firestore.collection(collection).doc(id).set({schemaVersion:2,siteId,...data});
   await put("sites",siteId,{name:"Phase11",status:"active",timeZone:"Asia/Kuala_Lumpur",activeMapRevisionId:"map"});
   await put("orchestratorConfigs",siteId,{status:"running",assignmentEnabled:true});
-  await put("zones",a,{name:"A",status:"active"}); await put("zones",b,{name:"B",status:"active"});
+  await put("zones",a,{name:"A",lifecycleStatus:"active"}); await put("zones",b,{name:"B",status:"active"});
   const minute=async(date:string,id:string,people:number,zoneId=a)=>persistMinuteContributions(siteId,new Date(date),"Asia/Kuala_Lumpur",
     [{id,zoneId,mapRevisionId:"map",metrics:{sampleAttemptCount:1,successfulSampleCount:1,failedSampleCount:0,peopleObservationCount:1,peopleSum:people,peopleMax:people}}]);
   return {siteId,a,b,put,minute};
