@@ -1,9 +1,11 @@
 import { v2Request } from "./http";
 import { createIdempotencyKey } from "./idempotency";
+import type { CameraObservation } from "../../../../shared/cameraMonitoring";
 
 export type V2Point = { xMeters: number; yMeters: number };
 export type V2Zone = { id: string; zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] };
 export type V2Camera = {
+  description?: string | null;
   id: string; name: string; status: "active" | "inactive"; monitoringEnabled: boolean; sourceType: "laptop_camera" | "looped_video";
   isSimulation: boolean; placement: { zoneId: string; point: V2Point } | null;
   runtime: { connectionStatus?: string; cleanlinessState?: string; lastPeopleCount?: number; lastSampleAcceptedAt?: string | null } | null;
@@ -20,12 +22,12 @@ export type V2Cleaner = {
 export type V2Alert = {
   id: string; issueType: string; observedCondition: string; status: string; severity: "warning" | "critical"; priorityScore: number;
   cameraId: string | null; cameraNameSnapshot: string; zoneId: string | null; zoneNameSnapshot: string; createdAt: string | null; updatedAt: string | null;
-  evidence: { mediaId: string; confidence?: number; capturedAt?: string; detections?: unknown[] } | null; activeWorkOrderId: string | null; isSimulation: boolean; revision: number;
+  evidence: { mediaId: string; confidence?: number; capturedAt?: string; detections?: unknown[]; observation?: CameraObservation } | null; activeWorkOrderId: string | null; isSimulation: boolean; revision: number;
 };
 export type V2WorkOrder = {
   id: string; origin: "alert" | "manual"; alertId: string | null; managementMode: string; status: string; severity: "warning" | "critical";
   issueType: string; title: string; instructions: string; assignedCleanerId: string; cleanerNameSnapshot: string;
-  zoneId: string; cameraId: string | null; target: { type: "camera" | "coordinate"; zoneNameSnapshot: string; point: V2Point | null; cameraNameSnapshot?: string | null };
+  zoneId: string | null; cameraId: string | null; target: { type: "camera" | "coordinate"; zoneId?: string | null; zoneNameSnapshot: string; point: V2Point | null; cameraNameSnapshot?: string | null };
   assignedAt?: string | null; createdAt: string | null; updatedAt: string | null; submittedAt: string | null; resolvedAt: string | null; completionEvidenceMediaId: string | null;
   latestVerificationId: string | null; latestVerificationOutcome: string | null; reworkCount: number; revision: number;
 };

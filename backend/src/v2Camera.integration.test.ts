@@ -10,43 +10,52 @@ async function signIn(email: string, password: string) { const response = await 
 
 run("V2 composite Camera workflow", () => {
   const suffix = randomUUID(); const uid = `camera-root-${suffix}`; const email = `${uid}@example.test`; const password = "Camera-password-123!"; const siteId = `camera-site-${suffix}`; const mapId = `camera-map-${suffix}`; const zoneId = `camera-zone-${suffix}`;
-  const reference1 = `reference-1-${suffix}`; const reference2 = `reference-2-${suffix}`; const video1 = `video-1-${suffix}`; let token = ""; let laptopCameraId = ""; let loopCameraId = "";
+  const regularUid = `camera-regular-${suffix}`; const regularEmail = `${regularUid}@example.test`;
+  const reference1 = `reference-1-${suffix}`; const reference2 = `reference-2-${suffix}`; const video1 = `video-1-${suffix}`; let token = ""; let regularToken = ""; let laptopCameraId = ""; let loopCameraId = "";
   const registration = (referenceMediaId: string) => ({ referenceMediaId, sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], bins: [] });
   beforeAll(async () => {
     await firebaseAuth.createUser({ uid, email, password, displayName: "Camera Root" });
+    await firebaseAuth.createUser({ uid: regularUid, email: regularEmail, password, displayName: "Camera Regular" });
     await firestore.collection("userAccounts").doc(uid).set({ schemaVersion: 2, uid, role: "supervisor", siteId, profileId: uid, authority: "root", emailNormalized: email, displayName: "Camera Root", status: "active", revision: 1 });
     await firestore.collection("supervisors").doc(uid).set({ schemaVersion: 2, uid, siteId, authority: "root", fullName: "Camera Root", status: "active", revision: 1 });
+    await firestore.collection("userAccounts").doc(regularUid).set({ schemaVersion: 2, uid: regularUid, role: "supervisor", siteId, profileId: regularUid, authority: "regular", emailNormalized: regularEmail, displayName: "Camera Regular", status: "active", revision: 1 });
+    await firestore.collection("supervisors").doc(regularUid).set({ schemaVersion: 2, uid: regularUid, siteId, authority: "regular", fullName: "Camera Regular", status: "active", revision: 1 });
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Camera Site", status: "active", rootSupervisorUid: uid, activeMapRevisionId: mapId, mapRevisionNumber: 1, firstCameraCreated: false, laptopCameraId: null, defaultSampleIntervalSeconds: 1, revision: 1 });
     const map = firestore.collection("siteMapRevisions").doc(mapId); await map.set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, cameraPlacementCount: 0, cleanerStationCount: 0 });
     await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 50, yMeters: 0 }, { xMeters: 50, yMeters: 50 }, { xMeters: 0, yMeters: 50 }] });
     for (const [id, mimeType] of [[reference1, "image/jpeg"], [reference2, "image/jpeg"], [video1, "video/mp4"]]) await firestore.collection("mediaAssets").doc(id).set({ schemaVersion: 2, mediaId: id, siteId, storageStatus: "available", mimeType });
     token = await signIn(email, password);
+    regularToken = await signIn(regularEmail, password);
   });
-  afterAll(async () => { await firebaseAuth.deleteUser(uid).catch(() => undefined); });
+  afterAll(async () => { await firebaseAuth.deleteUser(uid).catch(() => undefined); await firebaseAuth.deleteUser(regularUid).catch(() => undefined); });
 
-  it("forces the first Camera to laptop and publishes placement plus Registration atomically", async () => {
+  it("accepts either first source and publishes disabled with placement and Registration", async () => {
     const rejected = await request(app).post("/api/camera-creation/drafts").set("Authorization", `Bearer ${token}`).send({ kind: "create", name: "Wrong First", source: { type: "looped_video", sourceMediaId: video1 }, placement: { point: { xMeters: 10, yMeters: 10 } }, registration: registration(reference1) });
-    expect(rejected.status).toBe(400);
+    expect(rejected.status).toBe(201);
     const draft = await request(app).post("/api/camera-creation/drafts").set("Authorization", `Bearer ${token}`).send({ kind: "create", name: "Laptop Camera", source: { type: "laptop_camera" }, placement: { point: { xMeters: 10, yMeters: 10 } }, registration: registration(reference1) });
     expect(draft.status).toBe(201); laptopCameraId = draft.body.draft.cameraId;
     const published = await request(app).post(`/api/camera-creation/drafts/${draft.body.draft.id}/publish`).set("Authorization", `Bearer ${token}`);
     expect(published.status).toBe(200);
-    expect((await firestore.collection("cameras").doc(laptopCameraId).get()).data()).toMatchObject({ sourceType: "laptop_camera", monitoringEnabled: true, status: "active" });
+    expect((await firestore.collection("cameras").doc(laptopCameraId).get()).data()).toMatchObject({ sourceType: "laptop_camera", monitoringEnabled: false, status: "active" });
     const site = await firestore.collection("sites").doc(siteId).get();
     expect((await firestore.collection("siteMapRevisions").doc(site.data()?.activeMapRevisionId).collection("cameraPlacements").doc(laptopCameraId).get()).data()?.zoneId).toBe(zoneId);
+    const audits = await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "camera_created").get();
+    expect(audits.docs.find((event) => event.data().resourceId === laptopCameraId)?.data()).toMatchObject({ actorUid: uid, actorRole: "supervisor", actorAuthority: "root", actorNameSnapshot: "Camera Root" });
   });
 
   it("supports pre-Camera reference upload, plotting, validation, and reconfiguration publication", async () => {
-    const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera" });
+    const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera" });
     expect(started.status).toBe(201); const draftId = started.body.draft.id;
-    const reference = await request(app).post(`/api/camera-creation/drafts/${draftId}/reference`).set("Authorization", `Bearer ${token}`).attach("image", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { filename: "reference.jpg", contentType: "image/jpeg" });
+    const reference = await request(app).post(`/api/camera-creation/drafts/${draftId}/reference`).set("Authorization", `Bearer ${regularToken}`).attach("image", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { filename: "reference.jpg", contentType: "image/jpeg" });
     expect(reference.status).toBe(201);
-    const registrationSaved = await request(app).put(`/api/camera-creation/drafts/${draftId}/registration`).set("Authorization", `Bearer ${token}`).send({ sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], bins: [] });
+    const registrationSaved = await request(app).put(`/api/camera-creation/drafts/${draftId}/registration`).set("Authorization", `Bearer ${regularToken}`).send({ sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], bins: [] });
     expect(registrationSaved.status).toBe(200);
-    const validation = await request(app).post(`/api/camera-creation/drafts/${draftId}/validate`).set("Authorization", `Bearer ${token}`).send({});
+    const validation = await request(app).post(`/api/camera-creation/drafts/${draftId}/validate`).set("Authorization", `Bearer ${regularToken}`).send({});
     expect(validation.status).toBe(200); expect(validation.body).toEqual({ valid: true, errors: [] });
-    const published = await request(app).post(`/api/camera-creation/drafts/${draftId}/publish`).set("Authorization", `Bearer ${token}`).send({});
+    const published = await request(app).post(`/api/camera-creation/drafts/${draftId}/publish`).set("Authorization", `Bearer ${regularToken}`).send({});
     expect(published.status).toBe(200);
+    const audits = await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "camera_reconfigured").get();
+    expect(audits.docs.find((event) => event.data().resourceId === laptopCameraId)?.data()).toMatchObject({ actorUid: regularUid, actorRole: "supervisor", actorAuthority: "regular", actorNameSnapshot: "Camera Regular" });
   });
 
   it("keeps a new Zone provisional until the Camera publishes", async () => {
@@ -68,6 +77,28 @@ run("V2 composite Camera workflow", () => {
     expect((await firestore.collection("zones").doc(provisionalZoneId).get()).data()).toMatchObject({ lifecycleStatus: "active", name: "New Court" });
     const site = await firestore.collection("sites").doc(siteId).get();
     expect((await firestore.collection("siteMapRevisions").doc(site.data()?.activeMapRevisionId).collection("zoneGeometry").doc(provisionalZoneId).get()).exists).toBe(true);
+  });
+
+  it("rejects a provisional Zone that touches an active Zone", async () => {
+    const response = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({
+      kind: "create",
+      name: "Touching Zone Camera",
+      sourceType: "laptop_camera",
+      placement: { point: { xMeters: 55, yMeters: 20 } },
+      provisionalZone: { zoneId: `touching-zone-${suffix}`, zoneNameSnapshot: "Touching Court", polygon: [{ xMeters: 50, yMeters: 10 }, { xMeters: 58, yMeters: 10 }, { xMeters: 58, yMeters: 30 }, { xMeters: 50, yMeters: 30 }] },
+    });
+    expect(response.status).toBe(422);
+    expect(response.body.details).toMatchObject({ code: "provisional_zone_geometry_invalid", zoneConflicts: [expect.objectContaining({ reason: "shared_edge" })] });
+  });
+
+  it("locks one unfinished reconfiguration draft per Camera", async () => {
+    const first = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera" });
+    expect(first.status).toBe(201);
+    const second = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera" });
+    expect(second.status).toBe(409);
+    expect(second.body.details).toMatchObject({ code: "camera_draft_exists", draftId: first.body.draft.id });
+    expect((await request(app).delete(`/api/camera-creation/drafts/${first.body.draft.id}`).set("Authorization", `Bearer ${regularToken}`)).status).toBe(204);
+    expect((await firestore.collection("cameraDraftLocks").doc(laptopCameraId).get()).exists).toBe(false);
   });
 
   it("deletes an unfinished Camera Draft and its uploaded configuration media when cancelled", async () => {
@@ -92,10 +123,30 @@ run("V2 composite Camera workflow", () => {
     let camera = await firestore.collection("cameras").doc(loopCameraId).get();
     expect(camera.data()).toMatchObject({ sourceType: "looped_video", monitoringEnabled: false, isSimulation: true });
     await request(app).patch(`/api/camera-creation/cameras/${loopCameraId}/monitoring`).set("Authorization", `Bearer ${token}`).send({ monitoringEnabled: true, expectedRevision: camera.data()?.revision });
+    const monitoringAudits = await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "camera_monitoring_enabled").get();
+    expect(monitoringAudits.docs.find((event) => event.data().resourceId === loopCameraId)?.data()).toMatchObject({ actorUid: uid, actorRole: "supervisor", actorAuthority: "root", actorNameSnapshot: "Camera Root" });
     camera = await firestore.collection("cameras").doc(loopCameraId).get();
     const replacement = await request(app).post("/api/camera-creation/drafts").set("Authorization", `Bearer ${token}`).send({ kind: "reconfigure", cameraId: loopCameraId, name: "Loop Camera", source: { type: "looped_video", sourceMediaId: video1 }, registration: registration(reference2) });
     expect((await request(app).post(`/api/camera-creation/drafts/${replacement.body.draft.id}/publish`).set("Authorization", `Bearer ${token}`)).status).toBe(200);
     expect((await firestore.collection("cameras").doc(loopCameraId).get()).data()?.monitoringEnabled).toBe(true);
+  });
+
+  it("reserves only one enabled laptop Camera under concurrent requests", async () => {
+    const second = await request(app).post("/api/camera-creation/drafts").set("Authorization", `Bearer ${token}`).send({ kind: "create", name: "Second laptop", source: { type: "laptop_camera" }, placement: { point: { xMeters: 15, yMeters: 15 } }, registration: registration(reference1) });
+    expect(second.status).toBe(201);
+    expect((await request(app).post(`/api/camera-creation/drafts/${second.body.draft.id}/publish`).set("Authorization", `Bearer ${token}`)).status).toBe(200);
+    const ids = [laptopCameraId, second.body.draft.cameraId];
+    const enable = async (id: string, monitoringEnabled: boolean) => {
+      const doc = await firestore.collection("cameras").doc(id).get();
+      return request(app).patch(`/api/camera-creation/cameras/${id}/monitoring`).set("Authorization", `Bearer ${token}`).send({ monitoringEnabled, expectedRevision: doc.data()?.revision });
+    };
+    const results = await Promise.all(ids.map(id => enable(id, true)));
+    expect(results.map(r => r.status).sort()).toEqual([200, 409]);
+    const winner = ids[results.findIndex(r => r.status === 200)];
+    const other = ids.find(id => id !== winner)!;
+    expect((await enable(winner, false)).status).toBe(200);
+    expect((await enable(other, true)).status).toBe(200);
+    expect((await enable(other, false)).status).toBe(200);
   });
 
   it("returns a Camera detail read model with current Work, history, and safe Orchestrator trace", async () => {

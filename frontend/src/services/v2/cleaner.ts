@@ -19,7 +19,7 @@ export type V2CleanerMap = {
   siteId: string;
   siteName: string;
   activeRevisionId: string;
-  revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number };
+  revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number; backgroundMediaId: string | null; backgroundTransform: Record<string, number> | null };
   zones: V2Zone[];
   station: { point: V2Point | null; zoneId: string | null; mapRevisionId: string } | null;
 };
@@ -27,6 +27,8 @@ export type V2CleanerMap = {
 export const getV2CleanerSelf = (signal?: AbortSignal) => v2Request<{ cleaner: V2Cleaner & { email?: string; siteName?: string } }>("/api/cleaner/me", { signal });
 
 export const getV2CleanerWorkOrders = (signal?: AbortSignal) => v2Request<{ workOrders: V2WorkOrder[] }>("/api/cleaner/work-orders?status=all&limit=100", { signal });
+
+export const getV2CleanerWorkOrder = (workOrderId: string, signal?: AbortSignal) => v2Request<{ workOrder: V2WorkOrder }>(`/api/cleaner/work-orders/${encodeURIComponent(workOrderId)}`, { signal });
 
 export const getV2CleanerMap = (signal?: AbortSignal) => v2Request<{ map: V2CleanerMap }>("/api/cleaner/map", { signal });
 
@@ -65,9 +67,14 @@ function notificationFromSnapshot(id: string, value: Record<string, unknown>): V
 }
 
 /** Notification documents are immutable. This listener only delivers new server events to the active Cleaner session. */
-export function subscribeV2CleanerNotifications(siteId: string, onChange: (notifications: V2CleanerNotification[]) => void, onError?: (error: Error) => void): Unsubscribe | undefined {
+export function subscribeV2CleanerNotifications(siteId: string, onChange: (notifications: V2CleanerNotification[], hasNewEvents: boolean) => void, onError?: (error: Error) => void): Unsubscribe | undefined {
   const uid = firebaseAuth.currentUser?.uid;
   if (!uid || !siteId) return undefined;
   const source = query(collection(firebaseDb, "notifications"), where("recipientUid", "==", uid), where("siteId", "==", siteId), orderBy("createdAt", "desc"), limit(50));
-  return onSnapshot(source, (snapshot) => onChange(snapshot.docs.map((item) => notificationFromSnapshot(item.id, item.data()))), (error) => onError?.(error));
+  let initial = true;
+  return onSnapshot(source, (snapshot) => {
+    const hasNewEvents = !initial && snapshot.docChanges().some((change) => change.type === "added");
+    initial = false;
+    onChange(snapshot.docs.map((item) => notificationFromSnapshot(item.id, item.data())), hasNewEvents);
+  }, (error) => onError?.(error));
 }

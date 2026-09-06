@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { publishCameraWorkflow } from "./cameraLiveEvents.js";
 import { FieldValue, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
@@ -6,9 +7,9 @@ import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { canonicalHash, assertExpectedRevision } from "./v2Persistence.js";
 import { v2AuditEventData, type AuditActor } from "./v2AuditService.js";
 import { deriveCleanerAvailability } from "./v2CleanerAvailability.js";
-import { containingPolygon, type MapPoint, type Polygon } from "./v2MapGeometry.js";
+import { containingPolygon, pointInMapBounds, type MapPoint, type Polygon } from "./v2MapGeometry.js";
 import { applyVerification, canTransitionWork, requiresCompletionEvidence } from "./v2WorkPolicy.js";
-import { getV2LiveIssueState } from "./v2LiveMonitoringService.js";
+import { getV2LiveIssueState, clearV2EvidenceCandidate } from "./v2LiveMonitoringService.js";
 import { detectSupportedImage, validateDeclaredImageType } from "./imageUploadValidation.js";
 import { writeMedia } from "./localMediaStorage.js";
 import type { V2LiveObservation } from "./v2LiveMonitoringService.js";
@@ -16,6 +17,7 @@ import { enqueueV2OrchestratorTriggerInTransaction } from "./v2OrchestratorTrigg
 import { readOrchestrationGuard, commitOrchestration, OrchestrationConflict, type OrchestrationCommand } from "./v2OrchestratorCommit.js";
 import { v2Json } from "./v2Presentation.js";
 import { createV2NotificationInTransaction, notifyV2SiteSupervisors } from "./v2NotificationService.js";
+import { updateCameraRuntimeSnapshot } from "./monitoringRuntimeRegistry.js";
 
 function workNotification(tx: Transaction, data: DocumentData, uid: string | undefined, workOrderId: string, type: string, eventKey: string, body: string) {
   if (!uid) return;
@@ -33,6 +35,73 @@ const hash = (namespace: string, ...values: unknown[]) => canonicalHash(namespac
 type V2WorkOrder = Record<string, any>;
 const verificationSampleCount = (issueType: string) => issueType === "floor_litter" ? 3 : 2;
 
+type VerificationSample = {
+  sampleId: string;
+  capturedAtMs: number;
+  result: "clear" | "positive" | "inconclusive";
+  modelVersions: Record<string, string>;
+};
+
+type CameraVerificationCollector = {
+  siteId: string;
+  cameraId: string;
+  workOrderId: string;
+  verificationId: string;
+  issueType: string;
+  managementMode: string;
+  origin: string;
+  requestedAtMs: number;
+  requiredSampleCount: number;
+  samples: VerificationSample[];
+};
+
+const cameraVerificationCollectors = new Map<string, Map<string, CameraVerificationCollector>>();
+
+function registerCameraVerificationCollector(collector: Omit<CameraVerificationCollector, "samples"> & { samples?: VerificationSample[] }) {
+  const byWork = cameraVerificationCollectors.get(collector.cameraId) ?? new Map<string, CameraVerificationCollector>();
+  const current = byWork.get(collector.workOrderId);
+  if (current?.verificationId === collector.verificationId) return;
+  byWork.set(collector.workOrderId, { ...collector, samples: collector.samples ?? [] });
+  cameraVerificationCollectors.set(collector.cameraId, byWork);
+}
+
+function removeCameraVerificationCollector(cameraId: string, workOrderId: string) {
+  const byWork = cameraVerificationCollectors.get(cameraId);
+  if (!byWork) return;
+  byWork.delete(workOrderId);
+  if (byWork.size === 0) cameraVerificationCollectors.delete(cameraId);
+}
+
+export function resetV2CameraVerificationCollectors() {
+  cameraVerificationCollectors.clear();
+}
+
+export function inspectV2CameraVerificationCollectors(cameraId?: string) {
+  if (cameraId) return cameraVerificationCollectors.get(cameraId)?.size ?? 0;
+  return [...cameraVerificationCollectors.values()].reduce((sum, entries) => sum + entries.size, 0);
+}
+
+export async function recoverV2CameraVerificationCollectors() {
+  resetV2CameraVerificationCollectors();
+  const works = await firestore.collection("workOrders").where("status", "==", "awaiting_review").limit(500).get();
+  let recovered = 0;
+  for (const work of works.docs) {
+    const data = work.data();
+    if (data.schemaVersion !== V2_SCHEMA_VERSION || data.origin !== "alert" || data.target?.type !== "camera" || !data.cameraId || !data.latestVerificationId) continue;
+    const verification = await work.ref.collection("verifications").doc(String(data.latestVerificationId)).get();
+    const verificationData = verification.data();
+    if (!verification.exists || verificationData?.status !== "collecting") continue;
+    registerCameraVerificationCollector({
+      siteId: String(data.siteId), cameraId: String(data.cameraId), workOrderId: work.id,
+      verificationId: verification.id, issueType: String(data.issueType), managementMode: String(data.managementMode),
+      origin: String(data.origin), requestedAtMs: Number(verificationData.requestedAt?.toMillis?.() ?? 0),
+      requiredSampleCount: Number(verificationData.requiredSampleCount ?? verificationSampleCount(String(data.issueType))),
+    });
+    recovered += 1;
+  }
+  return recovered;
+}
+
 function actorMap(actor: V2WorkActor) {
   return actor.type === "orchestrator"
     ? { type: "orchestrator", serviceId: actor.uid, displayNameSnapshot: actor.displayName }
@@ -46,6 +115,14 @@ function present(id: string, data: DocumentData): V2WorkOrder {
     createdAt: instant(data.createdAt), updatedAt: instant(data.updatedAt), assignedAt: instant(data.assignedAt),
     startedAt: instant(data.startedAt), submittedAt: instant(data.submittedAt), resolvedAt: instant(data.resolvedAt), dismissedAt: instant(data.dismissedAt),
   };
+}
+
+function syncCameraWorkRuntime(work: V2WorkOrder) {
+  if (!work.cameraId || !work.siteId) return;
+  const cleanlinessState = work.status === "awaiting_review" ? "awaiting_review"
+    : work.status === "resolved" || work.status === "dismissed" ? "clean"
+      : "cleaning_in_progress";
+  updateCameraRuntimeSnapshot(String(work.siteId), String(work.cameraId), { cleanlinessState });
 }
 
 async function readSite(siteId: string, transaction?: Transaction) {
@@ -65,7 +142,7 @@ async function readCleaner(siteId: string, cleanerId: string, transaction?: Tran
 async function readStation(siteId: string, cleanerId: string, mapRevisionId: string, transaction?: Transaction) {
   const ref = firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("cleanerStations").doc(cleanerId);
   const snapshot = transaction ? await transaction.get(ref) : await ref.get();
-  return snapshot.exists && snapshot.data()?.siteId === siteId && snapshot.data()?.zoneId ? snapshot.data()! : null;
+  return snapshot.exists && snapshot.data()?.siteId === siteId && snapshot.data()?.point ? snapshot.data()! : null;
 }
 
 function assertCleanerAvailable(site: DocumentData, cleaner: DocumentData, station: DocumentData | null) {
@@ -90,12 +167,16 @@ async function cameraTarget(siteId: string, cameraId: string, transaction?: Tran
 async function coordinateTarget(siteId: string, point: MapPoint, transaction?: Transaction) {
   const site = await readSite(siteId, transaction);
   const mapRevisionId = String(site.data.activeMapRevisionId ?? "");
+  const revisionRef = firestore.collection("siteMapRevisions").doc(mapRevisionId);
   const zonesRef = firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("zoneGeometry");
-  const zones = transaction ? await transaction.get(zonesRef) : await zonesRef.get();
+  const [revision, zones] = transaction
+    ? await Promise.all([transaction.get(revisionRef), transaction.get(zonesRef)])
+    : await Promise.all([revisionRef.get(), zonesRef.get()]);
+  if (!revision.exists || revision.data()?.siteId !== siteId) throw new HttpError(409, "The Active Site Map is unavailable.");
+  if (!pointInMapBounds(point, Number(revision.data()?.widthMeters), Number(revision.data()?.heightMeters))) throw new HttpError(400, "Coordinate target must be inside the Site Map boundary.");
   const zoneId = containingPolygon(point, zones.docs.map((doc) => ({ id: doc.id, polygon: doc.data().polygon as Polygon })));
-  if (!zoneId) throw new HttpError(400, "Coordinate target must be inside exactly one active Zone.");
-  const zone = zones.docs.find((doc) => doc.id === zoneId)!;
-  return { site, mapRevisionId, zoneId, zoneName: String(zone.data().zoneNameSnapshot ?? zoneId) };
+  const zone = zoneId ? zones.docs.find((doc) => doc.id === zoneId) : null;
+  return { site, mapRevisionId, zoneId, zoneName: zone ? String(zone.data().zoneNameSnapshot ?? zoneId) : "Unzoned area" };
 }
 
 function deterministicInstructions(alert: DocumentData) {
@@ -152,7 +233,10 @@ export async function createV2AlertWorkOrder(input: { siteId: string; alertId: s
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "work_order_assigned", resourceType: "WorkOrder", resourceId: workId, outcome: "succeeded", after: { alertId: input.alertId, cleanerId: input.assignedCleanerId }, requestId }));
   });
   if (replay) return v2Json(replay);
-  return getV2WorkOrder(input.siteId, workId);
+  const created = await getV2WorkOrder(input.siteId, workId);
+  syncCameraWorkRuntime(created);
+  if (created.cameraId) publishCameraWorkflow(input.siteId, String(created.cameraId));
+  return created;
 }
 
 export async function createV2ManualWorkOrder(input: { siteId: string; title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: { type: "camera"; cameraId: string } | { type: "coordinate"; point: MapPoint }; creationEvidenceMediaId?: string | null; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
@@ -169,7 +253,7 @@ export async function createV2ManualWorkOrder(input: { siteId: string; title: st
     if (!cleaner.exists || cleaner.data()?.schemaVersion !== 2 || cleaner.data()?.siteId !== input.siteId) throw new HttpError(404, "Cleaner not found.");
     const account = await transaction.get(firestore.collection("userAccounts").doc(String(cleaner.data()?.authUid))); const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId));
     if (!account.exists || account.data()?.status !== "active" || account.data()?.siteId !== input.siteId) throw new HttpError(409, "Cleaner account is inactive."); assertCleanerAvailable(site.data()!, cleaner.data()!, station.exists ? station.data()! : null);
-    let target: DocumentData; let mapRevisionId: string; let zoneId: string; let cameraId: string | null = null;
+    let target: DocumentData; let mapRevisionId: string; let zoneId: string | null; let cameraId: string | null = null;
     if (input.target.type === "camera") { const result = await cameraTarget(input.siteId, input.target.cameraId, transaction); mapRevisionId = result.mapRevisionId; zoneId = String(result.placement.zoneId); cameraId = input.target.cameraId; target = { type: "camera", mapRevisionId, zoneId, zoneNameSnapshot: String(result.placement.zoneNameSnapshot ?? zoneId), point: result.placement.point, cameraId, cameraNameSnapshot: String(result.camera.data()?.name ?? cameraId) }; }
     else { const result = await coordinateTarget(input.siteId, input.target.point, transaction); mapRevisionId = result.mapRevisionId; zoneId = result.zoneId; target = { type: "coordinate", mapRevisionId, zoneId, zoneNameSnapshot: result.zoneName, point: input.target.point }; }
     const data = { schemaVersion: V2_SCHEMA_VERSION, workOrderId: workId, siteId: input.siteId, origin: "manual", alertId: null, managementMode: "manual", status: "assigned", severity: input.severity, issueType: "general_cleaning", title: input.title, instructions: input.instructions, target, mapRevisionId, zoneId, cameraId, assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(cleaner.data()!.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), startedAt: null, submittedAt: null, resolvedAt: null, resolvedBy: null, dismissedAt: null, dismissedBy: null, dismissReason: null, creationEvidenceMediaId: input.creationEvidenceMediaId ?? null, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: null, reworkCount: 0, isSimulation: false, idempotencyKey: input.idempotencyKey, requestFingerprint, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), revision: 1 };
@@ -180,7 +264,10 @@ export async function createV2ManualWorkOrder(input: { siteId: string; title: st
     workNotification(transaction, data, String(cleaner.data()!.authUid), workId, "work_assigned", workId, input.title);
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "manual_work_created", resourceType: "WorkOrder", resourceId: workId, outcome: "succeeded", after: { targetType: input.target.type, cleanerId: input.assignedCleanerId }, requestId }));
   });
-  return getV2WorkOrder(input.siteId, workId);
+  const created = await getV2WorkOrder(input.siteId, workId);
+  syncCameraWorkRuntime(created);
+  if (created.cameraId) publishCameraWorkflow(input.siteId, String(created.cameraId));
+  return created;
 }
 
 export async function getV2WorkOrder(siteId: string, workOrderId: string): Promise<V2WorkOrder> { const snapshot = await firestore.collection("workOrders").doc(workOrderId).get(); if (!snapshot.exists || snapshot.data()?.schemaVersion !== 2 || snapshot.data()?.siteId !== siteId) throw new HttpError(404, "Work Order not found."); return present(snapshot.id, snapshot.data()!); }
@@ -206,10 +293,16 @@ export async function transitionV2WorkOrder(siteId: string, workOrderId: string,
     if (actor.type === "cleaner" && String(data.assignedCleanerId) !== actor.cleanerId) throw new HttpError(404, "Work Order not found.");
     if (eventRef && (await transaction.get(eventRef)).exists) return;
     if (!canTransitionWork(String(data.status) as any, next)) throw new HttpError(409, `Work Order cannot move from ${data.status} to ${next}.`);
-    if (next === "awaiting_review" && requiresCompletionEvidence(String(data.target?.type) as "camera" | "coordinate") && !input.completionEvidenceMediaId) throw new HttpError(400, "Coordinate Work requires Completion Evidence before review.");
+    const manualWork = String(data.origin) === "manual";
+    if (next === "awaiting_review" && requiresCompletionEvidence(String(data.origin) as "alert" | "manual") && !input.completionEvidenceMediaId) throw new HttpError(400, "Manual Work requires Completion Evidence before review.");
+    if (next === "awaiting_review" && manualWork && input.completionEvidenceMediaId) {
+      const evidence = await transaction.get(firestore.collection("mediaAssets").doc(input.completionEvidenceMediaId));
+      const evidenceData = evidence.data();
+      if (!evidence.exists || evidenceData?.siteId !== siteId || evidenceData?.purpose !== "work_completion_evidence" || evidenceData?.ownerType !== "work_order" || evidenceData?.ownerId !== workOrderId || evidenceData?.storageStatus !== "available") throw new HttpError(400, "Completion Evidence must belong to this Manual Work Order.");
+    }
     const from = String(data.status); const fields = next === "in_progress" ? { startedAt: FieldValue.serverTimestamp() } : { submittedAt: FieldValue.serverTimestamp(), completionEvidenceMediaId: input.completionEvidenceMediaId ?? null, latestVerificationOutcome: null };
     const verificationRef = next === "awaiting_review" ? workRef.collection("verifications").doc(hash("v2-verification-request", workOrderId, input.idempotencyKey)) : null;
-    if (verificationRef) transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, alertId: data.alertId ?? null, kind: data.target?.type === "coordinate" ? "coordinate_supervisor" : "camera_deterministic", status: data.target?.type === "coordinate" ? "ready" : "collecting", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: data.target?.type === "coordinate" ? null : verificationSampleCount(String(data.issueType)), acceptedSampleCount: 0, sampleSummaries: [], outcome: null, outcomeReasonCodes: [], completionEvidenceMediaId: input.completionEvidenceMediaId ?? null, decidedAt: null, decidedBy: null, override: null, appliedAt: null, requestId });
+    if (verificationRef) transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, alertId: data.alertId ?? null, kind: manualWork ? "manual_supervisor" : "camera_deterministic", status: manualWork ? "ready" : "collecting", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: manualWork ? null : verificationSampleCount(String(data.issueType)), acceptedSampleCount: 0, sampleSummaries: [], outcome: null, outcomeReasonCodes: [], completionEvidenceMediaId: input.completionEvidenceMediaId ?? null, decidedAt: null, decidedBy: null, override: null, appliedAt: null, requestId });
     transaction.update(workRef, { status: next, ...fields, ...(verificationRef ? { latestVerificationId: verificationRef.id } : {}), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
     if (next === "in_progress" && alertRef && alert?.exists && ["assigned", "waiting_for_cleaner"].includes(String(alert.data()?.status))) transaction.update(alertRef, { status: "in_progress", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
     if (next === "awaiting_review" && alertRef && alert?.exists && String(data.managementMode) === "orchestrated") transaction.update(alertRef, { status: "awaiting_review", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
@@ -217,7 +310,18 @@ export async function transitionV2WorkOrder(siteId: string, workOrderId: string,
     transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: next === "in_progress" ? "started" : "submitted", fromStatus: from, toStatus: next, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: next, note: null, evidenceMediaIds: input.completionEvidenceMediaId ? [input.completionEvidenceMediaId] : [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
     void cleaner; void cleanerRef;
   });
-  return getV2WorkOrder(siteId, workOrderId);
+  const updated = await getV2WorkOrder(siteId, workOrderId);
+  syncCameraWorkRuntime(updated);
+  if (next === "awaiting_review" && updated.origin === "alert" && updated.target?.type === "camera" && updated.cameraId && updated.latestVerificationId) {
+    registerCameraVerificationCollector({
+      siteId, cameraId: String(updated.cameraId), workOrderId, verificationId: String(updated.latestVerificationId),
+      issueType: String(updated.issueType), managementMode: String(updated.managementMode), origin: String(updated.origin),
+      requestedAtMs: Date.parse(String(updated.submittedAt ?? new Date().toISOString())),
+      requiredSampleCount: verificationSampleCount(String(updated.issueType)),
+    });
+  }
+  if (updated.cameraId) publishCameraWorkflow(siteId, updated.cameraId);
+  return updated;
 }
 
 export async function applyV2Verification(input: { siteId: string; workOrderId: string; outcome: "passed" | "failed" | "inconclusive"; reason?: string | null; expectedRevision: number; idempotencyKey: string; override?: boolean }, actor: V2WorkActor, requestId: string, command?: OrchestrationCommand) {
@@ -249,7 +353,7 @@ export async function applyV2Verification(input: { siteId: string; workOrderId: 
       transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "work_verification_applied", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", after: { outcome: input.outcome }, requestId }));
     }
     if (existing.exists) transaction.update(verificationRef, { status: "applied", outcome: input.outcome, outcomeReasonCodes: input.reason ? [input.reason] : [], decidedAt: FieldValue.serverTimestamp(), decidedBy: actorMap(actor), override: input.override ? { outcome: input.outcome, reason: input.reason } : null, appliedAt: FieldValue.serverTimestamp(), requestId });
-    else transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, alertId: data.alertId ?? null, kind: data.target?.type === "coordinate" ? "coordinate_supervisor" : "camera_deterministic", status: "applied", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: null, acceptedSampleCount: 0, sampleSummaries: [], outcome: input.outcome, outcomeReasonCodes: input.reason ? [input.reason] : [], completionEvidenceMediaId: data.completionEvidenceMediaId ?? null, decidedAt: FieldValue.serverTimestamp(), decidedBy: actorMap(actor), override: input.override ? { outcome: input.outcome, reason: input.reason } : null, appliedAt: FieldValue.serverTimestamp(), requestId });
+    else transaction.create(verificationRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, alertId: data.alertId ?? null, kind: data.origin === "manual" ? "manual_supervisor" : "camera_deterministic", status: "applied", requestedAt: FieldValue.serverTimestamp(), requestedBy: actorMap(actor), requiredSampleCount: null, acceptedSampleCount: 0, sampleSummaries: [], outcome: input.outcome, outcomeReasonCodes: input.reason ? [input.reason] : [], completionEvidenceMediaId: data.completionEvidenceMediaId ?? null, decidedAt: FieldValue.serverTimestamp(), decidedBy: actorMap(actor), override: input.override ? { outcome: input.outcome, reason: input.reason } : null, appliedAt: FieldValue.serverTimestamp(), requestId });
     const updates: Record<string, unknown> = { status: result.workStatus, latestVerificationId: verificationRef.id, latestVerificationOutcome: input.outcome, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1), ...(input.outcome === "failed" ? { reworkCount: FieldValue.increment(1) } : {}) };
     if (result.workStatus === "resolved") Object.assign(updates, { resolvedAt: FieldValue.serverTimestamp(), resolvedBy: actorMap(actor) });
     if (command && guard) commitOrchestration(transaction, guard, command, { workOrder: { id: input.workOrderId, ...data, ...updates, revision: Number(data.revision) + 1,
@@ -267,20 +371,33 @@ export async function applyV2Verification(input: { siteId: string; workOrderId: 
     if (input.override) transaction.create(firestore.collection("auditEvents").doc(), v2AuditEventData({ auditEventId: randomUUID(), actor, siteId: input.siteId, action: "verification_overridden", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, after: { outcome: input.outcome }, requestId }));
   });
   if (replay) return v2Json(replay);
-  return { workOrder: await getV2WorkOrder(input.siteId, input.workOrderId), verificationId: appliedVerificationId };
+  const workOrder = await getV2WorkOrder(input.siteId, input.workOrderId);
+  syncCameraWorkRuntime(workOrder);
+  if (workOrder.cameraId) removeCameraVerificationCollector(String(workOrder.cameraId), input.workOrderId);
+  if (workOrder.cameraId && workOrder.status === "resolved") clearV2EvidenceCandidate(input.siteId, workOrder.cameraId, workOrder.issueType);
+  if (workOrder.cameraId) publishCameraWorkflow(input.siteId, workOrder.cameraId);
+  return { workOrder, verificationId: appliedVerificationId };
 }
 
 export async function dismissV2WorkOrder(input: { siteId: string; workOrderId: string; reason: string; expectedRevision: number; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
   await firestore.runTransaction(async (transaction) => { const context = await workContext(input.siteId, input.workOrderId, transaction); const { data, workRef, alert, alertRef, cleanerRef } = context; const eventRef = workRef.collection("events").doc(hash("v2-dismiss", input.workOrderId, input.idempotencyKey)); const existingEvent = await transaction.get(eventRef); if (existingEvent.exists) return; assertExpectedRevision(data, input.expectedRevision); if (![...ACTIVE].includes(String(data.status) as any)) throw new HttpError(409, "Work Order is already terminal."); const auditRef = firestore.collection("auditEvents").doc(); workNotification(transaction, data, context.cleaner.data()?.authUid, input.workOrderId, "work_dismissed", eventRef.id, "Your cleaning task has been dismissed."); if (data.alertId && data.cameraId) transaction.delete(firestore.collection("activeAlertKeys").doc(hash("v2-active-alert", input.siteId, data.cameraId, data.issueType))); transaction.update(workRef, { status: "dismissed", dismissedAt: FieldValue.serverTimestamp(), dismissedBy: actorMap(actor), dismissReason: input.reason, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, type: "dismissed", fromStatus: data.status, toStatus: "dismissed", cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_dismissed", note: input.reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.update(cleanerRef, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-work", input.siteId, data.alertId ?? input.workOrderId))); transaction.delete(firestore.collection("activeWorkOrderKeys").doc(hash("v2-active-manual-work", input.siteId, input.workOrderId))); if (alertRef && alert?.exists) transaction.update(alertRef, { status: "dismissed", activeWorkOrderId: null, dismissedAt: FieldValue.serverTimestamp(), dismissedBy: actorMap(actor), dismissReason: input.reason, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (data.cameraId) transaction.set(firestore.collection("cameraRuntimeStates").doc(String(data.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: String(data.cameraId), cleanlinessState: "clean", updatedAt: FieldValue.serverTimestamp() }, { merge: true }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "work_order_dismissed", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, before: { status: data.status }, after: { status: "dismissed" }, requestId })); });
-  return getV2WorkOrder(input.siteId, input.workOrderId);
+  const dismissed = await getV2WorkOrder(input.siteId, input.workOrderId);
+  syncCameraWorkRuntime(dismissed);
+  if (dismissed.cameraId) {
+    removeCameraVerificationCollector(String(dismissed.cameraId), input.workOrderId);
+    publishCameraWorkflow(input.siteId, String(dismissed.cameraId));
+  }
+  return dismissed;
 }
 
 export async function reassignV2WorkOrder(input: { siteId: string; workOrderId: string; assignedCleanerId: string; reason: string; expectedRevision: number; idempotencyKey: string }, actor: V2WorkActor, requestId: string) {
   await firestore.runTransaction(async (transaction) => { const context = await workContext(input.siteId, input.workOrderId, transaction); const { data, workRef, cleaner: oldCleaner, cleanerRef: oldRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-reassign", input.workOrderId, input.idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; assertExpectedRevision(data, input.expectedRevision); if (![...ACTIVE].includes(String(data.status) as any)) throw new HttpError(409, "Only active Work Orders can be reassigned."); const newCleaner = await transaction.get(firestore.collection("cleaners").doc(input.assignedCleanerId)); if (!newCleaner.exists || newCleaner.data()?.schemaVersion !== 2 || newCleaner.data()?.siteId !== input.siteId) throw new HttpError(404, "Replacement Cleaner not found."); const site = await transaction.get(firestore.collection("sites").doc(input.siteId)); const account = await transaction.get(firestore.collection("userAccounts").doc(String(newCleaner.data()?.authUid))); const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId)); if (!account.exists || account.data()?.status !== "active") throw new HttpError(409, "Replacement Cleaner account is inactive."); assertCleanerAvailable(site.data()!, newCleaner.data()!, station.exists ? station.data()! : null); const auditRef = firestore.collection("auditEvents").doc(); workNotification(transaction, data, oldCleaner.data()?.authUid, input.workOrderId, "work_reassigned", eventRef.id, "This task is no longer assigned to you."); workNotification(transaction, data, newCleaner.data()?.authUid, input.workOrderId, "work_assigned", eventRef.id, "A cleaning task has been assigned to you."); transaction.update(oldRef, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.update(newCleaner.ref, { activeWorkOrderId: input.workOrderId, activeWorkAssignedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.update(workRef, { assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(newCleaner.data()?.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: input.workOrderId, type: "reassigned", fromStatus: data.status, toStatus: data.status, cleanerId: input.assignedCleanerId, previousCleanerId: String(oldCleaner.data()?.cleanerId ?? data.assignedCleanerId), actor: actorMap(actor), reasonCode: "supervisor_reassigned", note: input.reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, action: "work_order_reassigned", resourceType: "WorkOrder", resourceId: input.workOrderId, outcome: "succeeded", reason: input.reason, before: { cleanerId: data.assignedCleanerId }, after: { cleanerId: input.assignedCleanerId }, requestId })); });
-  return getV2WorkOrder(input.siteId, input.workOrderId);
+  const reassigned = await getV2WorkOrder(input.siteId, input.workOrderId);
+  if (reassigned.cameraId) publishCameraWorkflow(input.siteId, String(reassigned.cameraId));
+  return reassigned;
 }
 
-export async function takeOverV2WorkOrder(siteId: string, workOrderId: string, actor: V2WorkActor, reason: string, idempotencyKey: string, requestId: string) { await firestore.runTransaction(async (transaction) => { const context = await workContext(siteId, workOrderId, transaction); const { data, workRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-takeover", workOrderId, idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; if (String(data.managementMode) === "manual") return; const auditRef = firestore.collection("auditEvents").doc(); transaction.update(workRef, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: "takeover", fromStatus: data.status, toStatus: data.status, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_takeover", note: reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, action: "work_order_takeover", resourceType: "WorkOrder", resourceId: workOrderId, outcome: "succeeded", reason, before: { managementMode: data.managementMode }, after: { managementMode: "manual" }, requestId })); }); return getV2WorkOrder(siteId, workOrderId); }
+export async function takeOverV2WorkOrder(siteId: string, workOrderId: string, actor: V2WorkActor, reason: string, idempotencyKey: string, requestId: string) { await firestore.runTransaction(async (transaction) => { const context = await workContext(siteId, workOrderId, transaction); const { data, workRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-takeover", workOrderId, idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; if (String(data.managementMode) === "manual") return; const auditRef = firestore.collection("auditEvents").doc(); transaction.update(workRef, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: "takeover", fromStatus: data.status, toStatus: data.status, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_takeover", note: reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, action: "work_order_takeover", resourceType: "WorkOrder", resourceId: workOrderId, outcome: "succeeded", reason, before: { managementMode: data.managementMode }, after: { managementMode: "manual" }, requestId })); }); const work = await getV2WorkOrder(siteId, workOrderId); if (work.cameraId) publishCameraWorkflow(siteId, String(work.cameraId)); return work; }
 
 export async function listV2WorkEvents(siteId: string, workOrderId: string) { await getV2WorkOrder(siteId, workOrderId); const snapshot = await firestore.collection("workOrders").doc(workOrderId).collection("events").orderBy("occurredAt", "desc").limit(100).get(); return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })); }
 
@@ -291,40 +408,45 @@ export async function listV2Verifications(siteId: string, workOrderId: string) {
 }
 
 export async function uploadV2CompletionEvidence(input: { siteId: string; workOrderId: string; cleanerId: string; file: { buffer: Buffer; mimetype: string; originalname: string } }) {
-  const work = await getV2WorkOrder(input.siteId, input.workOrderId); if (work.assignedCleanerId !== input.cleanerId || work.status !== "in_progress" || work.target?.type !== "coordinate") throw new HttpError(409, "Completion Evidence is only accepted for the assigned coordinate Work Order in progress.");
+  const work = await getV2WorkOrder(input.siteId, input.workOrderId); if (work.assignedCleanerId !== input.cleanerId || work.status !== "in_progress" || work.origin !== "manual") throw new HttpError(409, "Completion Evidence is only accepted for the assigned Manual Work Order in progress.");
   const detected = detectSupportedImage(input.file.buffer); validateDeclaredImageType(input.file.mimetype, detected.mimeType); const mediaId = randomUUID(); const storageKey = `media/${mediaId}/completion-evidence.${detected.extension}`; await writeMedia(storageKey, input.file.buffer); await firestore.collection("mediaAssets").doc(mediaId).create({ schemaVersion: V2_SCHEMA_VERSION, mediaId, siteId: input.siteId, purpose: "work_completion_evidence", ownerType: "work_order", ownerId: input.workOrderId, cameraId: null, mimeType: detected.mimeType, originalFileName: input.file.originalname, byteSize: input.file.buffer.length, sha256: hash("v2-media", input.file.buffer.toString("base64")), storageKey, storageStatus: "available", width: null, height: null, durationSeconds: null, capturedAt: FieldValue.serverTimestamp(), retentionClass: "operational", expiresAt: null, createdAt: FieldValue.serverTimestamp(), createdByUid: input.cleanerId, deletedAt: null, revision: 1 }); return { mediaId, workOrderId: input.workOrderId };
 }
 
 export async function recordV2CameraVerificationObservation(siteId: string, cameraId: string, observation: V2LiveObservation) {
-  const works = await firestore.collection("workOrders").where("siteId", "==", siteId).where("cameraId", "==", cameraId).where("status", "==", "awaiting_review").limit(10).get();
+  const collectors = [...(cameraVerificationCollectors.get(cameraId)?.values() ?? [])].filter((collector) => collector.siteId === siteId);
+  if (collectors.length === 0) return 0;
   let ready = 0;
-  for (const workDoc of works.docs) {
+  for (const collector of collectors) {
+    if (observation.capturedAtMs < collector.requestedAtMs
+      || collector.samples.some((sample) => sample.sampleId === observation.sampleId)
+      || collector.samples.some((sample) => sample.capturedAtMs >= observation.capturedAtMs)) continue;
+    let result: "clear" | "positive" | "inconclusive";
+    if (collector.issueType === "bin_service") result = observation.binStates.some(bin => bin.state === "full" || bin.state === "overflow") ? "positive" : observation.binStates.length > 0 && observation.binStates.every(bin => bin.state === "normal") ? "clear" : "inconclusive";
+    else result = observation.issues.some(issue => issue.issueType === collector.issueType) ? "positive" : "clear";
+    collector.samples = [...collector.samples, { sampleId: observation.sampleId, capturedAtMs: observation.capturedAtMs, result, modelVersions: observation.modelVersions }].slice(-3);
+    const clearCount = collector.samples.filter(sample => sample.result === "clear").length;
+    const outcome = result === "positive" ? "failed" : result === "inconclusive" ? "inconclusive" : clearCount >= collector.requiredSampleCount ? "passed" : null;
+    if (!outcome) continue;
+    const workRef = firestore.collection("workOrders").doc(collector.workOrderId);
     const changed = await firestore.runTransaction(async tx => {
-      const [work, site] = await Promise.all([tx.get(workDoc.ref), tx.get(firestore.collection("sites").doc(siteId))]);
+      const [work, site] = await Promise.all([tx.get(workRef), tx.get(firestore.collection("sites").doc(siteId))]);
       const data = work.data();
-      if (site.data()?.status !== "active" || !data || data.schemaVersion !== 2 || data.status !== "awaiting_review" || !data.latestVerificationId) return false;
-      const verificationRef = workDoc.ref.collection("verifications").doc(data.latestVerificationId);
+      if (site.data()?.status !== "active" || !data || data.schemaVersion !== 2 || data.status !== "awaiting_review" || data.latestVerificationId !== collector.verificationId) return false;
+      const verificationRef = workRef.collection("verifications").doc(collector.verificationId);
       const verification = await tx.get(verificationRef);
       const v = verification.data();
-      if (!v || v.status !== "collecting" || observation.capturedAtMs < (v.requestedAt?.toMillis?.() ?? 0)) return false;
-      const samples: any[] = v.sampleSummaries ?? [];
-      if (samples.some(sample => sample.sampleId === observation.sampleId) || samples.some(sample => (sample.capturedAt?.toMillis?.() ?? 0) >= observation.capturedAtMs)) return false;
-      let result: "clear" | "positive" | "inconclusive";
-      if (data.issueType === "bin_service") result = observation.binStates.some(bin => bin.state === "full" || bin.state === "overflow") ? "positive" : observation.binStates.length > 0 && observation.binStates.every(bin => bin.state === "normal") ? "clear" : "inconclusive";
-      else result = observation.issues.some(issue => issue.issueType === data.issueType) ? "positive" : "clear";
-      const next = [...samples, { sampleId: observation.sampleId, capturedAt: Timestamp.fromMillis(observation.capturedAtMs), result, modelVersions: observation.modelVersions }].slice(-3);
-      const clearCount = next.filter(sample => sample.result === "clear").length;
-      const outcome = result === "positive" ? "failed" : result === "inconclusive" ? "inconclusive" : clearCount >= Number(v.requiredSampleCount ?? 2) ? "passed" : null;
-      tx.update(verificationRef, { sampleSummaries: next, acceptedSampleCount: next.length,
-        ...(outcome ? { status: "ready", outcome, outcomeReasonCodes: [result === "positive" ? "issue_still_visible" : result === "inconclusive" ? "camera_evidence_inconclusive" : "required_clear_samples_observed"], decidedAt: FieldValue.serverTimestamp() } : {}) });
-      if (!outcome) return false;
-      tx.update(workDoc.ref, { latestVerificationOutcome: outcome, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+      if (!v || v.status !== "collecting") return false;
+      const persistedSamples = collector.samples.map((sample) => ({ sampleId: sample.sampleId, capturedAt: Timestamp.fromMillis(sample.capturedAtMs), result: sample.result, modelVersions: sample.modelVersions }));
+      tx.update(verificationRef, { sampleSummaries: persistedSamples, acceptedSampleCount: persistedSamples.length,
+        status: "ready", outcome, outcomeReasonCodes: [result === "positive" ? "issue_still_visible" : result === "inconclusive" ? "camera_evidence_inconclusive" : "required_clear_samples_observed"], decidedAt: FieldValue.serverTimestamp() });
+      tx.update(workRef, { latestVerificationOutcome: outcome, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
       if (data.managementMode === "orchestrated" && data.origin === "alert") enqueueV2OrchestratorTriggerInTransaction(tx, {
-        siteId, type: "review_work", aggregateType: "work_order", aggregateId: workDoc.id,
+        siteId, type: "review_work", aggregateType: "work_order", aggregateId: workRef.id,
         triggerType: "verification_ready", uniquenessKey: verificationRef.id, verificationId: verificationRef.id,
       });
       return true;
     });
+    removeCameraVerificationCollector(cameraId, collector.workOrderId);
     if (changed) ready++;
   }
   return ready;

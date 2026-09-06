@@ -20,7 +20,9 @@ describe("V2 Supervisor action client", () => {
 
   it("uses the V2 Work mutation contracts rather than local status changes", async () => {
     await createV2ManualWork({ title: "Clean entrance", instructions: "Remove loose litter.", severity: "warning", assignedCleanerId: "cleaner-1", target: { type: "camera", cameraId: "camera-1" } });
-    expect(request).toHaveBeenCalledWith("/api/work-orders/manual", expect.objectContaining({ method: "POST", json: expect.objectContaining({ assignedCleanerId: "cleaner-1", idempotencyKey: expect.stringMatching(/^manual-work-/) }) }));
+    expect(request).toHaveBeenCalledWith("/api/work-orders/manual", expect.objectContaining({ method: "POST", json: expect.objectContaining({ assignedCleanerId: "cleaner-1", target: { type: "camera", cameraId: "camera-1" }, idempotencyKey: expect.stringMatching(/^manual-work-/) }) }));
+    await createV2ManualWork({ title: "Clean walkway", instructions: "Remove loose litter.", severity: "warning", assignedCleanerId: "cleaner-1", target: { type: "coordinate", point: { xMeters: 50.1, yMeters: 30.2 } } });
+    expect(request).toHaveBeenLastCalledWith("/api/work-orders/manual", expect.objectContaining({ method: "POST", json: expect.objectContaining({ target: { type: "coordinate", point: { xMeters: 50.1, yMeters: 30.2 } }, idempotencyKey: expect.stringMatching(/^manual-work-/) }) }));
     await reassignV2Work(work, "cleaner-2", "Closer to the issue");
     expect(request).toHaveBeenLastCalledWith("/api/work-orders/work-1/reassign", expect.objectContaining({ json: expect.objectContaining({ assignedCleanerId: "cleaner-2", expectedRevision: 6 }) }));
     await takeOverV2Work(work, "Supervisor intervention required");

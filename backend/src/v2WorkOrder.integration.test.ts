@@ -3,7 +3,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
-import { createV2AlertWorkOrder, recordV2CameraVerificationObservation } from "./services/v2WorkOrderService.js";
+import { createV2AlertWorkOrder, inspectV2CameraVerificationCollectors, recordV2CameraVerificationObservation } from "./services/v2WorkOrderService.js";
 import { runV2ReviewCycle } from "./services/v2OrchestratorService.js";
 
 const run = process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
@@ -47,7 +47,7 @@ run("V2 Work Order and Verification", () => {
     await firestore.collection("orchestratorConfigs").doc(siteId).set({ schemaVersion: 2, siteId, status: "running", assignmentEnabled: true, reviewEnabled: true, provider: "test", model: "test", revision: 1 });
     const map = firestore.collection("siteMapRevisions").doc(mapId);
     await map.set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100 });
-    await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 100, yMeters: 0 }, { xMeters: 100, yMeters: 100 }, { xMeters: 0, yMeters: 100 }] });
+    await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 60, yMeters: 0 }, { xMeters: 60, yMeters: 60 }, { xMeters: 0, yMeters: 60 }] });
     await map.collection("cleanerStations").doc(cleanerId).set({ schemaVersion: 2, siteId, cleanerId, cleanerNameSnapshot: "Work Cleaner", point: { xMeters: 10, yMeters: 10 }, zoneId });
     await map.collection("cleanerStations").doc(secondCleanerId).set({ schemaVersion: 2, siteId, cleanerId: secondCleanerId, cleanerNameSnapshot: "Second Cleaner", point: { xMeters: 12, yMeters: 10 }, zoneId });
     await map.collection("cameraPlacements").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, zoneId, zoneNameSnapshot: "Main Zone", point: { xMeters: 20, yMeters: 20 } });
@@ -91,7 +91,7 @@ run("V2 Work Order and Verification", () => {
     expect((await firestore.collection("alerts").doc(alertId).get()).data()?.status).toBe("resolved");
   });
 
-  it("requires completion evidence for coordinate Work", async () => {
+  it("requires completion evidence for in-Zone coordinate Work", async () => {
     const manual = await request(app).post("/api/work-orders/manual").set("Authorization", `Bearer ${rootToken}`).send({ title: "Inspect entrance", instructions: "Clean the entrance floor and inspect the mat.", severity: "warning", assignedCleanerId: cleanerId, target: { type: "coordinate", point: { xMeters: 50, yMeters: 50 } }, idempotencyKey: `manual-${suffix}` });
     expect(manual.status).toBe(201);
     const manualId = manual.body.workOrder.id;
@@ -103,7 +103,53 @@ run("V2 Work Order and Verification", () => {
     const submitted = await request(app).post(`/api/cleaner/work-orders/${manualId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-submit-${suffix}-2`, completionEvidenceMediaId: evidence.body.evidence.mediaId });
     expect(submitted.status).toBe(200);
     expect(submitted.body.workOrder.status).toBe("awaiting_review");
+    const retainedPhoto = await request(app).get(`/api/cleaner/work-orders/${manualId}/completion-evidence`).set("Authorization", `Bearer ${cleanerToken}`);
+    expect(retainedPhoto.status).toBe(200);
+    expect(retainedPhoto.headers["content-type"]).toContain("image/jpeg");
+    expect((await request(app).get(`/api/cleaner/work-orders/${manualId}/completion-evidence`).set("Authorization", `Bearer ${await signIn(secondCleanerEmail, password)}`)).status).toBe(404);
     const resolved = await request(app).post(`/api/work-orders/${manualId}/verification`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "passed", reason: "Completion photo accepted", expectedRevision: submitted.body.workOrder.revision, idempotencyKey: `manual-resolve-${suffix}` });
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.workOrder.status).toBe("resolved");
+  });
+
+  it("accepts unzoned coordinate Work inside the Site Map and rejects points outside it", async () => {
+    const outside = await request(app).post("/api/work-orders/manual").set("Authorization", `Bearer ${rootToken}`).send({ title: "Outside map", instructions: "This point must be rejected.", severity: "warning", assignedCleanerId: cleanerId, target: { type: "coordinate", point: { xMeters: 101, yMeters: 50 } }, idempotencyKey: `outside-map-${suffix}` });
+    expect(outside.status).toBe(400);
+    expect(outside.body.error).toContain("Site Map boundary");
+
+    const manual = await request(app).post("/api/work-orders/manual").set("Authorization", `Bearer ${rootToken}`).send({ title: "Clean unzoned walkway", instructions: "Clean the walkway outside the configured Zones.", severity: "warning", assignedCleanerId: cleanerId, target: { type: "coordinate", point: { xMeters: 80, yMeters: 80 } }, idempotencyKey: `manual-unzoned-${suffix}` });
+    expect(manual.status).toBe(201);
+    expect(manual.body.workOrder).toMatchObject({ origin: "manual", zoneId: null, target: { type: "coordinate", zoneId: null, zoneNameSnapshot: "Unzoned area", point: { xMeters: 80, yMeters: 80 } } });
+    const manualId = manual.body.workOrder.id;
+    await request(app).post(`/api/cleaner/work-orders/${manualId}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-unzoned-start-${suffix}` });
+    const evidence = await request(app).post(`/api/cleaner/work-orders/${manualId}/completion-evidence`).set("Authorization", `Bearer ${cleanerToken}`).attach("photo", jpeg, { filename: "unzoned-completion.jpg", contentType: "image/jpeg" });
+    expect(evidence.status).toBe(201);
+    const submitted = await request(app).post(`/api/cleaner/work-orders/${manualId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-unzoned-submit-${suffix}`, completionEvidenceMediaId: evidence.body.evidence.mediaId });
+    expect(submitted.status).toBe(200);
+    const resolved = await request(app).post(`/api/work-orders/${manualId}/verification`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "passed", reason: "Unzoned completion photo accepted", expectedRevision: submitted.body.workOrder.revision, idempotencyKey: `manual-unzoned-resolve-${suffix}` });
+    expect(resolved.status).toBe(200);
+  });
+
+  it("requires Cleaner completion evidence and Supervisor review for Camera-targeted Manual Work", async () => {
+    const manual = await request(app).post("/api/work-orders/manual").set("Authorization", `Bearer ${rootToken}`).send({ title: "Manual Camera inspection", instructions: "Clean the area shown by the Camera.", severity: "critical", assignedCleanerId: cleanerId, target: { type: "camera", cameraId }, idempotencyKey: `manual-camera-${suffix}` });
+    expect(manual.status).toBe(201);
+    expect(manual.body.workOrder).toMatchObject({ origin: "manual", cameraId, zoneId, target: { type: "camera", cameraId, zoneId } });
+    const manualId = manual.body.workOrder.id;
+    expect((await request(app).post(`/api/cleaner/work-orders/${manualId}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-camera-start-${suffix}` })).status).toBe(200);
+    const missing = await request(app).post(`/api/cleaner/work-orders/${manualId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-camera-submit-missing-${suffix}` });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toContain("Manual Work requires Completion Evidence");
+    const unrelated = await request(app).post(`/api/cleaner/work-orders/${manualId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-camera-submit-unrelated-${suffix}`, completionEvidenceMediaId: "not-this-work-evidence" });
+    expect(unrelated.status).toBe(400);
+    expect(unrelated.body.error).toContain("must belong to this Manual Work Order");
+    const evidence = await request(app).post(`/api/cleaner/work-orders/${manualId}/completion-evidence`).set("Authorization", `Bearer ${cleanerToken}`).attach("photo", jpeg, { filename: "camera-completion.jpg", contentType: "image/jpeg" });
+    expect(evidence.status).toBe(201);
+    const submitted = await request(app).post(`/api/cleaner/work-orders/${manualId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `manual-camera-submit-${suffix}`, completionEvidenceMediaId: evidence.body.evidence.mediaId });
+    expect(submitted.status).toBe(200);
+    const verifications = await request(app).get(`/api/work-orders/${manualId}/verifications`).set("Authorization", `Bearer ${rootToken}`);
+    expect(verifications.body.verifications[0]).toMatchObject({ kind: "manual_supervisor", status: "ready", requiredSampleCount: null, completionEvidenceMediaId: evidence.body.evidence.mediaId });
+    expect(inspectV2CameraVerificationCollectors(cameraId)).toBe(0);
+    const resolved = await request(app).post(`/api/work-orders/${manualId}/verification`).set("Authorization", `Bearer ${rootToken}`).send({ outcome: "passed", reason: "Manual Camera Work photo accepted", expectedRevision: submitted.body.workOrder.revision, idempotencyKey: `manual-camera-resolve-${suffix}` });
     expect(resolved.status).toBe(200);
     expect(resolved.body.workOrder.status).toBe("resolved");
   });
@@ -114,6 +160,9 @@ run("V2 Work Order and Verification", () => {
     const automated = await createV2AlertWorkOrder({ siteId, alertId: automatedAlert, assignedCleanerId: cleanerId, idempotencyKey: `auto-${suffix}` }, { uid: "orchestrator-test", role: "supervisor", authority: null, displayName: "Orchestrator", type: "orchestrator" }, `auto-${suffix}`);
     await request(app).post(`/api/cleaner/work-orders/${automated.id}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `auto-start-${suffix}` });
     await request(app).post(`/api/cleaner/work-orders/${automated.id}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `auto-submit-${suffix}` });
+    await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `pre-submit-${suffix}`, capturedAtMs: Date.now() - 60000, peopleCount: 0, people: [], bins: [], issues: [], binStates: [], modelVersions: {}, isSimulation: false });
+    const pendingWork = await firestore.collection("workOrders").doc(automated.id).get();
+    expect((await pendingWork.ref.collection("verifications").doc(pendingWork.data()!.latestVerificationId).get()).data()?.acceptedSampleCount).toBe(0);
     for (let index = 1; index <= 2; index += 1) await recordV2CameraVerificationObservation(siteId, cameraId, { sampleId: `clear-${suffix}-${index}`, capturedAtMs: Date.now() + index, peopleCount: 0, people: [], bins: [], issues: [], binStates: [], modelVersions: {}, isSimulation: false });
     expect((await firestore.collection("workOrders").doc(automated.id).get()).data()?.status).toBe("awaiting_review");
     await runV2ReviewCycle(siteId, automated.id);
@@ -143,5 +192,16 @@ run("V2 Work Order and Verification", () => {
     const dismissed = await request(app).post(`/api/work-orders/${work.id}/dismiss`).set("Authorization", `Bearer ${rootToken}`).send({ reason: "Issue no longer requires action", expectedRevision: reassigned.body.workOrder.revision, idempotencyKey: `dismiss-${suffix}` });
     expect(dismissed.status).toBe(200); expect(dismissed.body.workOrder.status).toBe("dismissed"); expect((await firestore.collection("alerts").doc(takeoverAlert).get()).data()?.status).toBe("dismissed"); expect((await firestore.collection("cleaners").doc(secondCleanerId).get()).data()?.activeWorkOrderId).toBeNull();
     const audits = await firestore.collection("auditEvents").where("siteId", "==", siteId).get(); const actions = audits.docs.map((document) => document.data().action); expect(actions).toEqual(expect.arrayContaining(["work_order_takeover", "work_order_reassigned", "work_order_dismissed"]));
+  });
+
+  it("limits retained Camera evidence to the assigned Cleaner and denies monitoring to Cleaners", async () => {
+    const id = `evidence-work-${suffix}`, alertId = `evidence-alert-${suffix}`;
+    await firestore.collection("workOrders").doc(id).set({ schemaVersion: 2, siteId, assignedCleanerId: cleanerId, alertId, status: "assigned" });
+    await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, siteId, evidence: { mediaId: "fixture-evidence", observation: { sampleId: "fixture:5" } } });
+    const evidence = await request(app).get(`/api/cleaner/work-orders/${id}/camera-evidence`).set("Authorization", `Bearer ${cleanerToken}`);
+    expect(evidence.status).toBe(200); expect(evidence.body.evidence.observation.sampleId).toBe("fixture:5");
+    await firestore.collection("workOrders").doc(id).update({ assignedCleanerId: secondCleanerId });
+    expect((await request(app).get(`/api/cleaner/work-orders/${id}/camera-evidence`).set("Authorization", `Bearer ${cleanerToken}`)).status).toBe(404);
+    expect((await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${cleanerToken}`).send({})).status).toBe(403);
   });
 });

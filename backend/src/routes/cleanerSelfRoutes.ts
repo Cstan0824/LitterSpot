@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { getMediaContent } from "../services/mediaService.js";
+import { v2Json } from "../services/v2Presentation.js";
+import { firestore } from "../config/firebase.js";
 import type { Request, Response } from "express";
 import multer from "multer";
 import { z } from "zod";
@@ -35,8 +38,30 @@ cleanerSelfRoutes.get("/me", async (req, res) => {
   return res.json({ cleaner: await presentV2Cleaner(req.cleaner!.cleanerId, String(req.authUser.siteId)) });
 });
 
+cleanerSelfRoutes.get("/work-orders/:workOrderId/camera-evidence", async (req, res) => {
+  const work = await getV2WorkOrder(String(req.authUser.siteId), String(req.params.workOrderId));
+  if (work.assignedCleanerId !== req.cleaner!.cleanerId || !work.alertId) throw new HttpError(404, "Camera evidence not found.");
+  const alert = await firestore.collection("alerts").doc(work.alertId).get();
+  if (alert.data()?.siteId !== req.authUser.siteId || !alert.data()?.evidence?.mediaId) throw new HttpError(404, "Camera evidence not found.");
+  if (req.query.content === "true") {
+    const media = await getMediaContent(alert.data()!.evidence.mediaId);
+    return res.type(media.mimeType).sendFile(media.filePath, { dotfiles: "allow" });
+  }
+  return res.json(v2Json({ evidence: alert.data()!.evidence }));
+});
+
 cleanerSelfRoutes.get("/map", async (req, res) => {
   return res.json({ map: await getV2CleanerMap(String(req.authUser.siteId), req.cleaner!.cleanerId) });
+});
+
+cleanerSelfRoutes.get("/map/background", async (req, res) => {
+  const map = await getV2CleanerMap(String(req.authUser.siteId), req.cleaner!.cleanerId);
+  const mediaId = map.revision.backgroundMediaId;
+  if (!mediaId) throw new HttpError(404, "The active Site Map has no background image.");
+  const media = await getMediaContent(mediaId);
+  res.type(media.mimeType);
+  res.setHeader("Content-Length", String(media.byteSize));
+  return res.sendFile(media.filePath, { dotfiles: "allow" });
 });
 
 cleanerSelfRoutes.get("/work-orders", async (req, res) => {
@@ -101,6 +126,15 @@ cleanerSelfRoutes.post("/work-orders/:workOrderId/completion-evidence", v2Eviden
   if (!isV2Cleaner(req)) throw new HttpError(404, "Route not found.");
   if (!req.file) throw new HttpError(400, "A completion photo is required.");
   return res.status(201).json({ evidence: await uploadV2CompletionEvidence({ siteId: String(req.authUser.siteId), workOrderId: String(req.params.workOrderId), cleanerId: req.cleaner!.cleanerId, file: req.file }) });
+});
+
+cleanerSelfRoutes.get("/work-orders/:workOrderId/completion-evidence", async (req, res) => {
+  const work = await getV2WorkOrder(String(req.authUser.siteId), String(req.params.workOrderId));
+  if (work.assignedCleanerId !== req.cleaner!.cleanerId || !work.completionEvidenceMediaId) throw new HttpError(404, "Completion evidence not found.");
+  const media = await getMediaContent(work.completionEvidenceMediaId);
+  res.type(media.mimeType);
+  res.setHeader("Content-Length", String(media.byteSize));
+  return res.sendFile(media.filePath, { dotfiles: "allow" });
 });
 
 cleanerSelfRoutes.get("/notifications", async (req, res) => {

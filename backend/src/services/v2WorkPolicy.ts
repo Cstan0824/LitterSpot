@@ -18,5 +18,4 @@ export function applyVerification(input: { outcome: VerificationOutcome; managem
   return { workStatus: "awaiting_review" as const, requiresSupervisorDecision: true };
 }
 
-export function requiresCompletionEvidence(targetType: "camera" | "coordinate") { return targetType === "coordinate"; }
-
+export function requiresCompletionEvidence(origin: "alert" | "manual") { return origin === "manual"; }

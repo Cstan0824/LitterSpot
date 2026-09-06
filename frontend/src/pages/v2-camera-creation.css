@@ -101,3 +101,4 @@
   .registration-location-page .v2-camera-zone-planner { min-height: 330px; }
   .registration-location-page .camera-provisional-zone-action { grid-column: auto; grid-row: auto; }
 }
+.camera-modal-fields select{width:100%;min-height:42px;padding:10px 12px;border:1px solid #bdcbd5;background:#fff;color:#173650;font:inherit}.camera-modal-fields select:disabled{background:#eef2f4;color:#677e8d}

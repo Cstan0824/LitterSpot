@@ -310,3 +310,85 @@ The detail modal shows the Cleaner profile, effective availability and reason, c
 **Confirmed** The Supervisor Work queue does not display the internal Work Order UUID. IDs remain available to API routing, audit logs, and developer tools.
 
 The table uses that space for a **Next action** column derived from Work status and management mode. It shows who or what the Work is waiting for, plus the latest activity time. The Work title and instruction remain the primary row identity.
+
+## 12. 2026-09-06 — Quota-safe live monitoring persistence
+
+**Confirmed** Continuous development uses local Firebase Auth and Firestore emulators. The canonical cloud project is reserved for bounded acceptance runs after automated verification. Creating replacement cloud projects is not the development strategy.
+
+**Confirmed** Per-frame AI Observations and Detection Signals are transient. Node evaluates confidence, magnitude, and rolling issue rules in memory. A persisted Flag represents the transition where an issue becomes confirmed; a continuing unchanged condition does not create a new Flag for every frame.
+
+**Confirmed** Monitoring leases, live Camera frames, current overlays, rolling issue windows, evidence candidates, current runtime freshness, and active Camera Verification collectors live in the single Node prototype runtime. Node reloads durable configuration and unfinished Verification state during recovery.
+
+Firestore remains authoritative for Camera configuration and Registration, confirmed Flags, Alerts and Alert Evidence, Work Orders, Verification outcomes, accounts, audit events, and compact analytics summaries.
+
+Ordinary monitoring frames must perform no Firestore read or write after their runtime context is warm. Firestore changes occur for configuration and workflow transitions, bounded recovery/checkpoints, evidence replacement, and minute/daily analytics summaries.
+
+**Accepted recovery trade-off** A Node crash may discard an unconfirmed rolling observation window, the current transient frame, and the unfinished minute accumulator. It must not lose an existing Alert, retained evidence, Work Order, Verification request/outcome, or configuration revision.
+
+## 13. 2026-09-06 — Camera wall controls and return navigation
+
+**Confirmed** The Camera wall removes the separate availability and unresolved-Alert summary strip. Zone filters remain the primary list scope. A separate right-aligned filter shows both, enabled-only, or disabled-only Cameras.
+
+**Confirmed** A Camera card remains one large target that opens Camera Details. Its footer also contains a separate Enable or Disable button. Using that button changes monitoring without opening Camera Details. The adjacent condition badge shows Clear, Watch, or Action, while the video-stage badge independently shows Disabled, Offline, or Online.
+
+**Confirmed** Zone indicator precedence is critical Alert, warning Alert, no enabled Camera online, then healthy. These render red, amber, grey, and green respectively. Only unresolved Alerts affect the first two states.
+
+**Confirmed** Camera Details preserves its navigation origin. A Camera opened from a filtered Camera wall returns to the same Zone and monitoring-state filters. A Camera opened from Work returns to Work. Direct Camera links return to the unfiltered Camera wall.
+
+**Deferred** Keep exact analyzed-frame overlays as the current rendering mode. Smooth live video with synchronized overlays may be reconsidered later and is not part of this update.
+
+## 14. 2026-09-07 — Supervisor visibility, Camera reconfiguration, and Site entry
+
+**Confirmed** Supervisor accounts use the structural lifecycle labels `active` and `disabled`. Cleaner availability language does not apply to Supervisor accounts.
+
+**Confirmed** A Regular Supervisor may see the names and authority of other active Supervisors on the Team page. They do not see peer email addresses, disabled Supervisor accounts, or peer account-management controls. The Root Supervisor may see all Supervisor accounts, including disabled accounts, with name, email, authority, and lifecycle status.
+
+**Confirmed** The signed-in Supervisor opens personal account controls from the header avatar. The account modal shows Supervisor name, email, Root or Regular authority, and Sign out. The Active Site header control is reserved for Site administration.
+
+**Confirmed** Zone and structural Site Map administration remains Root-only. A Regular Supervisor cannot create, rename, reshape, or deactivate Zones; change Site dimensions or background; move a Camera; change its Zone placement; create a Camera; or change its structural lifecycle.
+
+**Confirmed** Root and Regular Supervisors may control Camera monitoring and reconfigure the operational Camera view. Camera-view reconfiguration covers source replacement, reference replacement, and floor/bin Registration. Camera identity, Site Map placement, Zone assignment, creation, and structural activation or deactivation remain Root-only.
+
+**Confirmed** The current `Reconfigure Camera` label is conceptually `Reconfigure Camera View`. The product should use clearer wording when that workflow is refined so it is not confused with Root-only structural placement.
+
+**Confirmed** Camera-view reconfiguration begins with the active configuration visible. It shows the current reference image, current source metadata, the existing looped video when applicable, and the active floor and bin geometry. Keeping the source prepopulates the current reference and geometry for editing. Replacing the source keeps the old configuration visible for comparison but requires a new reference and fresh floor/bin plotting. Cancelling preserves the active configuration, and publishing replaces the source and Registration atomically.
+
+**Confirmed** Site administration is entered through the Active Site control in the Supervisor header. It owns Site dimensions and background, Site Map drafts and publication, Zones, structural Camera placement and lifecycle, and Site-level audit history. Regular Supervisors may receive a read-only Site view, while Root Supervisors receive the mutation controls.
+
+**Confirmed** Active Zones must be spatially disjoint. A newly created, moved, or reshaped Zone is invalid if its interior or boundary overlaps another active Zone, crosses another Zone edge, shares an edge or vertex, or touches another Zone at a single point. Near but separate Zones remain valid; the rule does not introduce a product-level minimum corridor width.
+
+The frontend must run the same geometry rule while plotting and editing, identify the conflicting Zones, and block completion before submission. The backend remains authoritative and must validate the complete proposed Site Map again when a draft is saved, validated, and published. Direct API requests cannot bypass the rule.
+
+## 15. 2026-09-07 — Site Map viewer, structural editing, and placement accuracy
+
+**Confirmed** The Root Supervisor controls the Site Map Boundary by entering its real width and height in metres. The Site is not constrained to a fixed aspect ratio. Changing the boundary must revalidate every Zone, Camera Placement, Cleaner Station Point, and other retained Site coordinate before publication.
+
+**Confirmed** The Map Viewer is a fixed-size window and preserves the Site Map Boundary's aspect ratio without stretching it. `Fit to Site` shows the complete boundary. Zooming and panning change only the view transform; they never change Site dimensions or stored metre coordinates. The viewer shows a zoom level, a scale indicator that follows zoom, and pointer coordinates in metres.
+
+**Confirmed** Point and polygon workflows reuse the same Map Viewer and coordinate conversion rules. This includes Zone creation and reshaping, Camera Creation, Camera movement, Cleaner Station Point creation and editing, Manual Work coordinate placement, and read-only Cleaner map views. Desktop supports explicit placement mode, wheel or button zoom, and drag-to-pan. Touch layouts support pinch-to-zoom, one-finger pan, and an explicit placement action before a tap records a point.
+
+**Confirmed** Site coordinates remain stable at every zoom level. The viewer converts screen coordinates through the current pan and zoom transform into Site metres before validation or persistence. Stored point precision is independent of display zoom; the interface must not imply meaningful sub-centimetre accuracy.
+
+**Confirmed** One uploaded image represents the complete Site background. The product renders it once beneath one transparent grid and all Zone, Camera, Station Point, and Work overlays. It must not repeat the image inside grid cells. Root may scale and position the background inside the Site Map Boundary. The image must not be stretched to a mismatched aspect ratio, and the Site Map Boundary remains authoritative.
+
+**Confirmed** The Root Site page contains Overview, Map & Zones, and Site audit history. It does not duplicate the Camera list or full Camera administration. Camera markers appear in the map workspace because Camera Placement belongs to the Site Map Revision. A selected marker shows structural context and links to Camera Details.
+
+**Confirmed** The Camera page owns Camera identity, monitoring control, source media, reference capture, floor/bin Camera Registration, operational history, and the entry point for Root-only Camera movement. `Move Camera` opens the Site Map in placement mode with that Camera selected.
+
+**Confirmed** A Root moving a Camera distinguishes two cases. A Map Position Correction changes only an inaccurate recorded coordinate and retains the active Camera Registration. A Physical Camera Move changes the real installation position or view and requires a new reference plus fresh floor/bin plotting. The replacement placement and Registration become operational atomically.
+
+**Confirmed** A Camera Placement must resolve to exactly one active Zone. Reshaping or deactivating a Zone cannot publish while it leaves an active Camera outside every active Zone or inside more than one Zone. Root must move the Camera, restore valid Zone geometry, or structurally deactivate the Camera before publication.
+
+**Confirmed** Camera Creation retains the Root-only option to create a provisional Zone. The workflow displays every active Zone and applies the same strict spatial-disjointness checks used by Site administration. The provisional Zone must be valid before Camera placement or continuation. The backend validates the complete proposed geometry, and publication commits the Zone, Camera Placement, source, and initial Camera Registration together. Cancelling discards the provisional Zone.
+
+**Confirmed** The frontend gives immediate geometry feedback while a Zone is drawn or edited. It identifies the conflicting Zone, highlights invalid geometry, and blocks save, continuation, and publication. The backend independently rejects containment, area overlap, crossing edges, shared edges, shared vertices, single-point contact, self-intersection, zero-area polygons, fewer than three valid points, and out-of-bounds geometry. Automated coverage must include each invalid case and a valid case with a small positive gap.
+
+**Confirmed** Root performs Site Map mutations through drafts. The active revision remains operational while Root edits, validates, reviews, publishes, or discards a replacement draft. Site audit history records successful and failed boundary, background, draft, Zone, Camera Placement, and structural Camera lifecycle actions with the real actor identity and authority. Site activation and deactivation remain Superadmin responsibilities.
+
+**Confirmed delivery direction** The hardcoded Site page was an interaction prototype only. The next Site implementation replaces prototype records and simulated mutations with real frontend state, backend contracts, authorization, validation, revision publication, media storage, and audit persistence. The hardcoded data is not a fallback production mode.
+
+**Confirmed** Resizing the Site Map Boundary preserves all existing Zone vertices, Camera Placements, Cleaner Station Points, and other coordinates as absolute metre values. The system does not scale them proportionally. Anything outside the replacement boundary becomes a blocking validation error that Root must correct before publication.
+
+**Confirmed** Site Map coordinates use the existing image-aligned convention: `(0, 0)` is the top-left corner, X increases to the right, and Y increases downward. Background alignment, grid rendering, pointer conversion, geometry validation, and every point-placement workflow use this same convention.
+
+**Confirmed** A Root choosing Map Position Correction must confirm that the physical Camera and its view did not move, provide a short reason, and receive a warning that Physical Camera Move requires fresh Camera Registration. The audit event records the reason and both old and new coordinates. A Physical Camera Move cannot use the correction path to retain stale Registration.

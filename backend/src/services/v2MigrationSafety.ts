@@ -11,8 +11,8 @@ export type MigrationTarget = {
 
 export function assertV2MigrationTarget(target: MigrationTarget) {
   if (target.appEnvironment === "local-emulator") {
-    if (!target.emulator || target.firebaseProjectId !== "demo-litterspot" || target.expectedFirebaseProjectId !== "demo-litterspot" || target.firestoreDatabaseId !== "litterspot") {
-      throw new Error("V2 emulator migration commands require demo-litterspot/litterspot with Firebase emulators enabled.");
+    if (!target.emulator || target.firebaseProjectId !== "demo-litterspot" || target.expectedFirebaseProjectId !== "demo-litterspot" || target.firestoreDatabaseId !== "(default)") {
+      throw new Error("V2 emulator migration commands require demo-litterspot/(default) with Firebase emulators enabled.");
     }
     return;
   }

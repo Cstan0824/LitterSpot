@@ -4,7 +4,7 @@ import { assertV2MigrationTarget, requiredApplyConfirmation, validateV2SchemaMar
 describe("V2 migration safety", () => {
   it("allows only the isolated cloud target and the demo emulator target", () => {
     expect(() => assertV2MigrationTarget({ appEnvironment: "development-cloud", firebaseProjectId: "litterspot-v2-database", expectedFirebaseProjectId: "litterspot-v2-database", firestoreDatabaseId: "(default)", emulator: false })).not.toThrow();
-    expect(() => assertV2MigrationTarget({ appEnvironment: "local-emulator", firebaseProjectId: "demo-litterspot", expectedFirebaseProjectId: "demo-litterspot", firestoreDatabaseId: "litterspot", emulator: true })).not.toThrow();
+    expect(() => assertV2MigrationTarget({ appEnvironment: "local-emulator", firebaseProjectId: "demo-litterspot", expectedFirebaseProjectId: "demo-litterspot", firestoreDatabaseId: "(default)", emulator: true })).not.toThrow();
     expect(() => assertV2MigrationTarget({ appEnvironment: "development-cloud", firebaseProjectId: "unexpected", expectedFirebaseProjectId: "litterspot-v2-database", firestoreDatabaseId: "(default)", emulator: false })).toThrow(/exact/i);
     expect(() => assertV2MigrationTarget({ appEnvironment: "development-cloud", firebaseProjectId: "litterspot-v2-database", expectedFirebaseProjectId: "litterspot-v2-database", firestoreDatabaseId: "(default)", emulator: true })).toThrow(/exact/i);
   });

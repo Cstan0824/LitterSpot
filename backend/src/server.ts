@@ -7,6 +7,11 @@ import { startV2OrchestratorWorker, stopV2OrchestratorWorker } from "./services/
 import { recoverV2SiteOperations } from "./services/v2SiteOperationService.js";
 import { startPhase11Worker, stopPhase11Worker } from "./services/phase11Worker.js";
 import { isFirestoreQuotaError, safeFirestoreError } from "./shared/firestoreErrors.js";
+import { sweepMonitoringRuntime } from "./services/v2LiveMonitoringService.js";
+import { recoverV2CameraVerificationCollectors } from "./services/v2WorkOrderService.js";
+// Sweep only episodes present in this Node runtime, avoiding a global cloud scan.
+const monitoringSweep = setInterval(() => { void sweepMonitoringRuntime().catch(error => console.error(JSON.stringify({ event: "camera_monitoring_sweep_failed", ...safeFirestoreError(error) }))); }, 10000);
+monitoringSweep.unref();
 
 let maintenanceRunning = false;
 let maintenanceFailures = 0;
@@ -43,6 +48,7 @@ const server = app.listen(env.port, async () => {
   await startupRecovery("video_job_recovery", recoverVideoJobs);
   await startupRecovery("legacy_orchestrator_recovery", recoverOrchestratorRuns);
   await startupRecovery("orchestrator_recovery", recoverV2OrchestratorRuns);
+  await startupRecovery("camera_verification_recovery", recoverV2CameraVerificationCollectors);
   if (env.orchestratorWorkerEnabled) startV2OrchestratorWorker();
   scheduleMaintenance(1_000);
 });
@@ -55,6 +61,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM") {
   server.close();
   if (maintenanceTimer) clearTimeout(maintenanceTimer);
   stopV2OrchestratorWorker();
+  clearInterval(monitoringSweep);
   const timeout = new Promise<"timeout">((resolve) => {
     const timer = setTimeout(() => resolve("timeout"), 20_000);
     timer.unref();

@@ -8,6 +8,9 @@
     "api-sandbox"
   ],
   "scripts": {
+    "demo:camera-scene": "node scripts/demo-camera-scene.mjs",
+    "test:camera:fixture": "tsx scripts/camera-runtime-fixture.mts",
+    "test:camera:browser": "node scripts/test-camera-runtime-browser.mjs",
     "dev:frontend": "npm --workspace=frontend run dev",
     "dev:backend": "npm --workspace=backend run dev",
     "dev:sandbox": "npm --workspace=api-sandbox run dev",
@@ -24,6 +27,7 @@
     "start:api": "node scripts/start-api.mjs",
     "stop": "node scripts/stop-local.mjs",
     "start:local": "node scripts/start-api.mjs",
+    "start:emulator": "node scripts/start-emulator-dev.mjs",
     "stop:local": "node scripts/stop-local.mjs"
   },
   "devDependencies": {

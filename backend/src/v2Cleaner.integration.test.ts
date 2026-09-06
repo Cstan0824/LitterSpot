@@ -32,7 +32,7 @@ run("V2 Cleaner workflow", () => {
     await firestore.collection("supervisors").doc(rootUid).set({ schemaVersion: 2, uid: rootUid, siteId, authority: "root", fullName: "Cleaner Root", status: "active", revision: 1 });
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Cleaner Site", timeZone: "Asia/Kuala_Lumpur", status: "active", rootSupervisorUid: rootUid, activeMapRevisionId: revisionId, mapRevisionNumber: 1, revision: 1 });
     const revision = firestore.collection("siteMapRevisions").doc(revisionId);
-    await revision.set({ schemaVersion: 2, revisionId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, zoneCount: 1, cameraPlacementCount: 0, cleanerStationCount: 0 });
+    await revision.set({ schemaVersion: 2, revisionId, siteId, revisionNumber: 1, widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, backgroundMediaId: "cleaner-map-background", backgroundTransform: { xMeters: 0, yMeters: 0, widthMeters: 100, heightMeters: 100, opacity: 0.8 }, zoneCount: 1, cameraPlacementCount: 0, cleanerStationCount: 0 });
     await revision.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 50, yMeters: 0 }, { xMeters: 50, yMeters: 50 }, { xMeters: 0, yMeters: 50 }] });
     rootToken = await signIn(rootEmail, password);
   });
@@ -54,7 +54,7 @@ run("V2 Cleaner workflow", () => {
     expect(me.body.cleaner.id).toBe(cleanerId);
     const map = await request(app).get("/api/cleaner/map").set("Authorization", `Bearer ${cleanerToken}`);
     expect(map.status).toBe(200);
-    expect(map.body.map).toMatchObject({ siteId, activeRevisionId: expect.any(String), revision: { widthMeters: 100, heightMeters: 100, gridSizeMeters: 5 }, station: { zoneId: null } });
+    expect(map.body.map).toMatchObject({ siteId, activeRevisionId: expect.any(String), revision: { widthMeters: 100, heightMeters: 100, gridSizeMeters: 5, backgroundMediaId: "cleaner-map-background", backgroundTransform: { widthMeters: 100, heightMeters: 100, opacity: 0.8 } }, station: { zoneId: null } });
     expect(map.body.map.zones).toEqual([expect.objectContaining({ id: zoneId, zoneNameSnapshot: "Main Zone" })]);
     expect(map.body.map).not.toHaveProperty("cleanerStations");
     expect(map.body.map).not.toHaveProperty("cameraPlacements");

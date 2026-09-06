@@ -32,6 +32,7 @@ const integrationTests = [
   ["src/v2Cleaner.integration.test.ts", {}],
   ["src/v2Camera.integration.test.ts", {}],
   ["src/v2Monitoring.integration.test.ts", {}],
+  ["src/services/v2MonitoringQuota.integration.test.ts", {}],
   ["src/v2WorkOrder.integration.test.ts", {}],
   ["src/v2Orchestrator.integration.test.ts", {}],
   ["src/v2TestSupport.integration.test.ts", {}],

@@ -9,7 +9,7 @@ Canonical migration Phase 0 is complete. This phase changed migration tooling on
 - Kept the Firestore V2 contract and allowlisted collection catalogue in `backend/src/shared/v2Contracts.ts`.
 - Added one migration-target guard shared by inspect, validate, reset and bootstrap commands.
 - Restricted cloud migration commands to `litterspot-dev-jeremy/(default)`.
-- Allowed destructive-path testing only against `demo-litterspot/litterspot` with both Firebase emulators enabled.
+- Allowed destructive-path testing only against `demo-litterspot/(default)` with both Firebase emulators enabled.
 - Made reset dry-run by default.
 - Required `--apply` plus an exact `--confirm-target=<project>/<database>` value for destructive reset.
 - Changed reset to delete nested subcollections recursively. Deleting only parent documents would have left orphaned Site Map and history records.

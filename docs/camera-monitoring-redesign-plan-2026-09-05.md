@@ -1,6 +1,6 @@
 # Camera monitoring redesign plan
 
-Status: planning baseline. No runtime implementation is included in this document.
+Status: Camera phases 1–8 are implemented. The quota-safe persistence follow-up is also implemented and recorded in [ADR 0004](adr/0004-keep-live-monitoring-state-in-node.md). Exact analyzed-frame overlays are implemented. Smooth video with synchronized overlays remains the open rendering option described below. See [camera-monitoring-testing-guide.md](camera-monitoring-testing-guide.md).
 
 This plan supersedes the Camera source and monitoring assumptions recorded in Phase 12.5 and Phase 12.6. Camera Creation and Registration remain valid. The redesign begins after publication and covers Camera enablement, continuous browser-owned monitoring, live overlays, evidence, reconfiguration access, and development-only Demo Source Scenes.
 

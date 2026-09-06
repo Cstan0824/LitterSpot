@@ -1,5 +1,7 @@
 # Cameras and cleanliness operations
 
+Camera runtime updates from 2026-09-05 are described in [camera-monitoring-testing-guide.md](../camera-monitoring-testing-guide.md). All new Cameras begin disabled; creation order no longer restricts source type. Live frames travel through authenticated event streaming and are not Firestore documents. Current runtime freshness, frame sequence, rolling qualification, evidence candidates, and partial Camera Verification samples stay in Node memory. Firestore records material transitions and minute summaries. A Node restart begins a new episode and reloads unfinished durable Verification requests.
+
 ## `cameraDrafts/{draftId}`
 
 A Camera Draft supports both initial Camera Creation and later source/Registration replacement. It is never returned as an operational Camera.
@@ -81,6 +83,14 @@ This is stable Camera identity and active revision pointers.
 
 Camera Zone, map point and map revision are resolved from the Active Map Revision. API read models return them as derived fields.
 
+### Development playback fields
+
+`cameras/{cameraId}.demoPlayback` contains `mediaId`, `sourceRevisionId`, `generation`, and `selectedAt` as epoch milliseconds. It is a development control beneath the published source. Selection leaves the Camera revision, source/Registration pointers, monitoring episode and sequence unchanged. Clients receive `playbackGeneration` and the selected media content URL through `/api/monitoring/live/config`.
+
+`cameras/{cameraId}/demoScenes/{key}` contains `schemaVersion`, `siteId`, `cameraId`, `key`, `mediaId`, `sourceRevisionId`, `registrationRevisionId`, and `createdAt`. Keys are immutable and tied to one source/Registration pair. The associated media asset uses purpose `camera_source_video` and owner type `camera`.
+
+Retained Alert Evidence additionally includes `observation`, `people`, `bins`, dimensions and `coordinateSpace=image_pixels`. Its media asset keeps the same observation as `evidenceObservation` for reusable history thumbnails. These nested evidence payloads are excluded from indexing. Ordinary observations and frames stay transient.
+
 ## `cameraSourceRevisions/{sourceRevisionId}`
 
 Source revisions are immutable.
@@ -144,7 +154,7 @@ Immutable image-space configuration.
 
 ## `cameraRuntimeStates/{cameraId}`
 
-This replaceable document keeps high-frequency operational state away from Camera identity.
+This replaceable document is a durable transition checkpoint, not a per-frame heartbeat. The API overlays current in-memory runtime data while Node is running.
 
 | Field | Type | Required | Meaning and workflow use |
 | --- | --- | ---: | --- |
@@ -155,9 +165,9 @@ This replaceable document keeps high-frequency operational state away from Camer
 | `cleanlinessState` | enum | yes | `clean`, `alerted`, `cleaning_in_progress`, `awaiting_review`, or `unknown`. Derived from active Alert/Work. |
 | `monitoringSessionId` | string or null | yes | Current owning browser session. |
 | `monitoringEpisodeId` | string or null | yes | Current enable/playback episode. |
-| `lastFrameCapturedAt` | timestamp or null | yes | Browser capture time. |
-| `lastSampleAcceptedAt` | timestamp or null | yes | Latest valid Node sample. |
-| `lastInferenceSucceededAt` | timestamp or null | yes | Latest successful FastAPI result. |
+| `lastFrameCapturedAt` | timestamp or null | yes | Browser capture time at the latest durable runtime transition. Live freshness is in memory. |
+| `lastSampleAcceptedAt` | timestamp or null | yes | Accepted sample time at the latest durable runtime transition. |
+| `lastInferenceSucceededAt` | timestamp or null | yes | Successful inference time at the latest durable runtime transition. |
 | `lastPeopleCount` | integer or null | yes | Current Dashboard/live card value. Not historical analytics. |
 | `lastIssueSummary` | map | yes | Bounded current issue counts/conditions for Camera Details. |
 | `sourceErrorCode` | string or null | yes | Safe error code. |
@@ -167,7 +177,7 @@ This replaceable document keeps high-frequency operational state away from Camer
 
 ## `monitoringSessions/{siteId}`
 
-One lease document controls capture ownership for a Site.
+This document records the latest lease claim or release for traceability. The single Node prototype enforces the live lease and accepts heartbeats in memory, so heartbeat requests do not write Firestore.
 
 | Field | Type | Required | Meaning and workflow use |
 | --- | --- | ---: | --- |
@@ -177,8 +187,8 @@ One lease document controls capture ownership for a Site.
 | `ownerUid` | string | yes | Supervisor who owns capture. |
 | `leaseTokenHash` | string | yes | Hash of secret token returned only to the owner. |
 | `claimedAt` | timestamp | yes | Lease start. |
-| `heartbeatAt` | timestamp | yes | Latest accepted heartbeat. |
-| `leaseExpiresAt` | timestamp | yes | Another browser may claim after this time. |
+| `heartbeatAt` | timestamp | yes | Heartbeat time at claim. Live heartbeat freshness is in memory. |
+| `leaseExpiresAt` | timestamp | yes | Durable claim-time expiry snapshot. Node owns the live expiry. |
 | `status` | enum | yes | `active` or `released`. |
 | `revision` | integer | yes | Lease compare-and-set counter. |
 
@@ -199,7 +209,7 @@ An episode starts when monitoring begins or a simulation Camera is enabled/resta
 | `startedAt` | timestamp | yes | Start time. |
 | `endedAt` | timestamp or null | yes | Stop/restart time. |
 | `endReason` | enum or null | yes | `disabled`, `session_lost`, `source_error`, `camera_inactive`, or `restarted`. |
-| `lastSequence` | integer | yes | Highest accepted sample sequence for replay protection. |
+| `lastSequence` | integer | yes | Highest accepted sequence when the episode ended. Live replay protection is in memory. |
 
 ## Replay and model-test collections
 
@@ -211,7 +221,7 @@ Every replay document adds `schemaVersion`, `siteId`, `cameraId`, `isTest`, `isS
 
 A live AI Observation is an in-memory Node object. It contains sample identity, capture time, people count, floor issues, registered-bin states, model versions, latency, source/Registration revisions and simulation marker. It is discarded after it contributes to:
 
-- current Camera Runtime State;
+- current in-memory Camera Runtime State;
 - a minute analytics accumulator;
 - an in-memory temporal qualification window;
 - a persisted Flag;
@@ -219,7 +229,7 @@ A live AI Observation is an in-memory Node object. It contains sample identity, 
 
 ## `flags/{flagId}`
 
-A Flag persists only when one sample group passes issue-specific confidence and magnitude gates.
+A Flag persists when an issue first passes its rolling confidence and magnitude gates, or when that confirmed condition materially escalates. Repeated frames from one unchanged confirmed condition do not create more Flags.
 
 | Field | Type | Required | Meaning and workflow use |
 | --- | --- | ---: | --- |
@@ -374,7 +384,7 @@ For Alert-origin Work only, this lock prevents two active Work Orders for one Al
 | `instructions` | string | yes | Node-generated for Alert Work; Supervisor-provided for manual Work. |
 | `target` | discriminated map | yes | Camera target or coordinate target. |
 | `mapRevisionId` | string | yes | Queryable mirror of `target.mapRevisionId`. |
-| `zoneId` | string | yes | Queryable mirror of `target.zoneId`. |
+| `zoneId` | string or null | yes | Queryable mirror of `target.zoneId`; null for coordinate Work in an Unzoned Area. |
 | `cameraId` | string or null | yes | Queryable mirror for Camera targets; null for coordinate-only Work. |
 | `assignedCleanerId` | string | yes | One Cleaner. Assignment counts as acceptance. |
 | `cleanerNameSnapshot` | string | yes | Historical display. |
@@ -388,7 +398,7 @@ For Alert-origin Work only, this lock prevents two active Work Orders for one Al
 | `dismissedBy` | actor map or null | yes | Supervisor/system. |
 | `dismissReason` | string or null | yes | Required dismissal reason. |
 | `creationEvidenceMediaId` | string or null | yes | Optional Supervisor evidence for manual Work. |
-| `completionEvidenceMediaId` | string or null | yes | Required when coordinate-targeted Work enters awaiting review. |
+| `completionEvidenceMediaId` | string or null | yes | Required when any Supervisor-created manual Work enters awaiting review. |
 | `latestVerificationId` | string or null | yes | Most recent Verification. |
 | `latestVerificationOutcome` | enum or null | yes | `passed`, `failed`, or `inconclusive`. |
 | `reworkCount` | integer | yes | Failed Verification count. Same Cleaner remains assigned. |
@@ -414,7 +424,7 @@ Camera target:
 }
 ```
 
-Coordinate target uses the same map, Zone and point fields without Camera fields. Work retains this snapshot even after the Site Map changes.
+Coordinate target uses the same map and point fields without Camera fields. `zoneId` is the containing active Zone when one exists, otherwise null with `zoneNameSnapshot` set to `Unzoned area`. Work retains this snapshot even after the Site Map changes.
 
 ## `workOrders/{workOrderId}/events/{eventId}`
 
@@ -446,23 +456,23 @@ Append-only Work history.
 | `siteId` | string | yes | Tenant. |
 | `workOrderId` | string | yes | Parent Work. |
 | `alertId` | string or null | yes | Alert context. |
-| `kind` | enum | yes | `camera_deterministic` or `coordinate_supervisor`. |
+| `kind` | enum | yes | `camera_deterministic` for Alert Work or `manual_supervisor` for Supervisor-created Manual Work. Historical `coordinate_supervisor` records remain readable. |
 | `status` | enum | yes | `collecting`, `ready`, or `applied`. |
 | `requestedAt` | timestamp | yes | Review request time. |
 | `requestedBy` | actor map | yes | Cleaner submission/system workflow. |
-| `requiredSampleCount` | integer or null | yes | 3 litter, 2 spill/bin, null for coordinate review. |
+| `requiredSampleCount` | integer or null | yes | 3 litter, 2 spill/bin, null for manual review. |
 | `acceptedSampleCount` | integer | yes | Fresh valid samples collected. |
 | `sampleSummaries` | array | yes | Bounded outcomes, capture times, model/Registration versions and reasons. |
 | `outcome` | enum or null | yes | `passed`, `failed`, or `inconclusive`. |
 | `outcomeReasonCodes` | string array | yes | Safe deterministic reasons. |
-| `completionEvidenceMediaId` | string or null | yes | Required for coordinate review. |
+| `completionEvidenceMediaId` | string or null | yes | Required for manual review. |
 | `decidedAt` | timestamp or null | yes | Outcome time. |
 | `decidedBy` | actor map or null | yes | Verification engine or Supervisor. |
 | `override` | map or null | yes | Supervisor override outcome and required reason. |
 | `appliedAt` | timestamp or null | yes | When Alert/Work state changed. |
 | `requestId` | string | yes | Idempotency and tracing. |
 
-For orchestrated Work, passed resolves, failed returns the same Work to `in_progress`, and inconclusive leaves it `awaiting_review` and notifies Supervisors. Manual management requires a Supervisor's final application. Ordinary negative monitoring never creates a Verification.
+For Alert Work, passed resolves, failed returns the same Work to `in_progress`, and inconclusive leaves it `awaiting_review` and notifies Supervisors. Supervisor-created Manual Work always uses its Cleaner completion photo and requires a Supervisor's final application. Ordinary negative monitoring never creates a Verification.
 
 ## `operationKeys/{keyHash}`
 

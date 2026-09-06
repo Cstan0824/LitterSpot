@@ -1657,6 +1657,68 @@ The System response separates process state from Site configuration:
 
 `GET /api/cleaner/map` deliberately excludes map drafts, Camera placements, and every other Cleaner's Station Point. A returned Station Point may have `zoneId: null` when it is in an unzoned but in-boundary part of the Site Map. Coordinate Work already carries its own target point; Camera-targeted Work is represented by its Camera reference until the live-monitoring integration is available.
 
+### V2 Site Map administration API
+
+All routes require an active Site Supervisor. Mutations are Root-only except the narrow Cleaner Station Point route.
+
+| Method | Route | Behaviour |
+| --- | --- | --- |
+| GET | `/api/site-map` | Active Site Map, user-defined boundary, coordinate convention, background metadata, Zones, Camera Placements, and Cleaner Station Points. |
+| GET | `/api/site-map/draft` | Root only. Recover the Site's one editable draft and its geometry. |
+| POST | `/api/site-map/draft/start` | Root only. Copies the active revision into a new draft and rejects a second concurrent draft. |
+| POST | `/api/site-map/draft` | Root only. Saves one complete valid draft snapshot using `expectedRevision` concurrency. |
+| POST | `/api/site-map/draft/validate` | Root only. Revalidates geometry, background ownership, and active Camera coverage, then records a success or failure audit. |
+| POST | `/api/site-map/draft/publish` | Root only. Revalidates and atomically publishes the immutable replacement revision. |
+| DELETE | `/api/site-map/draft` | Root only. Discards the draft without changing the active revision. |
+| POST | `/api/site-map/background` | Root-only multipart `image`. Stores one Site-owned configuration image and returns its media ID, content URL, MIME type, width, and height. |
+| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Starts or publishes a confirmed Camera placement change. |
+| PUT | `/api/site-map/station-points/{cleanerId}` | Root or Regular. Publishes one in-boundary Station Point; `zoneId` may be null. |
+
+Site Map draft body:
+
+```json
+{
+  "baseRevisionId": "active-revision-id",
+  "expectedRevision": 1,
+  "widthMeters": 2000,
+  "heightMeters": 1200,
+  "gridSizeMeters": 20,
+  "backgroundMediaId": "site-background-media-id",
+  "backgroundTransform": {
+    "xMeters": 0,
+    "yMeters": 0,
+    "widthMeters": 1800,
+    "heightMeters": 1200,
+    "opacity": 1
+  },
+  "zones": [],
+  "cameraPlacements": [],
+  "cameraPlacementChanges": [],
+  "cleanerStations": []
+}
+```
+
+Background alignment must preserve the uploaded image aspect ratio. The coordinate convention is top-left origin, X right, and Y down. Resizing the Site boundary preserves every existing absolute metre coordinate and reports anything now outside the boundary.
+
+Invalid Zone geometry returns `422` with `details.code=site_map_geometry_invalid`, flat `errors`, structured `issues`, and `zoneConflicts`. Active Zones cannot contain, overlap, cross, share edges or vertices, or touch at one point. Near but separate geometry is valid.
+
+A changed Camera point inside a general Site Map draft requires `cameraPlacementChanges[]` with `mode=map_position_correction`, `confirmation=true`, and a reason. Physical movement cannot use this path.
+
+Camera placement change body:
+
+```json
+{
+  "point": { "xMeters": 640.25, "yMeters": 315.5 },
+  "mode": "map_position_correction",
+  "reason": "The original Site Map pin was measured incorrectly.",
+  "expectedCameraRevision": 4,
+  "expectedMapRevisionId": "active-revision-id",
+  "confirmation": true
+}
+```
+
+`map_position_correction` publishes a map-only replacement revision and retains Camera Registration. `physical_camera_move` requires monitoring to be disabled and returns `status=registration_required` with a protected Root-only Camera Draft. That draft cannot publish until a new reference and floor/bin Registration validate. Publication changes placement, source, and Registration atomically.
+
 ### V2 Camera detail API
 
 | Method | Route | Response |
@@ -1710,3 +1772,25 @@ React ranking/heatmap cutover remains deferred. Future integration should
 consume both stable DTOs in one coordinated pass. Upload, processing,
 detection, alert, dashboard, and analytics backend work must not depend on the
 current dummy React data.
+# Camera monitoring redesign endpoints, 2026-09-05
+
+These V2 additions require a Supervisor Bearer token. Cleaner accounts cannot own monitoring.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/monitoring/live/config` | Camera source settings, playback generation, and current runtime; no lease secrets. |
+| GET | `/api/monitoring/live/events` | Authenticated SSE with `control`, `workflow`, and `observation` events. Observation and exact frame data URL are paired. Reconnect after the 50-second connection lifetime. |
+| PATCH | `/api/camera-creation/cameras/:cameraId/monitoring` | `{monitoringEnabled, expectedRevision}`; returns the new revision. Laptop conflicts return 409 with the conflicting Camera ID/name. |
+| POST | `/api/camera-creation/cameras/:cameraId/deactivate` | Root only; `{expectedRevision}`; disables and structurally deactivates the Camera. |
+| POST | `/api/monitoring/sessions/:sessionId/cameras/:cameraId/stop` | Owner token in `x-monitoring-token`; body `{episodeId, reason}`. Stops only this episode. |
+| GET | `/api/media/:mediaId/overlay` | Same-Site retained `observation`, or null for older/non-evidence media. |
+| GET | `/api/cleaner/work-orders/:workOrderId/camera-evidence` | Assigned Cleaner only; linked Alert Evidence. Add `?content=true` for the image bytes. |
+| GET | `/api/development/cameras/:cameraId/scenes` | Development scene list. |
+| POST | `/api/development/cameras/:cameraId/scenes/:key` | Multipart `video`; creates an immutable scene with exact Registration dimensions. |
+| POST | `/api/development/cameras/:cameraId/scenes/:key/select` | Select scene without resetting monitoring or workflow state. |
+
+Development scene routes also require `CAMERA_DEMO_SCENES_ENABLED=true` and a development application environment. Source scene selection controls do not appear in the product UI.
+
+Sample requests retain their existing multipart contract and accept optional `sourceTimeSeconds` and integer `playbackGeneration`. Successful responses include `nextSequence` and queue diagnostics. Overload returns 429 before consuming a sequence. A client recovering an ambiguous response may repeat episode start to obtain the authoritative next sequence without resetting the active episode.
+
+The single Node prototype owns live leases, heartbeat expiry, episode sequence, current runtime freshness, rolling qualification, candidate evidence, and partial Camera Verification samples in memory. Session claim/release and Episode start/end remain durable transition records. After the first accepted frame changes a Camera to online, an ordinary frame performs no Firestore read or write. A continuing confirmed issue also remains transient until its condition materially changes. Live configuration and Camera list routes reuse a Site snapshot until Camera, scene, or map configuration changes.

@@ -85,8 +85,8 @@ Superadmin access to selected-Site operational pages is read and structural in i
 - One Active Map Revision per Site.
 - One editable Site Map Draft per Site.
 - Published revisions never mutate.
-- Active Zone polygons do not overlap.
-- Camera Placements and coordinate Work targets fall inside exactly one active Zone. Cleaner Station Points fall inside the Site Map boundary and may be unzoned.
+- Active Zone polygons are spatially disjoint. They do not overlap, cross, share an edge or vertex, or touch at one point.
+- Camera Placements fall inside exactly one active Zone. Coordinate Manual Work targets and Cleaner Station Points fall inside the Site Map boundary and may be unzoned.
 - Operational and historical records snapshot their map revision, Zone label and point.
 
 ### Cameras
@@ -109,7 +109,7 @@ Superadmin access to selected-Site operational pages is read and structural in i
 - An assigned/in-progress/awaiting-review Alert has one matching active Work.
 - Alert and Work statuses advance together for Alert-origin Work.
 - Manual Work has no Alert and starts already assigned.
-- Coordinate Work requires Completion Evidence before `awaiting_review`.
+- Every Supervisor-created Manual Work Order requires Completion Evidence before `awaiting_review`, including Camera-targeted Manual Work.
 - Assignment equals acceptance; Cleaner cannot reject or report a problem.
 - Failed Verification reuses the same Cleaner and Work Order.
 - Supervisor takeover sets management mode to manual and blocks later Orchestrator mutations.

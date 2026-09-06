@@ -6,7 +6,6 @@ import "./styles.css";
 import "./field-station.css";
 import { OperationsConsole } from "./features/operations/OperationsConsole";
 import { DetectionTestPage } from "./pages/DetectionTestPage";
-import { SystemPage } from "./pages/SystemPage";
 import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
@@ -17,8 +16,9 @@ import { SessionProvider, useSession } from "./session/SessionProvider";
 import { supervisorRouteFromHash, type SupervisorRoute } from "./services/v2/routing";
 import { deriveSupervisorCapabilities } from "./services/v2/session";
 import { sessionErrorCopy } from "./services/v2/errors";
+import { SiteMonitoringProvider } from "./features/operations/SiteMonitoringProvider";
 
-type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
+type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "status";
 
 function SessionFailure({ error, onRetry, onLogout }: { error: unknown; onRetry: () => void; onLogout: () => void }) {
   const copy = sessionErrorCopy(error);
@@ -48,11 +48,13 @@ function App() {
 
   const supervisor = session.supervisor;
   const capabilities = deriveSupervisorCapabilities(supervisor.authority);
+  const content = () => {
   if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DetectionTestPage /></FieldStationShell>;
   if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><PipelinePage /></FieldStationShell>;
   if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} canRegisterCamera={capabilities.registerCameras} /></FieldStationShell>;
-  if (route === "status") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><SystemPage /></FieldStationShell>;
   return <OperationsConsole supervisor={supervisor} capabilities={capabilities} page={route as OperationsPage} onNavigate={(page) => { location.hash = page === "dashboard" ? "/" : `/${page}`; }} onLogout={() => { void sessionState.signOut(); }} />;
+  };
+  return <SiteMonitoringProvider key={supervisor.uid}>{content()}</SiteMonitoringProvider>;
 }
 
 createRoot(document.getElementById("root")!).render(<StrictMode><SessionProvider><App /></SessionProvider></StrictMode>);

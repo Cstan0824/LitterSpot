@@ -38,6 +38,18 @@ _Avoid_: Area, organization record
 The Site's two-dimensional, approximate real-distance coordinate plane, shown as a grid with an optional client-supplied background image.
 _Avoid_: Google Map, GPS map
 
+**Site Map Boundary**:
+The user-defined rectangular extent of a Site Map in real metres. Its width and height define the valid coordinate range independently of the size or shape of any on-screen viewer.
+_Avoid_: Map viewer size, uploaded image dimensions
+
+**Map Viewer**:
+A fixed on-screen window onto a Site Map Boundary. Fit, zoom, and pan change which part of the map is visible but never change Site dimensions, geometry, or stored metre coordinates.
+_Avoid_: Site Map Boundary, image crop
+
+**Site Background Alignment**:
+The scale and position that place one uploaded Site background image within the Site Map Boundary without changing the boundary's real dimensions.
+_Avoid_: Repeating grid tile, Site dimensions
+
 **Site Map Revision**:
 An immutable published version or editable draft of the Site Map dimensions, background, Zone geometry, Camera Placement, and Cleaner Station Points.
 _Avoid_: Site version, floor
@@ -55,12 +67,20 @@ A non-operational workspace for creating a Camera or replacing its source and Re
 _Avoid_: Incomplete Camera, temporary Camera
 
 **Zone**:
-A non-overlapping polygon inside one Site Map Revision that groups Camera Placements, observations, Alerts, and Work Orders. A Cleaner may have a nearest Zone for display context, but does not belong to or become restricted by a Zone.
+A spatially disjoint polygon inside one Site Map Revision that groups Camera Placements, observations, Alerts, and Work Orders. Active Zone interiors and boundaries may not overlap, cross, share an edge, or touch at a point. A Cleaner may have a nearest Zone for display context, but does not belong to or become restricted by a Zone.
 _Avoid_: Area, region
 
 **Camera Placement**:
 The Camera's physical point inside exactly one active Zone on the Site Map.
 _Avoid_: Camera registration, camera ROI
+
+**Map Position Correction**:
+A correction to a Camera's recorded Site Map coordinate when the physical Camera and its view did not move; the existing Camera Registration remains valid.
+_Avoid_: Physical Camera Move, Camera reconfiguration
+
+**Physical Camera Move**:
+A change to the Camera's real installation position or view. It changes Camera Placement and requires a new reference and Camera Registration before the replacement configuration becomes operational.
+_Avoid_: Map Position Correction, source-only replacement
 
 **Camera Creation**:
 One Root Supervisor workflow that combines Camera identity, Site Map placement, source configuration, reference capture, floor/bin plotting, validation, and initial Camera Registration publication.
@@ -120,12 +140,16 @@ _Avoid_: Camera lifecycle, Camera history
 The structured result of analyzing one sampled frame, including people count, floor hazards, and registered-bin states.
 _Avoid_: Alert, task, flag
 
+**Detection Signal**:
+A transient issue result from one AI Observation. Detection Signals feed rolling qualification in memory and are not durable operational history.
+_Avoid_: Flag, Alert, persisted detection event
+
 **Flag**:
-An internal, persisted qualification record showing that one Camera issue observation passed its confidence, magnitude, and issue-specific gates; Flags feed temporal Alert policy but have no standalone user page.
+A durable internal record created when rolling, issue-specific qualification confirms a cleanliness condition. One continuing condition does not create a new Flag for every sampled frame, and Flags have no standalone user page.
 _Avoid_: Alert, raw detection, Supervisor flag page
 
 **Alert**:
-A camera-scoped cleanliness condition created or updated when its issue-specific Flag pattern proves that cleanup is required.
+A camera-scoped cleanliness condition created or materially updated from a confirmed Flag when cleanup is required.
 _Avoid_: Detection, model result
 
 **Waiting Alert**:
@@ -137,7 +161,7 @@ The highest-confidence qualifying frame retained to explain an Alert, together w
 _Avoid_: Continuous footage, annotated image
 
 **Completion Evidence**:
-A Cleaner-supplied photo required for reviewing coordinate-targeted manual Work that has no Camera.
+A Cleaner-supplied photo required before any Supervisor-created Manual Work can enter review, whether its target is a Camera or a Site Map coordinate.
 _Avoid_: Alert Evidence, continuous footage
 
 **Bin Placement Intervention**:
@@ -157,8 +181,12 @@ Whether an Alert-linked Work Order assignment is controlled by the Orchestrator 
 _Avoid_: User role, Work status
 
 **Coordinate Target**:
-A Work Order location defined by a point inside an active Zone without requiring a Camera.
+A Work Order location defined by a point inside the Site Map boundary without requiring a Camera. It may belong to one active Zone or to an Unzoned Area.
 _Avoid_: Camera target, zone-only target
+
+**Unzoned Area**:
+The part of the Site Map boundary outside every active Zone. A Supervisor may place coordinate-targeted Manual Work there; the Work keeps its exact point and has no Zone identity.
+_Avoid_: nearest Zone, implicit Zone, outside the Site
 
 **Verification**:
 An explicit post-cleaning review that evaluates fresh evidence and produces passed, failed, or inconclusive; ordinary negative observations do not resolve Alerts.

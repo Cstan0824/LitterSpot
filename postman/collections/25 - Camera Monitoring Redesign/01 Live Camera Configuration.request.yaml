@@ -1,0 +1,19 @@
+$kind: http-request
+name: Live Camera Configuration
+url: "{{baseUrl}}/api/monitoring/live/config"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Camera configuration loads', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const cameras = pm.response.json().cameras;
+        const selected = cameras.find(c => c.id === pm.environment.get('v2CameraId')) || cameras.find(c => c.sourceType === 'looped_video') || cameras[0];
+        if (selected) { pm.environment.set('v2CameraId', selected.id); pm.environment.set('v2CameraRevision', String(selected.revision)); }
+      }
+    language: text/javascript
+order: 1000

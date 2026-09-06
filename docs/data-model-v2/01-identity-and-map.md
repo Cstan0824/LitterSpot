@@ -186,8 +186,9 @@ The Site is the tenant and one physical venue.
 | `rootSupervisorUid` | string | yes | The one active Root Supervisor. |
 | `activeMapRevisionId` | string | yes | Canonical pointer to the complete current Site Map. |
 | `mapDraftExists` | boolean | yes | Cheap indicator for Root UI. The draft document remains authoritative. |
-| `firstCameraCreated` | boolean | yes | Enforces that the first Camera uses `laptop_camera`. |
-| `laptopCameraId` | string or null | yes | Enforces at most one laptop Camera. |
+| `firstCameraCreated` | boolean | legacy | Historical publication marker. Camera creation order no longer restricts source type. |
+| `laptopCameraId` | string or null | legacy | Earlier single-registered-laptop pointer. Not used for monitoring enablement. |
+| `enabledLaptopCameraId` | string or null | optional until first control mutation | Reservation updated transactionally with Camera enablement. Only one laptop-source Camera may be enabled per Site. Existing enabled Camera records are also checked during transition. |
 | `defaultSampleIntervalSeconds` | number | yes | Starts at `1`; Site-level monitoring default. |
 | `fullBinAlertsEnabled` | boolean | yes | Can disable unreliable `full` without disabling overflow. |
 | `alertPolicyVersion` | string | yes | Active qualification/aging policy. |
@@ -261,8 +262,13 @@ At most one editable map draft exists per Site.
 | `gridSizeMeters` | number | yes | Display grid spacing; coordinates remain authoritative. |
 | `backgroundMediaId` | string or null | yes | Optional floor-plan/image asset. |
 | `backgroundTransform` | map | yes | Visual placement of the background within the coordinate plane. |
+| `coordinateOrigin` | enum | yes | `top_left`. |
+| `xAxisDirection` | enum | yes | `right`. |
+| `yAxisDirection` | enum | yes | `down`. |
 | `validationStatus` | enum | yes | `not_validated`, `valid`, or `invalid`. |
 | `validationErrors` | array | yes | Bounded safe validation results for the editor. |
+| `validationIssues` | array | yes | Structured safe issues with kind, conflicting Zone IDs, reason, and display message. |
+| `validatedContentHash` | string or null | yes | Hash of the exact structural content that passed validation; any save clears it. |
 | `createdAt` | timestamp | yes | Draft creation time. |
 | `createdByUid` | string | yes | Root Supervisor or structural Superadmin actor. |
 | `updatedAt` | timestamp | yes | Latest edit time. |
@@ -279,6 +285,8 @@ At most one editable map draft exists per Site.
 | `heightMeters` | number | Rendered background height. |
 | `opacity` | number 0..1 | Editor/viewer opacity. |
 
+`widthMeters / heightMeters` must preserve the uploaded image aspect ratio. The full aligned image remains inside the Site boundary and is never stretched or repeated per grid cell.
+
 ## `siteMapDrafts/{siteId}/zoneGeometry/{zoneId}`
 
 | Field | Type | Required | Meaning and workflow use |
@@ -287,7 +295,7 @@ At most one editable map draft exists per Site.
 | `siteId` | string | yes | Tenant. |
 | `zoneId` | string | yes | Stable Zone identity and document ID. |
 | `zoneNameSnapshot` | string | yes | Label shown during editing. |
-| `polygon` | point array | yes | Non-self-intersecting metre coordinates inside Site bounds. |
+| `polygon` | point array | yes | Spatially disjoint, non-self-intersecting metre coordinates inside Site bounds. It cannot touch another active Zone boundary. |
 | `centroid` | point | yes | Server-calculated polygon centroid for labels and fallback distance. |
 | `areaSquareMeters` | number | yes | Server-calculated approximate area. |
 | `updatedAt` | timestamp | yes | Latest geometry change. |
@@ -303,6 +311,10 @@ At most one editable map draft exists per Site.
 | `cameraNameSnapshot` | string | yes | Editor label. |
 | `point` | point | yes | Metre coordinate inside exactly one draft Zone. |
 | `zoneId` | string | yes | Server-derived containing Zone. Never trusted from the client. |
+| `changeMode` | enum or null | yes | `map_position_correction` only when the draft changes an existing Camera point. Physical movement uses a Camera Draft. |
+| `changeReason` | string or null | yes | Required reason for a Map Position Correction. |
+| `previousPoint` | point or null | yes | Active-revision point retained for confirmation and audit. |
+| `previousZoneId` | string or null | yes | Active-revision Zone retained for confirmation and audit. |
 | `updatedAt` | timestamp | yes | Latest placement change. |
 | `updatedByUid` | string | yes | Latest editor. |
 
@@ -314,8 +326,8 @@ At most one editable map draft exists per Site.
 | `siteId` | string | yes | Tenant. |
 | `cleanerId` | string | yes | Stable Cleaner ID and document ID. |
 | `cleanerNameSnapshot` | string | yes | Editor label. |
-| `point` | point | yes | Metre coordinate inside exactly one draft Zone. |
-| `zoneId` | string | yes | Server-derived containing Zone. |
+| `point` | point | yes | Metre coordinate inside the Site Map boundary; it may be in an Unzoned Area. |
+| `zoneId` | string or null | yes | Server-derived containing Zone or null. |
 | `updatedAt` | timestamp | yes | Latest Station Point change. |
 | `updatedByUid` | string | yes | Latest editor. |
 
@@ -335,6 +347,9 @@ Published revisions are immutable. The Site pointer, not a mutable revision stat
 | `gridSizeMeters` | number | yes | Published display grid spacing. |
 | `backgroundMediaId` | string or null | yes | Historical background reference. |
 | `backgroundTransform` | map | yes | Historical visual transform. |
+| `coordinateOrigin` | enum | yes | `top_left`. |
+| `xAxisDirection` | enum | yes | `right`. |
+| `yAxisDirection` | enum | yes | `down`. |
 | `zoneCount` | integer | yes | Validation/export summary. |
 | `cameraPlacementCount` | integer | yes | Validation/export summary. |
 | `cleanerStationCount` | integer | yes | Validation/export summary. |
@@ -354,9 +369,10 @@ Validation rejects:
 - non-positive dimensions;
 - a background outside allowed file and size rules;
 - polygons with fewer than three unique points, self-intersections, zero area, or points outside the Site;
-- any overlap between active Zone polygons;
-- Camera or Cleaner points outside the Site or not contained by exactly one active Zone;
-- missing placement for an operational Camera or active Cleaner;
+- containment, area overlap, crossing edges, shared edges, shared vertices, or single-point contact between active Zone polygons;
+- Camera points outside the Site or not contained by exactly one active Zone;
+- Cleaner Station Points outside the Site; Station Points may be unzoned;
+- missing placement for an active Camera, placement for an inactive or missing Camera, or a changed Camera point without confirmed correction metadata and a reason;
 - stale edits whose `baseRevisionId` no longer equals the Site's Active Map Revision.
 
-Publication stages and verifies every immutable revision document first. One Firestore transaction then confirms the base revision and switches `sites.activeMapRevisionId`. All application reads resolve geometry through that pointer. Search-oriented projections may update afterward, but they are never authoritative.
+One Firestore transaction rechecks the base revision, creates the immutable replacement revision and its bounded geometry, records audits, and switches `sites.activeMapRevisionId`. All application reads resolve geometry through that pointer. Search-oriented projections may update afterward, but they are never authoritative.

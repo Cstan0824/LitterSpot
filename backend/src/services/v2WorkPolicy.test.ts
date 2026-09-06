@@ -11,7 +11,7 @@ describe("V2 Work policy", () => {
     expect(applyVerification({ outcome: "passed", managementMode: "orchestrated", origin: "alert" })).toMatchObject({ workStatus: "resolved", requiresSupervisorDecision: false });
     expect(applyVerification({ outcome: "failed", managementMode: "orchestrated", origin: "alert" })).toMatchObject({ workStatus: "in_progress" });
     expect(applyVerification({ outcome: "passed", managementMode: "manual", origin: "manual" })).toMatchObject({ workStatus: "awaiting_review", requiresSupervisorDecision: true });
-    expect(requiresCompletionEvidence("coordinate")).toBe(true);
+    expect(requiresCompletionEvidence("manual")).toBe(true);
+    expect(requiresCompletionEvidence("alert")).toBe(false);
   });
 });
-

@@ -13,9 +13,12 @@ import { WorkManagementPage } from "./WorkManagementPage";
 import { TeamManagementPage } from "./TeamManagementPage";
 import type { SupervisorCapabilities } from "../../services/v2/session";
 import { BinPlacementAnalysisPage } from "./BinPlacementAnalysisPage";
+import { alertZoneDisplayName } from "./alertPresentation";
+import { SystemPage } from "../../pages/SystemPage";
+import { SiteAdministrationPage } from "../../pages/SiteAdministrationPage";
 
-type Page = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin";
-type AdminProfile = { displayName: string; email: string };
+type Page = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "status";
+type AdminProfile = { displayName: string; email: string; authority: "root" | "regular" };
 const labelForKind = (kind: string) => ({ bin_overflow: "Bin overflow", floor_litter: "Floor litter", floor_spill: "Floor spill" }[kind] ?? kind.replaceAll("_", " "));
 const evidenceUrl = (_analysisId: number) => "/mock/spill.jpg";
 const formatTime = (value?: string | null) => value ? new Date(`${value.endsWith("Z") ? value : `${value}Z`}`).toLocaleString() : "—";
@@ -27,9 +30,9 @@ function adaptV2Operations(model: V2OperationsReadModel) {
   const site: Site = { id: model.siteMap.siteId, name: model.siteMap.siteName, description: null, timezone: "Asia/Kuala_Lumpur", status: "active", createdAt: null, updatedAt: null };
   const zoneName = new Map(model.siteMap.zones.map((zone) => [zone.id, zone.zoneNameSnapshot]));
   const zones: Zone[] = model.siteMap.zones.map((zone) => ({ id: zone.id, siteId: model.siteMap.siteId, siteName: model.siteMap.siteName, name: zone.zoneNameSnapshot, code: null, description: null, status: "active", createdAt: null, updatedAt: null }));
-  const staff: Cleaner[] = model.cleaners.map((cleaner) => ({ id: cleaner.id, staffCode: cleaner.staffCode, fullName: cleaner.fullName, phone: cleaner.phone, assignedSiteId: model.siteMap.siteId, assignedZoneId: cleaner.stationZoneId ?? "", assignedZoneName: zoneName.get(cleaner.stationZoneId ?? "") ?? "No Station Point", status: cleaner.status, notes: cleaner.notes, createdAt: null, updatedAt: null, deactivatedAt: null }));
+  const staff: Cleaner[] = model.cleaners.map((cleaner) => ({ id: cleaner.id, staffCode: cleaner.staffCode, fullName: cleaner.fullName, phone: cleaner.phone, assignedSiteId: model.siteMap.siteId, assignedZoneId: cleaner.stationZoneId ?? "", assignedZoneName: cleaner.stationPoint ? zoneName.get(cleaner.stationZoneId ?? "") ?? "Unzoned Station Point" : "No Station Point", status: cleaner.status, notes: cleaner.notes, createdAt: null, updatedAt: null, deactivatedAt: null }));
   const cameras: CameraRecord[] = model.cameras.map((camera) => ({ id: camera.id, siteId: model.siteMap.siteId, siteName: model.siteMap.siteName, zoneId: camera.placement?.zoneId ?? "", zoneName: zoneName.get(camera.placement?.zoneId ?? "") ?? "Unplaced", code: camera.id.slice(0, 8).toUpperCase(), name: camera.name, sourceMode: camera.sourceType === "looped_video" ? "upload" : "stream", status: camera.status, availability: camera.runtime?.connectionStatus === "online" ? "available" : "unavailable", registrationStatus: camera.registration?.status === "ready" ? "ready" : "unregistered", registrationRevision: 0, registrationUpdatedAt: null, createdAt: null, updatedAt: null }));
-  const alerts: Alert[] = model.alerts.map((alert) => ({ id: alert.id, analysisId: 0, cameraId: alert.cameraId ?? "", cameraName: alert.cameraNameSnapshot, zone: alert.zoneNameSnapshot, kind: alert.issueType, severity: alert.severity, confidence: alert.evidence?.confidence ?? null, status: alert.status, createdAt: alert.createdAt ?? "", updatedAt: alert.updatedAt ?? "", resolvedAt: alert.status === "resolved" ? alert.updatedAt : null, imageName: "", peopleCount: 0, evidenceAvailable: Boolean(alert.evidence?.mediaId), evidenceMediaId: alert.evidence?.mediaId ?? null, activeWorkOrderId: alert.activeWorkOrderId }));
+  const alerts: Alert[] = model.alerts.map((alert) => ({ id: alert.id, analysisId: 0, cameraId: alert.cameraId ?? "", cameraName: alert.cameraNameSnapshot, zone: alertZoneDisplayName(alert, zoneName), kind: alert.issueType, severity: alert.severity, confidence: alert.evidence?.confidence ?? null, status: alert.status, createdAt: alert.createdAt ?? "", updatedAt: alert.updatedAt ?? "", resolvedAt: alert.status === "resolved" ? alert.updatedAt : null, imageName: "", peopleCount: 0, evidenceAvailable: Boolean(alert.evidence?.mediaId), evidenceMediaId: alert.evidence?.mediaId ?? null, evidenceObservation: alert.evidence?.observation, activeWorkOrderId: alert.activeWorkOrderId }));
   const availabilityById = Object.fromEntries(model.cleaners.map((cleaner) => [cleaner.id, cleaner.availability]));
   const stationById = Object.fromEntries(model.cleaners.flatMap((cleaner) => cleaner.stationPoint ? [[cleaner.id, { x: cleaner.stationPoint.xMeters / model.siteMap.revision.widthMeters * 100, y: cleaner.stationPoint.yMeters / model.siteMap.revision.heightMeters * 100 }]] : []));
   const scheduleSummaryById = Object.fromEntries(model.cleaners.map((cleaner) => {
@@ -202,8 +205,8 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
     return () => removeEventListener("keydown", closeOnEscape);
   }, [drawerOpen]);
   useEffect(() => subscribeLiveVideo(() => setLiveVideos(getLiveVideos())), []);
-  const load = useCallback(async () => {
-    setLoading(true); setError(undefined);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true); setError(undefined);
     try {
       const model = await getV2OperationsReadModel();
       const data = adaptV2Operations(model);
@@ -216,7 +219,13 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
       setError(message); setStaffError(message); setLocationError(message);
     } finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (page !== "site") void load(); }, [load, page]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => { clearTimeout(timer); timer = setTimeout(() => { void load(true); }, 750); };
+    window.addEventListener("litterspot:camera-workflow", refresh);
+    return () => { clearTimeout(timer); window.removeEventListener("litterspot:camera-workflow", refresh); };
+  }, [load]);
   const refreshPlacement = useCallback(async () => {
     const activeZones = zones.filter((zone) => zone.status === "active");
     if (activeZones.length === 0) {
@@ -246,7 +255,7 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
   const [gridView, setGridView] = useState<"3x2" | "2x3" | "1x6">("3x2");
   const alerts = useMemo(() => allAlerts.filter((item) => (status === "all" || item.status === status) && (severity === "all" || item.severity === severity)), [allAlerts, severity, status]);
   const gridColumns = gridView === "3x2" ? 3 : gridView === "2x3" ? 2 : 1;
-  const siteName = sites[0]?.name ?? "Active site";
+  const siteName = sites[0]?.name ?? (page === "site" ? "Sunway Theme Park" : "Active site");
   const refreshDashboard = () => undefined;
   const refreshAlerts = () => undefined;
 
@@ -268,10 +277,12 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
     if (page === "admin") return <TeamManagementPage staff={staff} zones={zones} v2Cleaners={v2Model?.cleaners ?? []} workOrders={v2WorkOrders} mapZones={v2Model?.siteMap.zones ?? []} mapSize={{ widthMeters: v2Model?.siteMap.revision.widthMeters ?? 1, heightMeters: v2Model?.siteMap.revision.heightMeters ?? 1 }} onCreate={createCleanerV2} onUpdate={updateCleanerV2} onMoveStation={moveCleanerStation} onAvailabilityOverride={overrideCleanerAvailability} />;
     if (page === "cameras") return <CameraOperationsPage readOnly allowWorkActions canManageCameraPlacement={capabilities.manageCameraPlacement} sites={sites} zones={zones} cameras={cameraRecords} v2Cameras={v2Model?.cameras} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onCameraPublished={async () => { await load(); }} onDismissCameraWork={(workId, reason) => actOnWork(workId, "dismiss", { reason })} onCreateZone={async () => { throw new Error("Zone creation is handled by the V2 Camera registration wizard."); }} onCreateCamera={async () => { throw new Error("Camera creation is handled by the V2 Camera registration wizard."); }} />;
     if (page === "alerts") return <AlertManagementPage alerts={allAlerts} cameras={cameraRecords} cleaners={staff} workOrders={v2WorkOrders} availableCleaners={staff.filter((cleaner) => availabilityById[cleaner.id]?.available)} onAssign={assignAlert} onDismiss={dismissAlert} onStatus={(alert, next) => changeStatus(alert, next)} />;
-    if (page === "history") return <WorkManagementPage workOrders={v2WorkOrders} cleaners={staff} zones={zones} cameras={cameraRecords} alerts={allAlerts} availableCleanerIds={staff.filter((cleaner) => availabilityById[cleaner.id]?.available).map((cleaner) => cleaner.id)} onCreateV2Work={createManualWork} onV2Action={actOnWork} />;
+    if (page === "history" && v2Model) return <WorkManagementPage siteMap={v2Model.siteMap} workOrders={v2WorkOrders} cleaners={staff} zones={zones} cameras={cameraRecords} alerts={allAlerts} availableCleanerIds={staff.filter((cleaner) => availabilityById[cleaner.id]?.available).map((cleaner) => cleaner.id)} onCreateV2Work={createManualWork} onV2Action={actOnWork} />;
     if (page === "placement") return <BinPlacementAnalysisPage siteName={siteName} />;
+    if (page === "site") return <SiteAdministrationPage siteName={siteName} readOnly={!capabilities.configureSiteMap} />;
+    if (page === "status") return <SystemPage />;
     return <section className="ops-page"><header className="page-title"><div><span>DASHBOARD</span><h1>Live camera overview</h1><p>Latest analyzed snapshots from each registered camera.</p></div><button className="outline-button" onClick={() => void refreshDashboard()}>Refresh</button></header><div className="dashboard-statline"><span><b>{dashboard?.summary.activeAlerts ?? 0}</b> Active alerts</span><span><b>{dashboard?.summary.resolvedAlerts ?? 0}</b> Resolved</span><span><b>{dashboard?.summary.configuredCameras ?? 0}</b> Cameras configured</span></div><div className="camera-grid-toolbar"><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([['1x6', 'Single column', 1], ['2x3', 'Two columns', 2], ['3x2', 'Three columns', 6]] as const).map(([value, label, cells]) => <button className={gridView === value ? "active" : ""} aria-label={label} title={label} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div><section className="camera-grid camera-grid-adjustable" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{dashboard.cameras.map((camera) => { const uploaded = liveVideos.find((video) => video.cameraId === camera.id); return uploaded ? <UploadedVideoCard video={uploaded} key={camera.id} /> : <CameraCard camera={camera} key={camera.id} />; })}</section><section className="dashboard-empty"><h2>Need a fresh camera frame?</h2><p>Use the pipeline playground to upload the exact camera image, plot a floor-only ROI, and create a saved evidence record.</p><button className="primary" onClick={() => { location.hash = "/pipeline"; }}>Open pipeline playground</button></section></section>;
-  }, [alerts, allAlerts, availabilityById, cameraRecords, cameras, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, scheduleSummaryById, severity, siteName, sites, staff, staffError, stationById, status, supervisor, v2Dashboard, v2Model, v2WorkOrders, zones]);
+  }, [alerts, allAlerts, availabilityById, cameraRecords, cameras, capabilities.configureSiteMap, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, scheduleSummaryById, severity, siteName, sites, staff, staffError, stationById, status, supervisor, v2Dashboard, v2Model, v2WorkOrders, zones]);
 
   const go = (target: Page) => { onNavigate(target); setDrawerOpen(false); };
   return <div className={`ops-shell ${drawerOpen ? "drawer-open" : ""}`}>
@@ -284,6 +295,6 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
       <button type="button" className={page === "placement" ? "current" : ""} aria-current={page === "placement" ? "page" : undefined} onClick={() => go("placement")}>Bin analysis</button>
       <p>Analysis tools</p><button type="button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button type="button" onClick={() => { location.hash = "/playground"; }}>Batch analysis</button><button type="button" onClick={() => { location.hash = "/status"; }}>Service status</button>
     </nav><div className="sidebar-cameras"><p>Camera sources</p>{dashboard.cameras.map((camera) => <span key={camera.id}><i className={camera.latest ? "online" : "offline"} />{camera.name}<small>{camera.latest?.flags.length ?? 0}</small></span>)}</div><button className="field-site" type="button" onClick={() => go("cameras")}><small>Active site</small><strong>{siteName}</strong></button><div className="sidebar-user"><b>{supervisor.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</b><span>{supervisor.displayName}<small>Supervisor</small></span></div></aside>
-    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>{siteName} / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void load()}>Try again</button></div> : content}</main>
+    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>{siteName} / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "site" ? "Site administration" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{page === "site" ? content : loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void load()}>Try again</button></div> : content}</main>
   </div>;
 }

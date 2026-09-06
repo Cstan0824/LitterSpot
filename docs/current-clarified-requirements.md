@@ -238,15 +238,15 @@ Cleaner Work Order Details shows:
 **Confirmed completion-evidence rules**:
 
 - Camera-linked Alert Work does not require a Cleaner photo because fresh Camera Verification provides post-cleaning evidence;
-- coordinate-targeted manual Work requires one Cleaner Completion Evidence photo when it is submitted for Supervisor review;
+- every Supervisor-created manual Work requires one Cleaner Completion Evidence photo when it is submitted for Supervisor review, including Camera-targeted manual Work;
 - the completion photo is stored with the Work Order and remains visible in its history;
-- the Supervisor makes the final decision for coordinate-targeted manual Work.
+- the Supervisor makes the final decision for all manual Work.
 
 **Confirmed** Cleaner mobile shows the Cleaner Schedule and Station Point as read-only information.
 
 **Confirmed** Cleaner mobile shows only the latest five resolved or dismissed Work Orders. The full durable history remains available to Supervisors and backend audit APIs.
 
-If the Cleaner cannot see the issue or believes it is already gone, they still submit the Work Order for review. For Alert-driven work, Camera Verification and the Orchestrator or Supervisor determine whether it resolves or returns for rework. For coordinate-only manual work, the Supervisor reviews it manually.
+If the Cleaner cannot see the issue or believes it is already gone, they still submit the Work Order for review. For Alert-driven work, Camera Verification and the Orchestrator or Supervisor determine whether it resolves or returns for rework. For manual Work, the Cleaner submits one completion photo and the Supervisor reviews it.
 
 **Confirmed** Notification retention length is not a product requirement for the prototype. Choose a reasonable configurable implementation default later without affecting Work Order history.
 
@@ -411,11 +411,11 @@ Evidence is optional because manual Work can be created outside Camera coverage.
 
 **Confirmed** Manual Work Orders can target a map coordinate without a Camera.
 
-**Confirmed** A coordinate target must fall inside exactly one active Zone; the backend derives the Zone from the point.
+**Corrected 2026-09-06** A coordinate target may be placed anywhere inside the active Site Map boundary. The backend derives the Zone when the point falls inside exactly one active Zone. A point outside every active Zone remains valid with `zoneId=null` and the display label `Unzoned area`.
 
-**Confirmed** A manual coordinate-targeted Work Order has no Camera Verification. A Supervisor reviews and resolves it manually.
+**Confirmed** A Supervisor chooses either a Camera target or a coordinate target. Camera selection is optional and explicit; clicking a coordinate does not infer or attach a nearby Camera.
 
-**Confirmed** A Camera-targeted manual Work Order may run deterministic Camera Verification as advisory decision support. The result never automatically resolves or returns the manual Work Order for rework; the Supervisor applies the final decision.
+**Corrected 2026-09-06** Every manual Work Order requires one Cleaner Completion Evidence photo, including Camera-targeted manual Work. Manual Work does not enter deterministic Camera Verification. A selected Camera may provide location and context evidence, but the Supervisor reviews the Cleaner photo and applies the final decision.
 
 **Confirmed** Manual Work uses the same visible lifecycle:
 
@@ -591,7 +591,7 @@ Zone rules:
 - a Camera point belongs inside exactly one active Zone;
 - one Zone can contain multiple Cameras;
 - Cleaner Station Points may be inside Zones or unzoned parts of the Site Map;
-- coordinate-targeted Work Orders must fall inside exactly one active Zone;
+- coordinate-targeted Manual Work may be inside an active Zone or in an Unzoned Area, but must remain inside the Site Map boundary;
 - deactivated Zone geometry remains available for historical records;
 - deactivated Zones cannot receive new Cameras, Cleaner assignments, or Work Orders.
 
@@ -1133,7 +1133,7 @@ Manual work begins at Work Order creation and can target either a Camera or a co
 - One 2D grid per Site with approximate real-distance dimensions.
 - Optional plain or uploaded-image background.
 - Zones are non-overlapping polygons.
-- Cameras and coordinate-targeted Work Orders must fall inside exactly one active Zone; Cleaner Station Points must only remain inside the Site Map boundary.
+- Cameras must fall inside exactly one active Zone. Coordinate-targeted Manual Work and Cleaner Station Points must remain inside the Site Map boundary and may be unzoned.
 - Dimension changes require Zone and Camera Placement reconfiguration while historical revisions remain available.
 
 ### 2026-08-29 — Camera monitoring and storage

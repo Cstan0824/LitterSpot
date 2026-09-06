@@ -43,6 +43,8 @@ import { v2TestSupportRoutes } from "./routes/v2TestSupportRoutes.js";
 import { v2OperationsRoutes } from "./routes/v2OperationsRoutes.js";
 import { auditV2Mutation } from "./middleware/auditV2Mutation.js";
 import { phase11AnalyticsRoutes, phase11BinPlacementRoutes, phase11DashboardRoutes } from "./routes/phase11Routes.js";
+import { cameraSceneRoutes } from "./routes/cameraSceneRoutes.js";
+import { cameraLiveRoutes } from "./routes/cameraLiveRoutes.js";
 
 export const app = express();
 
@@ -78,7 +80,9 @@ app.get("/api/health", readiness);
 app.get("/api/health/ready", readiness);
 
 app.use("/api", authenticateUser);
-app.use("/api", rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMinute }));
+const generalLimit = rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMinute });
+const cameraLimit = rateLimit({ namespace: "camera-samples", maximum: 3600 });
+app.use("/api", (req, res, next) => /\/monitoring\/sessions\/[^/]+\/cameras\/[^/]+\/samples$/.test(req.path) ? cameraLimit(req, res, next) : generalLimit(req, res, next));
 
 app.use("/api/me", supervisorRoutes);
 app.use("/api/superadmin", requireSuperadmin, superadminRoutes);
@@ -93,6 +97,7 @@ app.use(["/api/site-map", "/api/camera-creation", "/api/monitoring", "/api/alert
 app.use("/api/site-map", siteMapRoutes);
 app.use("/api/camera-creation", v2CameraRoutes);
 app.use("/api/monitoring", v2MonitoringRoutes);
+app.use("/api/monitoring/live", cameraLiveRoutes);
 app.use("/api/supervisors", v2SupervisorAccountRoutes);
 app.use("/api/bin-replacement", binReplacementRoutes);
 app.use("/api/analytics", analyticsRoutes);
@@ -114,6 +119,7 @@ app.use("/api/work-orders", (req, _res, next) => {
   return next();
 });
 app.use("/api/test-support/v2", v2TestSupportRoutes);
+app.use("/api/development/cameras", cameraSceneRoutes);
 app.use("/api/zones", zoneRoutes);
 app.use("/api/orchestrator/v2", v2OrchestratorSupervisorRoutes);
 app.use("/api/orchestrator", orchestratorSupervisorRoutes);

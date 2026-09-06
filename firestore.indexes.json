@@ -532,6 +532,8 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "mediaAssets", "fieldPath": "evidenceObservation", "indexes": [] },
+    { "collectionGroup": "alerts", "fieldPath": "evidence", "indexes": [] },
     { "collectionGroup": "analyticsMinuteBuckets", "fieldPath": "contributions", "indexes": [] },
     { "collectionGroup": "analyticsMinuteBuckets", "fieldPath": "zoneMetrics", "indexes": [] },
     { "collectionGroup": "analyticsDailySummaries", "fieldPath": "zoneMinuteMetrics", "indexes": [] },

@@ -10,6 +10,7 @@ describe("role routing", () => {
 
   it("does not treat Cleaner or unknown hashes as Supervisor routes", () => {
     expect(supervisorRouteFromHash("#/alerts?zone=main")).toBe("alerts");
+    expect(supervisorRouteFromHash("#/site")).toBe("site");
     expect(supervisorRouteFromHash("#/cleaner")).toBe("dashboard");
     expect(supervisorRouteFromHash("#/unknown")).toBe("dashboard");
   });

@@ -122,6 +122,7 @@ async function ensureCleaner(rootUid: string, rootName: string, fixture: Cleaner
 
 async function ensureCamera(input: {
   rootUid: string;
+  rootName: string;
   name: string;
   sourceType: "laptop_camera" | "looped_video";
   point: { xMeters: number; yMeters: number };
@@ -161,7 +162,7 @@ async function ensureCamera(input: {
   });
   const validation = await validateV2CameraDraft(siteId, draft.id);
   if (!validation.valid) throw new Error(`Camera fixture draft is invalid: ${validation.errors.join(", ")}`);
-  const published = await publishV2CameraDraft(draft.id, input.rootUid);
+  const published = await publishV2CameraDraft(draft.id, supervisorActor(input.rootUid, input.rootName), `integration-publish-camera-${draft.id}`);
   return String(published.cameraId);
 }
 
@@ -272,8 +273,8 @@ const reviewCleanerId = fixtureCleanerIds["CLN-004"];
 const reworkCleanerId = fixtureCleanerIds["CLN-005"];
 const dismissedCleanerId = fixtureCleanerIds["CLN-006"];
 const evidenceCleanerId = fixtureCleanerIds["CLN-007"];
-const laptopCameraId = await ensureCamera({ rootUid: root.uid, name: "Main Entrance Camera", sourceType: "laptop_camera", point: { xMeters: 20, yMeters: 20 }, bin: false });
-const loopedCameraId = await ensureCamera({ rootUid: root.uid, name: "Food Court Demo Camera", sourceType: "looped_video", point: { xMeters: 70, yMeters: 20 }, bin: true });
+const laptopCameraId = await ensureCamera({ rootUid: root.uid, rootName, name: "Main Entrance Camera", sourceType: "laptop_camera", point: { xMeters: 20, yMeters: 20 }, bin: false });
+const loopedCameraId = await ensureCamera({ rootUid: root.uid, rootName, name: "Food Court Demo Camera", sourceType: "looped_video", point: { xMeters: 70, yMeters: 20 }, bin: true });
 
 const orchestratorAlertId = await ensureSimulatedAlert({ rootUid: root.uid, rootName, cameraId: laptopCameraId, issueType: "floor_spill", condition: "spill", severity: "critical", clientRequestId: "integration-orchestrator-assignment-v1" });
 const reviewAlertId = await ensureSimulatedAlert({ rootUid: root.uid, rootName, cameraId: loopedCameraId, issueType: "bin_service", condition: "full", severity: "warning", clientRequestId: "integration-awaiting-review-v1" });

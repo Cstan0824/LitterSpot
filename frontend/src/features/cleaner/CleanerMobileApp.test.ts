@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../services/v2/cleaner", () => ({
-  getV2CleanerMap: vi.fn(), getV2CleanerNotifications: vi.fn(), getV2CleanerSelf: vi.fn(), getV2CleanerWorkOrders: vi.fn(),
+  getV2CleanerMap: vi.fn(), getV2CleanerNotifications: vi.fn(), getV2CleanerSelf: vi.fn(), getV2CleanerWorkOrder: vi.fn(), getV2CleanerWorkOrders: vi.fn(),
   startV2CleanerWork: vi.fn(), submitV2CleanerForReview: vi.fn(), subscribeV2CleanerNotifications: vi.fn(), uploadV2CleanerCompletionEvidence: vi.fn(),
 }));
 

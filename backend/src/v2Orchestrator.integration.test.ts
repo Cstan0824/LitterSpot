@@ -200,7 +200,7 @@ run("V2 Orchestrator integration", () => {
     const scenario = await seedScenario();
     const selector: AssignmentSelector = { async select() { return { alertId: scenario.alertIds[0], cleanerId: scenario.cleanerIds[0], rationaleSummary: "Automatic outbox assignment.", provider: "fake", model: "fake-pair-model" }; } };
     const eventId = await enqueueV2ImmediateAssignmentTrigger(scenario.siteId, "integration_trigger", `integration:${randomUUID()}`);
-    expect(await processV2OrchestratorTriggers(10, { selector, sleep: async () => undefined, now: scenario.now, scheduleScan: false })).toBeGreaterThan(0);
+    expect(await processV2OrchestratorTriggers(10, { selector, sleep: async () => undefined, now: scenario.now, scheduleScan: false, siteId: scenario.siteId })).toBeGreaterThan(0);
     expect((await firestore.collection("orchestratorOutbox").doc(eventId).get()).data()?.status).toBe("completed");
     expect((await firestore.collection("alerts").doc(scenario.alertIds[0]).get()).data()?.status).toBe("assigned");
     await Promise.all(scenario.cleanerUids.map((uid) => firebaseAuth.deleteUser(uid).catch(() => undefined)));

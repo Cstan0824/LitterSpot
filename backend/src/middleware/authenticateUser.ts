@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import { firebaseAuth, firestore } from "../config/firebase.js";
+import { createHash } from "node:crypto";
+const monitoringAuth = new Map<string, { expiresAt: number; authUser: AuthenticatedUser; supervisor: AuthenticatedSupervisor }>();
 
 export type AuthenticatedUser = {
   uid: string;
@@ -66,6 +68,10 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
   const authorization = req.header("authorization");
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   if (!match) return res.status(401).json({ error: "Authentication required.", requestId: req.requestId });
+  const isMonitoringRequest = /^\/api\/monitoring(?:\/|\?|$)/.test(req.originalUrl);
+  const sampleKey = isMonitoringRequest ? createHash("sha256").update(match[1]).digest("hex") : null;
+  const cached = sampleKey ? monitoringAuth.get(sampleKey) : null;
+  if (cached && cached.expiresAt > Date.now()) { req.authUser = cached.authUser; req.supervisor = cached.supervisor; return next(); }
 
   let decoded;
   try {
@@ -113,6 +119,10 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
       };
       req.authUser = { ...authenticated, role: "supervisor", profileId: profile.id, siteId, authority };
       req.supervisor = { ...authenticated, siteId, authority };
+      if (sampleKey) {
+        if (monitoringAuth.size >= 256) monitoringAuth.clear();
+        monitoringAuth.set(sampleKey, { expiresAt: Math.min(Date.now() + 5 * 60_000, decoded.exp * 1000), authUser: req.authUser, supervisor: req.supervisor });
+      }
       return next();
     }
 

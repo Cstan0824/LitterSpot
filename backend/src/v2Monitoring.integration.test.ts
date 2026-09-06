@@ -5,6 +5,7 @@ import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
 import { writeMedia } from "./services/localMediaStorage.js";
 import { flushV2MinuteBuckets, inspectV2LiveMemory, markOfflineCameras, resetV2LiveMemory, setV2LiveInferenceForTests } from "./services/v2LiveMonitoringService.js";
+import { expireRuntimeSessionForTests, resetMonitoringRuntime } from "./services/monitoringRuntimeRegistry.js";
 
 const run = process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -33,7 +34,7 @@ run("V2 live monitoring", () => {
     setV2LiveInferenceForTests(async () => ({ image: { width: 640, height: 480 }, focusRegion: [], peopleCount: 4, people: [{ confidence: 0.88, bbox: { x1: 20, y1: 30, x2: 120, y2: 300 } }], bins: [{ binIndex: 1, binId: "bin-1", localizerConfidence: 0.9, bbox: { x1: 1, y1: 1, x2: 10, y2: 10 }, classificationRegion: { x1: 1, y1: 1, x2: 10, y2: 10 }, state: binState, stateConfidence: 0.9, signals: { binPresence: 0.9, fullness: binState === "normal" ? 0.1 : 0.9, overflow: binState === "overflow" ? 0.9 : 0.1 }, unknownReasons: [], processingTimeMs: 2 }], floorHazards: includeSpill ? [{ className: "floor_spill", confidence: 0.8, bbox: { x1: 1, y1: 2, x2: 3, y2: 4 }, polygon: [] }] : [], modelVersions: { floorHazard: "floor-v1", people: "people-v1", binLocalizer: "bin-loc-v1", binState: "bin-state-v1" }, processingTimeMs: 12 } as any));
     token = await signIn(email, password);
   });
-  afterAll(async () => { setV2LiveInferenceForTests(null); resetV2LiveMemory(cameraId); await firebaseAuth.deleteUser(uid).catch(() => undefined); });
+  afterAll(async () => { setV2LiveInferenceForTests(null); resetV2LiveMemory(cameraId); resetMonitoringRuntime(cameraId); await firebaseAuth.deleteUser(uid).catch(() => undefined); });
 
   it("claims one owner, starts an Episode, and processes a sample without storing the frame", async () => {
     const claim = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({}); expect(claim.status).toBe(201); sessionId = claim.body.sessionId; leaseToken = claim.body.leaseToken;
@@ -45,21 +46,29 @@ run("V2 live monitoring", () => {
     expect((await firestore.collection("analysisRuns").where("cameraId", "==", cameraId).get()).size).toBe(0);
     const media = await firestore.collection("mediaAssets").where("cameraId", "==", cameraId).get(); expect(media.size).toBe(1); expect(media.docs[0].data().purpose).toBe("alert_evidence");
     expect(inspectV2LiveMemory(cameraId).temporalKeys).toHaveLength(3);
+    const alertEvidence = (await firestore.collection("alerts").where("cameraId", "==", cameraId).get()).docs[0].data().evidence;
+    expect(alertEvidence).toMatchObject({ width: 640, height: 480, people: [{ confidence: 0.88 }], bins: [{ binId: "bin-1" }], observation: { sampleId: `${episodeId}:1` } });
     expect(await flushV2MinuteBuckets(siteId, new Date())).toBe(0);
     expect(await flushV2MinuteBuckets(siteId, new Date(Date.now() + 60000))).toBe(1);
     expect((await firestore.collection("analyticsMinuteBuckets").where("siteId", "==", siteId).get()).size).toBe(1);
   });
 
   it("combines full and overflow into one escalating bin-service Alert", async () => {
+    const resumed = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/start`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).send({});
+    expect(resumed.body).toMatchObject({ episodeId, nextSequence: 2, resumed: true });
+    expect(inspectV2LiveMemory(cameraId).temporalKeys).toHaveLength(3);
     includeSpill = false; binState = "full";
     for (const sequence of [2, 3]) { const response = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", String(sequence)).field("capturedAt", new Date(capturedBaseMs + sequence * 1_000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(response.status).toBe(200); }
     let alerts = await firestore.collection("alerts").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get(); expect(alerts.size).toBe(1); expect(alerts.docs[0].data()).toMatchObject({ observedCondition: "full", severity: "warning" });
     binState = "overflow";
     const overflow = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "4").field("capturedAt", new Date(capturedBaseMs + 4_000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(overflow.status).toBe(200);
     alerts = await firestore.collection("alerts").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get(); expect(alerts.size).toBe(1); expect(alerts.docs[0].data()).toMatchObject({ observedCondition: "overflow", severity: "critical" }); expect((await firestore.collection("activeAlertKeys").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get()).size).toBe(1);
+    const flagsBefore = await firestore.collection("flags").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get();
+    const continuing = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "5").field("capturedAt", new Date(capturedBaseMs + 5_000).toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" }); expect(continuing.status).toBe(200);
+    const flagsAfter = await firestore.collection("flags").where("cameraId", "==", cameraId).where("issueType", "==", "bin_service").get(); expect(flagsAfter.size).toBe(flagsBefore.size);
     await flushV2MinuteBuckets(siteId,new Date(Date.now()+120000));
     const buckets=await firestore.collection("analyticsMinuteBuckets").where("siteId","==",siteId).get();
-    expect(buckets.size).toBe(1); expect(buckets.docs[0].data().siteTotals.successfulSampleCount).toBe(4); expect(buckets.docs[0].data().siteTotals.peopleSum).toBe(16); expect(buckets.docs[0].data().siteTotals.inferenceLatencyMsSum).toBe(48);
+    expect(buckets.size).toBe(1); expect(buckets.docs[0].data().siteTotals.successfulSampleCount).toBe(5); expect(buckets.docs[0].data().siteTotals.peopleSum).toBe(20); expect(buckets.docs[0].data().siteTotals.inferenceLatencyMsSum).toBe(60);
   });
 
   it("exposes Alert traceability, ages warnings, and dismisses with history", async () => {
@@ -71,15 +80,15 @@ run("V2 live monitoring", () => {
   });
 
   it("rejects duplicate sequence and marks stale Camera runtime offline", async () => {
-    const duplicate = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "4").field("capturedAt", new Date().toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" });
+    const duplicate = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "5").field("capturedAt", new Date().toISOString()).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" });
     expect(duplicate.status).toBe(409);
     await firestore.collection("cameraRuntimeStates").doc(cameraId).update({ lastSampleAcceptedAt: new Date(0), connectionStatus: "online" });
-    expect(await markOfflineCameras(siteId, new Date(), 5)).toBeGreaterThanOrEqual(1);
+    expect(await markOfflineCameras(siteId, new Date(Date.now() + 6000), 5)).toBeGreaterThanOrEqual(1);
     expect((await firestore.collection("cameraRuntimeStates").doc(cameraId).get()).data()?.connectionStatus).toBe("offline");
   });
 
   it("allows lease failover after expiry and validates release ownership", async () => {
-    await firestore.collection("monitoringSessions").doc(siteId).update({ leaseExpiresAt: new Date(0) });
+    expireRuntimeSessionForTests(siteId);
     const replacement = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({});
     expect(replacement.status).toBe(201);
     const wrongRelease = await request(app).post(`/api/monitoring/sessions/${replacement.body.sessionId}/release`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", "wrong").send({});
