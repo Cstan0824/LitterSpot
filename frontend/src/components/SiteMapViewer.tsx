@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { SiteBackgroundTransform, SiteMapBackground, SiteMapCameraPlacement, SiteMapCleanerStation } from "../services/v2/siteMap";
 import type { SiteMapPoint, SiteMapPolygon } from "../services/v2/mapGeometry";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../services/v2/media";
 import { completedSiteMapGesture, SITE_MAP_WHEEL_LISTENER_OPTIONS, siteMapButtonZoomFactor, siteMapCameraMarkerScale, siteMapDrawingPoints, siteMapGestureShouldPan, siteMapWheelZoomFactor } from "./siteMapInteraction";
+import { siteMapZoneColour } from "./siteMapZonePalette";
 import "./site-map-viewer.css";
 
 type ZoneLayer = { id: string; name: string; polygon: SiteMapPolygon };
@@ -197,7 +198,7 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
         <rect className="site-map-ground" width={boundary.widthMeters} height={boundary.heightMeters} />
         {backgroundUrl && backgroundTransform && <image className="site-map-background" href={backgroundUrl} x={backgroundTransform.xMeters} y={backgroundTransform.yMeters} width={backgroundTransform.widthMeters} height={backgroundTransform.heightMeters} opacity={backgroundTransform.opacity} preserveAspectRatio="xMidYMid meet" />}
         <rect className="site-map-grid" width={boundary.widthMeters} height={boundary.heightMeters} fill={`url(#${patternId})`} />
-        {zones.map((zone) => <polygon key={zone.id} points={points(zone.polygon)} data-site-map-zone-id={zoneSelectionEnabled ? zone.id : undefined} className={`site-map-zone ${selectedZoneId === zone.id ? "selected" : ""} ${conflictingZoneIds.has(zone.id) ? "conflict" : ""} ${drawingZoneId === zone.id ? "draft" : ""}`} role={zoneSelectionEnabled ? "button" : undefined} tabIndex={zoneSelectionEnabled ? 0 : undefined} aria-label={zoneSelectionEnabled ? `Select ${zone.name} Zone` : undefined} onKeyDown={zoneSelectionEnabled ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectZone?.(zone.id); } } : undefined} />)}
+        {zones.map((zone) => { const colour = siteMapZoneColour(zone.id); return <polygon key={zone.id} points={points(zone.polygon)} data-site-map-zone-id={zoneSelectionEnabled ? zone.id : undefined} className={`site-map-zone ${selectedZoneId === zone.id ? "selected" : ""} ${conflictingZoneIds.has(zone.id) ? "conflict" : ""} ${drawingZoneId === zone.id ? "draft" : ""}`} style={{ "--zone-fill": colour.fill, "--zone-stroke": colour.stroke, "--zone-selected-stroke": colour.selectedStroke } as CSSProperties} role={zoneSelectionEnabled ? "button" : undefined} tabIndex={zoneSelectionEnabled ? 0 : undefined} aria-label={zoneSelectionEnabled ? `Select ${zone.name} Zone` : undefined} onKeyDown={zoneSelectionEnabled ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectZone?.(zone.id); } } : undefined} />; })}
         {drawingPoints.length > 1 && <polyline className="site-map-drawing-line" points={points(drawingPoints)} />}
         {drawingPoints.map((point, index) => <g className="site-map-drawing-point" key={`drawing-point-${index}`} transform={`translate(${point.xMeters} ${point.yMeters})`}><circle r={drawingPointRadius} /><circle r={drawingPointRadius * .34} /></g>)}
         {labels.map((zone) => zone.centre && zone.polygon.length >= 3 ? <text key={`${zone.id}-label`} x={zone.centre.xMeters} y={zone.centre.yMeters} className={conflictingZoneIds.has(zone.id) ? "conflict" : ""} style={{ fontSize: zoneLabelSize, strokeWidth: zoneLabelStroke }}>{zone.name}</text> : null)}

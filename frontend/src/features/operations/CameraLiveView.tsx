@@ -3,6 +3,8 @@ import { useSiteMonitoring } from "./SiteMonitoringProvider";
 import type { Box, CameraObservation } from "../../../../shared/cameraMonitoring";
 import "./camera-live-view.css";
 
+export const CAMERA_VIEW_ASPECT_RATIO = "16 / 9";
+
 export function ObservationOverlay({ observation, compact = false }: { observation: CameraObservation; compact?: boolean }) {
   const boxes: Array<{ box?: Box; label: string; confidence: number; color: string }> = [
     ...observation.people.map(p => ({ box: p.bbox, label: "Person", confidence: p.confidence, color: "#ade04a" })),
@@ -40,10 +42,9 @@ export function CameraLiveView({ cameraId, compact = false }: { cameraId: string
   }, [raw, view?.sourceVideo]);
   const enabled = view?.camera.monitoringEnabled;
   const stale = !view?.frameDataUrl || !view?.observation || !view?.lastReceivedAt || now - view.lastReceivedAt > 10_000;
-  const dimensions = view?.observation?.image ?? { width: view?.camera.registration?.sourceWidth || 16, height: view?.camera.registration?.sourceHeight || 9 };
   const operationalStatus = cameraMonitoringStatus({ available: Boolean(view), enabled: Boolean(enabled), busy: Boolean(view?.controlBusy), stale, error: state.error, message: view?.message, lastReceivedAt: view?.lastReceivedAt, peopleCount: view?.observation?.peopleCount, processingTimeMs: view?.observation?.processingTimeMs, now });
   return <div className={`camera-live-view ${compact ? "compact" : "detail"}`}>
-    <div className="camera-live-stage" style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}>
+    <div className="camera-live-stage" style={{ aspectRatio: CAMERA_VIEW_ASPECT_RATIO }}>
       {raw && view?.sourceVideo ? <canvas ref={canvas} /> : enabled && view?.frameDataUrl && view.observation ? <><img src={view.frameDataUrl} alt={`${view.camera.name} analyzed frame`} /><ObservationOverlay observation={view.observation} compact={compact} /></> : <div className="camera-live-empty"><strong>{enabled ? "Waiting for a fresh frame" : "Camera is disabled"}</strong>{!compact && <span>{enabled ? view?.message || "The Camera is enabled and connecting to its source." : "Enable it to resume monitoring and detection."}</span>}</div>}
       <span className={`camera-live-badge ${!enabled ? "disabled" : stale ? "offline" : "online"}`}>{!enabled ? "Disabled" : stale ? "Offline" : "Online"}</span>
     </div>

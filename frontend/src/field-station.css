@@ -1676,7 +1676,7 @@ textarea:focus-visible {
 .camera-wall-preview video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   filter: saturate(.72) contrast(1.08);
 }
 
@@ -2527,7 +2527,7 @@ body {
 .camera-reference-heading > span { color: var(--fs-muted); font: 400 10px/1 "Field Mono", monospace; }
 .camera-reference-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
 .camera-reference-visual { min-width: 0; border: 1px solid var(--fs-jade); background: #fff; }
-.camera-reference-visual .camera-wall-preview { aspect-ratio: auto; height: clamp(450px, 45vw, 655px); }
+.camera-reference-visual .camera-wall-preview { aspect-ratio: 16 / 9; height: auto; }
 .camera-reference-visual footer { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 32px; align-items: end; padding: 16px 7px 10px; }
 .camera-reference-visual h1 { margin: 0 0 4px; color: #0d0f10; font: 700 clamp(37px, 3.3vw, 54px)/.92 "Field Display", sans-serif; letter-spacing: -.02em; }
 .camera-reference-visual footer p { margin: 0; color: #52616a; font-size: 11px; line-height: 1.45; }
@@ -2734,8 +2734,9 @@ body {
 .alert-overlay-switch button { min-height: 38px; padding: 0 12px; border: 0; background: #fff; color: var(--fs-muted); font-size: 10px; white-space: nowrap; cursor: pointer; }
 .alert-overlay-switch button + button { border-left: 1px solid var(--fs-line); }
 .alert-overlay-switch button.active { background: var(--fs-jade); color: #fff; }
-.alert-evidence-image { position: relative; height: 500px; overflow: hidden; background: #dce3ea; }
-.alert-evidence-image > img { width: 100%; height: 100%; object-fit: cover; }
+.alert-evidence-image { position: relative; min-height: 240px; overflow: visible; background: #dce3ea; }
+.alert-evidence-image .camera-retained-frame { width: 100%; }
+.alert-evidence-image .camera-retained-frame > img { display: block; width: 100%; height: auto; object-fit: contain; }
 .alert-detection-box { position: absolute; right: 11%; bottom: 9%; width: 31%; height: 31%; border: 4px solid var(--fs-coral); }
 .alert-detection-box b { position: absolute; top: -26px; left: -4px; padding: 6px 8px; background: var(--fs-coral); color: #fff; font: 700 8px/1 "Field Mono", monospace; text-transform: uppercase; }
 .alert-evidence-chip { position: absolute; top: 12px; right: 12px; padding: 7px 9px; background: rgba(11, 24, 48, .9); color: #fff; font: 400 8px/1 "Field Mono", monospace; }
@@ -2839,7 +2840,7 @@ body {
   .camera-detail-heading { grid-template-columns: 1fr; }
   .camera-detail-secondary { grid-template-columns: 1fr; }
   .camera-detail-evidence .camera-wall-preview,
-  .alert-evidence-image { min-height: 0; height: 320px; }
+  .alert-evidence-image { min-height: 0; height: auto; }
   .alert-management-filters { align-items: stretch; flex-direction: column; }
   .alert-management-filters > div { grid-auto-flow: row; grid-template-columns: repeat(3, max-content); }
   .alert-management-filters label { margin-left: 0; }

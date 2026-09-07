@@ -10,3 +10,9 @@ export function validateCameraSource(input: { existingCameraCount: number; exist
 export function publishCameraState(input: { sourceType: CameraSourceType; previousMonitoringEnabled?: boolean; replacement: boolean }) {
   return { status: "active" as const, monitoringEnabled: input.replacement ? Boolean(input.previousMonitoringEnabled) : false, isSimulation: input.sourceType === "looped_video" };
 }
+
+export function cameraIdentityChangeAllowed(input: { authority?: "root" | "regular" | null; kind: string; previousName?: string | null; previousDescription?: string | null; nextName?: string | null; nextDescription?: string | null }) {
+  if (input.kind !== "reconfigure" || input.authority === "root") return true;
+  return String(input.previousName ?? "") === String(input.nextName ?? "")
+    && String(input.previousDescription ?? "") === String(input.nextDescription ?? "");
+}

@@ -262,7 +262,7 @@
 }
 
 .work-target-map-v2 polygon.selected {
-  fill: rgba(142, 203, 34, .2);
+  fill: rgba(142, 203, 34, .4);
   stroke: #5c8b16;
   stroke-width: .6;
 }

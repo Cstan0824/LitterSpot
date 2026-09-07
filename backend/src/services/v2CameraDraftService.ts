@@ -4,7 +4,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
-import { publishCameraState, validateCameraSource, type CameraSourceType } from "./v2CameraPolicy.js";
+import { cameraIdentityChangeAllowed, publishCameraState, validateCameraSource, type CameraSourceType } from "./v2CameraPolicy.js";
 import { cameraRegistrationDraftSchema } from "../schemas/cameraRegistration.js";
 import { containingPolygon, polygonArea, validateMapGeometry, type Polygon } from "./v2MapGeometry.js";
 import { v2AuditEventData, type AuditActor } from "./v2AuditService.js";
@@ -24,6 +24,7 @@ export async function startV2CameraDraft(input: { siteId: string; kind: "create"
   if ((input.kind === "create" || input.kind === "physical_move") && site.data()?.mapDraftExists) throw new HttpError(409, "Finish or discard the current Site Map draft before changing Camera placement.", { code: "site_map_draft_exists" });
   const cameraId = input.cameraId ?? firestore.collection("cameras").doc().id; const existing = input.kind !== "create" ? await firestore.collection("cameras").doc(cameraId).get() : null; if (input.kind !== "create" && (!existing?.exists || existing.data()?.siteId !== input.siteId)) throw new HttpError(404, "Camera not found."); if ((input.kind === "create" || input.kind === "physical_move") && !input.placement) throw new HttpError(400, "Camera Placement is required.");
   if (input.kind !== "create" && input.provisionalZone) throw new HttpError(400, "A provisional Zone is only supported while creating a Camera.");
+  if (input.kind === "reconfigure" && input.placement) throw new HttpError(400, "Camera Placement cannot change during Camera View reconfiguration.", { code: "camera_placement_root_move_only" });
   if (input.kind === "physical_move" && (!input.moveReason || input.moveReason.trim().length < 3)) throw new HttpError(400, "A reason is required for a Physical Camera Move.");
   const activeRevision = firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId));
   const activeSourceRef = existing?.exists && existing.data()?.activeSourceRevisionId ? firestore.collection("cameraSourceRevisions").doc(String(existing.data()?.activeSourceRevisionId)) : null;
@@ -149,6 +150,7 @@ export async function publishV2CameraDraft(draftId: string, actor: AuditActor, r
     const existing = await transaction.get(existingCameraRef);
     if (data.kind === "create" && existing.exists) throw new HttpError(409, "Camera already exists.");
     if (data.kind !== "create" && (!existing.exists || existing.data()?.siteId !== data.siteId || existing.data()?.revision !== data.baseCameraRevision)) throw new HttpError(409, "Camera changed after the draft was created.");
+    if (!cameraIdentityChangeAllowed({ authority: actor.authority, kind: String(data.kind), previousName: existing.data()?.name, previousDescription: existing.data()?.description, nextName: data.name, nextDescription: data.description })) throw new HttpError(403, "Root Supervisor access is required to change Camera identity.", { code: "camera_identity_root_only" });
     if (existing.exists && existing.data()?.monitoringEnabled && existing.data()?.sourceType !== data.source.type) throw new HttpError(409, "Disable the Camera before changing its source type.");
     if ((data.kind === "create" || data.kind === "physical_move") && site.data()?.activeMapRevisionId !== data.baseMapRevisionId) throw new HttpError(409, "Site Map changed after the Camera Draft was created.");
     if (data.kind === "physical_move" && actor.authority !== "root") throw new HttpError(403, "Root Supervisor access is required.");

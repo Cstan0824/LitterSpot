@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { publishCameraState, validateCameraSource } from "./v2CameraPolicy.js";
+import { cameraIdentityChangeAllowed, publishCameraState, validateCameraSource } from "./v2CameraPolicy.js";
 
 describe("V2 Camera source policy", () => {
   it("allows either source regardless of creation order", () => {
@@ -10,5 +10,10 @@ describe("V2 Camera source policy", () => {
   it("defaults simulation monitoring off and preserves it on replacement", () => {
     expect(publishCameraState({ sourceType: "looped_video", replacement: false })).toMatchObject({ status: "active", monitoringEnabled: false, isSimulation: true });
     expect(publishCameraState({ sourceType: "looped_video", previousMonitoringEnabled: true, replacement: true })).toMatchObject({ monitoringEnabled: true });
+  });
+  it("keeps Camera identity changes Root-only during view reconfiguration", () => {
+    expect(cameraIdentityChangeAllowed({ authority: "regular", kind: "reconfigure", previousName: "Camera 1", previousDescription: "Entrance", nextName: "Renamed", nextDescription: "Entrance" })).toBe(false);
+    expect(cameraIdentityChangeAllowed({ authority: "regular", kind: "reconfigure", previousName: "Camera 1", previousDescription: "Entrance", nextName: "Camera 1", nextDescription: "Entrance" })).toBe(true);
+    expect(cameraIdentityChangeAllowed({ authority: "root", kind: "reconfigure", previousName: "Camera 1", previousDescription: "Entrance", nextName: "Renamed", nextDescription: "Updated" })).toBe(true);
   });
 });

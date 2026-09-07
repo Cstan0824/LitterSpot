@@ -5,7 +5,7 @@ import { createV2RegularSupervisor, listV2Supervisors, updateV2Supervisor } from
 export const v2SupervisorAccountRoutes = Router();
 
 v2SupervisorAccountRoutes.get("/", async (req, res) => {
-  return res.json({ supervisors: await listV2Supervisors(String(req.authUser.siteId)) });
+  return res.json({ supervisors: await listV2Supervisors(String(req.authUser.siteId), req.authUser.authority === "root" ? "root" : "regular") });
 });
 
 v2SupervisorAccountRoutes.post("/", async (req, res) => {

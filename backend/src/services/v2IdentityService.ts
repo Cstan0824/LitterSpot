@@ -4,6 +4,7 @@ import { HttpError } from "../shared/httpError.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { canonicalHash, requestBodyHash } from "./v2Persistence.js";
 import { v2AuditEventData, writeV2AuditEvent, type AuditActor } from "./v2AuditService.js";
+import { projectV2SupervisorList, type V2SupervisorListSource } from "./v2SupervisorProjection.js";
 
 export type IdentityOperationType = "create_site_root" | "create_supervisor" | "create_cleaner" | "recover_root";
 
@@ -75,9 +76,26 @@ export async function compensateIdentityOperation(input: {
   });
 }
 
-export async function listV2Supervisors(siteId: string) {
+export async function listV2Supervisors(siteId: string, viewerAuthority: "root" | "regular") {
   const snapshot = await firestore.collection("supervisors").where("siteId", "==", siteId).limit(200).get();
-  return snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+  const profiles = snapshot.docs
+    .map((document) => { const data = document.data(); return { uid: document.id, fullName: data.fullName, phone: data.phone, authority: data.authority, status: data.status, revision: data.revision }; })
+    .filter((profile) => profile.authority === "root" || profile.authority === "regular")
+    .filter((profile) => profile.status === "active" || profile.status === "inactive")
+    .sort((left, right) => Number(left.authority === "regular") - Number(right.authority === "regular") || String(left.fullName).localeCompare(String(right.fullName)));
+  const accounts = viewerAuthority === "root"
+    ? await Promise.all(profiles.map((profile) => firestore.collection("userAccounts").doc(profile.uid).get()))
+    : [];
+  const sources: V2SupervisorListSource[] = profiles.map((profile, index) => ({
+    uid: profile.uid,
+    fullName: String(profile.fullName ?? "Supervisor"),
+    email: viewerAuthority === "root" ? String(accounts[index]?.data()?.emailNormalized ?? "") : "",
+    phone: typeof profile.phone === "string" ? profile.phone : null,
+    authority: profile.authority as "root" | "regular",
+    status: profile.status as "active" | "inactive",
+    revision: Number(profile.revision ?? 0),
+  }));
+  return projectV2SupervisorList(sources, viewerAuthority);
 }
 
 export async function createV2RegularSupervisor(input: {

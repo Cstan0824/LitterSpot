@@ -59,6 +59,21 @@ run("V2 composite Camera workflow", () => {
     expect(audits.docs.find((event) => event.data().resourceId === laptopCameraId)?.data()).toMatchObject({ actorUid: regularUid, actorRole: "supervisor", actorAuthority: "regular", actorNameSnapshot: "Camera Regular" });
   });
 
+  it("blocks a Regular Supervisor from changing Camera identity through reconfiguration", async () => {
+    const placementAttempt = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera", placement: { point: { xMeters: 20, yMeters: 20 } } });
+    expect(placementAttempt.status).toBe(400);
+    expect(placementAttempt.body.details.code).toBe("camera_placement_root_move_only");
+    const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Renamed by Regular", description: "Changed identity", sourceType: "laptop_camera" });
+    expect(started.status).toBe(201);
+    const draftId = started.body.draft.id;
+    await firestore.collection("cameraDrafts").doc(draftId).update({ validationStatus: "valid" });
+    const published = await request(app).post(`/api/camera-creation/drafts/${draftId}/publish`).set("Authorization", `Bearer ${regularToken}`).send({});
+    expect(published.status).toBe(403);
+    expect(published.body.details.code).toBe("camera_identity_root_only");
+    expect((await firestore.collection("cameras").doc(laptopCameraId).get()).data()).toMatchObject({ name: "Laptop Camera" });
+    expect((await request(app).delete(`/api/camera-creation/drafts/${draftId}`).set("Authorization", `Bearer ${regularToken}`)).status).toBe(204);
+  });
+
   it("keeps a new Zone provisional until the Camera publishes", async () => {
     const provisionalZoneId = `provisional-zone-${suffix}`;
     const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({

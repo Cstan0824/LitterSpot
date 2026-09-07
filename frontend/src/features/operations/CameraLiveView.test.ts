@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cameraMonitoringStatus } from "./CameraLiveView";
+import { CAMERA_VIEW_ASPECT_RATIO, cameraMonitoringStatus } from "./CameraLiveView";
 
 describe("cameraMonitoringStatus", () => {
+  it("keeps every Camera stage at 16:9 regardless of source dimensions", () => {
+    expect(CAMERA_VIEW_ASPECT_RATIO).toBe("16 / 9");
+  });
   it("describes a deliberately disabled Camera", () => {
     expect(cameraMonitoringStatus({ available: true, enabled: false, busy: false, stale: true, now: 1_000 })).toEqual({ tone: "disabled", title: "Monitoring stopped", detail: "Enable this Camera to resume detection." });
   });

@@ -74,6 +74,30 @@ run("V2 identity and Site workflow", () => {
     expect(updated.status).toBe(200);
   });
 
+  it("projects Supervisor visibility according to the viewer authority", async () => {
+    const disabledUid = `disabled-regular-${suffix}`;
+    await Promise.all([
+      firestore.collection("supervisors").doc(disabledUid).set({ schemaVersion: 2, uid: disabledUid, siteId, authority: "regular", fullName: "Disabled Regular", phone: "+60333333333", status: "inactive", revision: 1 }),
+      firestore.collection("userAccounts").doc(disabledUid).set({ schemaVersion: 2, uid: disabledUid, role: "supervisor", siteId, profileId: disabledUid, authority: "regular", emailNormalized: `disabled-${suffix}@example.test`, displayName: "Disabled Regular", status: "inactive", revision: 1 }),
+    ]);
+
+    const rootView = await request(app).get("/api/supervisors").set("Authorization", `Bearer ${rootToken}`);
+    expect(rootView.status).toBe(200);
+    expect(rootView.body.supervisors.find((supervisor: { uid: string }) => supervisor.uid === regularUid)).toMatchObject({
+      uid: regularUid, fullName: "Updated Regular", email: regularEmail, phone: null, authority: "regular", status: "active",
+    });
+    expect(rootView.body.supervisors.find((supervisor: { uid: string }) => supervisor.uid === disabledUid)).toMatchObject({
+      uid: disabledUid, email: `disabled-${suffix}@example.test`, status: "inactive",
+    });
+
+    const regularView = await request(app).get("/api/supervisors").set("Authorization", `Bearer ${regularToken}`);
+    expect(regularView.status).toBe(200);
+    expect(regularView.body.supervisors).toContainEqual({ uid: rootUid, fullName: "Root Supervisor", authority: "root" });
+    expect(regularView.body.supervisors).toContainEqual({ uid: regularUid, fullName: "Updated Regular", authority: "regular" });
+    expect(regularView.body.supervisors.some((supervisor: { uid: string }) => supervisor.uid === disabledUid)).toBe(false);
+    expect(regularView.body.supervisors.every((supervisor: Record<string, unknown>) => Object.keys(supervisor).sort().join(",") === "authority,fullName,uid")).toBe(true);
+  });
+
   it("blocks Site users immediately after Superadmin deactivation", async () => {
     const response = await request(app).patch(`/api/superadmin/sites/${siteId}/status`).set("Authorization", `Bearer ${superadminToken}`).send({ status: "inactive", reason: "integration test" });
     expect(response.status).toBe(200);

@@ -18,10 +18,8 @@
 .site-map-grid { pointer-events: none; }
 .site-map-grid + * { vector-effect: non-scaling-stroke; }
 .site-map-viewer pattern path { fill: none; stroke: rgba(21,52,70,.28); stroke-width: .18; vector-effect: non-scaling-stroke; }
-.site-map-zone { fill: rgba(26,150,188,.18); stroke: #087fa3; stroke-width: 1.4; vector-effect: non-scaling-stroke; cursor: pointer; transition: fill .16s ease-out; }
-.site-map-zone:nth-of-type(3n+2) { fill: rgba(232,174,45,.17); stroke: #b6800e; }
-.site-map-zone:nth-of-type(3n) { fill: rgba(92,157,138,.18); stroke: #3c7f6c; }
-.site-map-zone.selected { fill: rgba(23,105,232,.25); stroke: #1558c0; stroke-width: 3.2; }
+.site-map-zone { --zone-fill: rgba(26,150,188,.18); --zone-stroke: #087fa3; --zone-selected-stroke: #1558c0; fill: var(--zone-fill); stroke: var(--zone-stroke); stroke-width: 1.4; vector-effect: non-scaling-stroke; cursor: pointer; transition: fill .16s ease-out, stroke .16s ease-out; }
+.site-map-zone.selected { fill: var(--zone-fill); stroke: var(--zone-selected-stroke); stroke-width: 3.2; }
 .site-map-zone.conflict { fill: rgba(238,94,88,.3); stroke: #d43831; stroke-width: 2.8; }
 .site-map-zone.draft { stroke-dasharray: 7 5; }
 .site-map-zone[role="button"]:focus { outline: none; }

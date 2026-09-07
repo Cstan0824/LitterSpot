@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraPlacementsForRegistration, zoneAtPoint } from "./V2CameraCreationPage";
+import { cameraPlacementsForRegistration, cameraWorkflowSteps, laptopCameraControlLabel, laptopCaptureEnabled, zoneAtPoint } from "./V2CameraCreationPage";
 
 const size = { widthMeters: 100, heightMeters: 100 };
 const zones = [
@@ -21,5 +21,19 @@ describe("camera existing-zone map selection", () => {
     const placements = [{ cameraId: "camera-1" }, { cameraId: "camera-2" }];
     expect(cameraPlacementsForRegistration(placements)).toEqual(placements);
     expect(cameraPlacementsForRegistration(placements, "camera-1")).toEqual([{ cameraId: "camera-2" }]);
+  });
+
+  it("removes Camera placement from view reconfiguration", () => {
+    expect(cameraWorkflowSteps("create").map((step) => step.id)).toEqual(["location", "source", "plot", "review"]);
+    expect(cameraWorkflowSteps("reconfigure").map((step) => step.id)).toEqual(["source", "plot", "review"]);
+    expect(cameraWorkflowSteps("physical_move").map((step) => step.id)).toEqual(["source", "plot", "review"]);
+  });
+
+  it("exposes accurate laptop Camera controls", () => {
+    expect(laptopCameraControlLabel("closed")).toBe("Open laptop Camera");
+    expect(laptopCameraControlLabel("opening")).toBe("Opening Camera…");
+    expect(laptopCameraControlLabel("open")).toBe("Close laptop Camera");
+    expect(laptopCaptureEnabled({ state: "open", frameReady: true, busy: false })).toBe(true);
+    expect(laptopCaptureEnabled({ state: "open", frameReady: false, busy: false })).toBe(false);
   });
 });
