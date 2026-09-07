@@ -14,4 +14,8 @@ describe("Camera detail return navigation", () => {
     expect(cameraDetailBackTarget(new URLSearchParams("cameraId=cam-1&from=work"))).toEqual({ hash: "/history", label: "Back to Work" });
     expect(cameraDetailBackTarget(new URLSearchParams("cameraId=cam-1&from=team"))).toEqual({ hash: "/admin", label: "Back to Team" });
   });
+
+  it("returns Dashboard Camera links to the Dashboard", () => {
+    expect(cameraDetailBackTarget(new URLSearchParams("cameraId=cam-1&from=dashboard"))).toEqual({ hash: "/", label: "Back to Dashboard" });
+  });
 });

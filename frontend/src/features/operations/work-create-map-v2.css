@@ -225,6 +225,11 @@
   outline-offset: 2px;
 }
 
+.work-target-map-v2.shared { min-height: 0; overflow: visible; border: 0; background: transparent; cursor: default; touch-action: auto; }
+.work-target-map-v2.shared > .site-map-viewer .site-map-viewer-window { height: 330px; }
+.work-target-map-shared-hint { max-width: none; margin: 0; padding: 9px 11px; border: 1px solid #bfcbd3; border-top: 0; background: #f4f8fa; color: #4f6979; font-size: 11px; line-height: 1.35; }
+.work-target-map-v2.shared.read-only > .site-map-viewer .site-map-viewer-window { height: 250px; }
+
 .work-target-map-background {
   position: absolute;
   inset: 0;

@@ -2,7 +2,7 @@
 
 /* The V2 registration flow extends Melissa's Add Camera modal across four pages. */
 .camera-registration-scrim { align-items: start; }
-.camera-registration-wizard { display: flex; width: min(1160px, 100%); max-height: calc(100vh - 44px); overflow: hidden; flex-direction: column; color: #15223a; font-family: "Field Text", sans-serif; }
+.camera-registration-wizard { display: flex; width: min(1160px, 100%); height: min(900px, calc(100vh - 44px)); max-height: calc(100vh - 44px); overflow: hidden; flex-direction: column; color: #15223a; font-family: "Field Text", sans-serif; }
 .camera-registration-wizard > header,
 .camera-registration-progress,
 .camera-registration-footer,
@@ -46,13 +46,17 @@
 .registration-inline-actions button,
 .registration-capture,
 .registration-tool-actions button,
+.registration-remove-floor,
 .registration-remove-bin { min-height: 40px; padding: 0 13px; border: 1px solid #aebdca; border-radius: 2px; background: #fff; color: #183b55; font: 700 11px "Field Text", sans-serif; cursor: pointer; }
-.registration-upload { display: grid; min-height: 108px; place-content: center; gap: 6px; margin-bottom: 12px; border: 1px dashed #1684a8; background: #eff9fb; color: #173650; text-align: center; cursor: pointer; }
+.registration-video-input { display: none; }
+.registration-upload { display: grid; width: 100%; min-height: 408px; place-content: center; gap: 6px; margin-bottom: 12px; border: 1px dashed #1684a8; background: #eff9fb; color: #173650; text-align: center; cursor: pointer; }
 .registration-upload strong { font: 700 18px "Field Display", sans-serif; }
 .registration-upload small { color: #607586; font-size: 10px; }
-.registration-upload input { display: none; }
 .registration-capture { width: 100%; margin-top: 10px; }
 .registration-side-panel { display: grid; align-content: start; gap: 12px; padding: 22px; background: #f4f7f8; }
+.registration-preview-header { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 12px; }
+.registration-preview-header > span { color: #637889; font: 700 10px/1 "Field Mono", monospace; letter-spacing: .09em; }
+.registration-preview-header > button { min-height: 32px; padding: 0 10px; border: 1px solid #9fb0bc; background: #fff; color: #173650; font: 700 10px "Field Text", sans-serif; cursor: pointer; }
 .registration-side-panel > img { display: block; width: 100%; max-height: 290px; border: 1px solid #9fb0bc; object-fit: contain; background: #0d2739; }
 .registration-side-panel > strong { color: #173650; font: 700 22px/1 "Field Display", sans-serif; }
 .registration-side-panel > small { color: #637889; font: 500 10px "Field Mono", monospace; }
@@ -75,7 +79,15 @@
 .registration-summary dd { margin: 0; color: #173650; font-size: 11px; font-weight: 800; text-align: right; }
 .registration-tool-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .registration-tool-actions .primary { grid-column: 1 / -1; }
+.registration-remove-floor,
 .registration-remove-bin { color: #a13f37; }
+.reference-page .registration-side-panel { display: flex; flex-direction: column; }
+.registration-preview-capture { width: 100%; margin: auto 0 0; }
+.v2-camera-plot polygon.floor { fill: rgba(33,188,214,.11); }
+.v2-camera-plot polygon.floor,
+.v2-camera-plot polygon.bin { stroke-width: 1; }
+.v2-camera-plot polyline.pending.floor { fill: rgba(11,159,199,.07); stroke: #0b9fc7; stroke-width: .6; }
+.v2-camera-plot circle.pending.floor { fill: #fff; stroke: #0b9fc7; stroke-width: .75; vector-effect: non-scaling-stroke; }
 .camera-registration-note { margin: 0; padding: 10px 24px; border-top: 1px solid #b7dce5; background: #effbfd; color: #315e73; font-size: 11px; }
 .camera-registration-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 24px; border-top: 1px solid #c8d1da; background: #fff; }
 .camera-registration-footer p { max-width: 570px; margin: 0; color: #6d7d83; font-size: 11px; line-height: 1.45; }
@@ -90,7 +102,7 @@
 
 @media (max-width: 760px) {
   .camera-registration-scrim { padding: 0; }
-  .camera-registration-wizard { max-height: 100vh; border: 0; }
+  .camera-registration-wizard { height: 100vh; max-height: 100vh; border: 0; }
   .camera-registration-progress { grid-template-columns: repeat(4, minmax(116px, 1fr)); overflow-x: auto; }
   .camera-registration-page { grid-template-columns: 1fr; }
   .registration-media-workspace { border-right: 0; border-bottom: 1px solid #c8d1da; }
@@ -102,3 +114,32 @@
   .registration-location-page .camera-provisional-zone-action { grid-column: auto; grid-row: auto; }
 }
 .camera-modal-fields select{width:100%;min-height:42px;padding:10px 12px;border:1px solid #bdcbd5;background:#fff;color:#173650;font:inherit}.camera-modal-fields select:disabled{background:#eef2f4;color:#677e8d}
+
+/* Shared metre-based map adoption. */
+.registration-location-page .camera-zone-map.shared { min-height: 0; overflow: visible; border: 0; background: transparent; cursor: default; }
+.registration-location-page .camera-zone-map.shared::before { display: none; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer { min-height: 505px; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-window { height: 430px; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer svg { position: static; z-index: auto; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer span { position: static; z-index: auto; max-width: none; transform: none; padding: 0; background: transparent; color: inherit; font: inherit; letter-spacing: normal; white-space: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer i { position: static; z-index: auto; width: auto; height: auto; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; transform: none; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer polygon { fill: rgba(32,166,207,.16); stroke: #1684a8; stroke-width: 1.4; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer polygon.selected { fill: rgba(240,93,80,.22); stroke: #e25045; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker circle:first-child { fill: #fff; stroke: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker circle:nth-child(2) { fill: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker path { stroke: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-toolbar span { display: inline; margin: 0; color: #91bdca; font: 700 10px/1 "Field Mono", monospace; letter-spacing: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status span { display: flex; align-items: flex-end; gap: 8px; color: #fff; font: 700 10px/1 "Field Mono", monospace; letter-spacing: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status span:last-child { display: block; color: #a9bdca; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status i { display: block; max-width: 150px; margin: 0; border-top: 2px solid #fff; }
+.registration-location-page .camera-zone-map.shared .site-map-empty-background { position: absolute; inset-inline-start: 16px; inset-block-end: 15px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.32); background: rgba(6,23,37,.88); }
+.registration-location-page .camera-zone-map.shared .site-map-empty-background span { display: block; margin-top: 4px; color: #afc3ce; font: 9px/1.2 "Field Text", sans-serif; }
+.registration-location-page .camera-zone-map.shared > .camera-zone-map-instruction { position: static; max-width: none; margin: 0; padding: 9px 11px; border: 1px solid #bfcbd3; border-top: 0; background: #f4f8fa; color: #4f6979; font-size: 11px; }
+.registration-location-page .v2-camera-zone-planner.shared .v2-camera-zone-tools { top: 61px; right: 10px; bottom: auto; left: auto; }
+.registration-location-page .v2-camera-zone-planner.shared > p { position: static; max-width: none; margin: 0; padding: 9px 11px; border: 1px solid #bfcbd3; border-top: 0; background: #f4f8fa; color: #4f6979; font-size: 11px; line-height: 1.35; }
+.camera-map-loading { display: grid; min-height: 330px; place-items: center; border: 1px solid #bdcbd4; background: #f4f7f8; color: #607586; font-size: 12px; }
+
+@media (max-width: 760px) {
+  .registration-location-page .camera-zone-map.shared .site-map-viewer { min-height: 0; }
+  .registration-location-page .camera-zone-map.shared .site-map-viewer-window { height: 330px; }
+}

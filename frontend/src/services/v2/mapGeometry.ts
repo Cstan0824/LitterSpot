@@ -32,11 +32,22 @@ function segmentContact(a: SiteMapPoint, b: SiteMapPoint, c: SiteMapPoint, d: Si
   return (abC === 0 && onSegment(a, b, c)) || (abD === 0 && onSegment(a, b, d)) || (cdA === 0 && onSegment(c, d, a)) || (cdB === 0 && onSegment(c, d, b)) ? "touch" : "none";
 }
 
+function samePoint(left: SiteMapPoint, right: SiteMapPoint) {
+  return Math.abs(left.xMeters - right.xMeters) <= EPSILON_METERS && Math.abs(left.yMeters - right.yMeters) <= EPSILON_METERS;
+}
+
+export function siteMapPolygonArea(polygon: SiteMapPolygon) {
+  return Math.abs(polygon.reduce((sum, point, index) => {
+    const next = polygon[(index + 1) % polygon.length];
+    return sum + point.xMeters * next.yMeters - next.xMeters * point.yMeters;
+  }, 0)) / 2;
+}
+
 function onBoundary(point: SiteMapPoint, polygon: SiteMapPolygon) {
   return polygon.some((vertex, index) => orientation(vertex, polygon[(index + 1) % polygon.length], point) === 0 && onSegment(vertex, polygon[(index + 1) % polygon.length], point));
 }
 
-function inPolygon(point: SiteMapPoint, polygon: SiteMapPolygon) {
+export function pointInSiteMapPolygon(point: SiteMapPoint, polygon: SiteMapPolygon) {
   if (onBoundary(point, polygon)) return true;
   let inside = false;
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
@@ -58,10 +69,43 @@ export function zonePolygonConflict(left: SiteMapPolygon, right: SiteMapPolygon)
     }
   }
   if (sharedEdge) return "shared_edge";
-  const leftInside = left.filter((point) => !onBoundary(point, right) && inPolygon(point, right));
-  const rightInside = right.filter((point) => !onBoundary(point, left) && inPolygon(point, left));
-  if (leftInside.length || rightInside.length) return left.every((point) => inPolygon(point, right)) || right.every((point) => inPolygon(point, left)) ? "containment" : "area_overlap";
+  const leftInside = left.filter((point) => !onBoundary(point, right) && pointInSiteMapPolygon(point, right));
+  const rightInside = right.filter((point) => !onBoundary(point, left) && pointInSiteMapPolygon(point, left));
+  if (leftInside.length || rightInside.length) return left.every((point) => pointInSiteMapPolygon(point, right)) || right.every((point) => pointInSiteMapPolygon(point, left)) ? "containment" : "area_overlap";
   return boundaryTouch ? "boundary_touch" : null;
+}
+
+export function pointInSiteMapBoundary(point: SiteMapPoint, boundary: { widthMeters: number; heightMeters: number }) {
+  return Number.isFinite(point.xMeters) && Number.isFinite(point.yMeters) && point.xMeters >= 0 && point.yMeters >= 0 && point.xMeters <= boundary.widthMeters && point.yMeters <= boundary.heightMeters;
+}
+
+export function siteMapPolygonSelfIntersects(polygon: SiteMapPolygon) {
+  for (let first = 0; first < polygon.length; first += 1) {
+    for (let second = first + 1; second < polygon.length; second += 1) {
+      if (second === first || (second + 1) % polygon.length === first || (first + 1) % polygon.length === second) continue;
+      if (segmentContact(polygon[first], polygon[(first + 1) % polygon.length], polygon[second], polygon[(second + 1) % polygon.length]) !== "none") return true;
+    }
+  }
+  return false;
+}
+
+export type ZoneCandidateIssue = { code: string; message: string; zoneIds?: string[] };
+
+export function validateZoneCandidate(candidate: { id: string; name: string; polygon: SiteMapPolygon }, activeZones: Array<{ id: string; name: string; polygon: SiteMapPolygon }>, boundary: { widthMeters: number; heightMeters: number }) {
+  const issues: ZoneCandidateIssue[] = [];
+  const unique = candidate.polygon.filter((point, index, all) => all.findIndex((other) => samePoint(point, other)) === index);
+  if (unique.length < 3) issues.push({ code: "needs_three_unique_points", message: `${candidate.name} needs at least three unique boundary points.`, zoneIds: [candidate.id] });
+  if (unique.length !== candidate.polygon.length) issues.push({ code: "duplicate_vertex", message: `${candidate.name} contains a duplicate boundary point.`, zoneIds: [candidate.id] });
+  if (candidate.polygon.some((point) => !pointInSiteMapBoundary(point, boundary))) issues.push({ code: "outside_bounds", message: `${candidate.name} extends outside the Site Map boundary.`, zoneIds: [candidate.id] });
+  if (siteMapPolygonArea(candidate.polygon) <= EPSILON_METERS) issues.push({ code: "zero_area", message: `${candidate.name} has no usable area.`, zoneIds: [candidate.id] });
+  if (candidate.polygon.length >= 3 && siteMapPolygonSelfIntersects(candidate.polygon)) issues.push({ code: "self_intersects", message: `${candidate.name} crosses itself.`, zoneIds: [candidate.id] });
+  issues.push(...candidateZoneConflicts(candidate, activeZones).map((conflict) => ({ ...conflict, code: conflict.reason })));
+  return issues;
+}
+
+export function containingZoneId(point: SiteMapPoint, zones: Array<{ id: string; polygon: SiteMapPolygon }>) {
+  const matches = zones.filter((zone) => pointInSiteMapPolygon(point, zone.polygon));
+  return matches.length === 1 ? matches[0].id : null;
 }
 
 export function candidateZoneConflicts(candidate: { id: string; name: string; polygon: SiteMapPolygon }, activeZones: Array<{ id: string; name: string; polygon: SiteMapPolygon }>) {

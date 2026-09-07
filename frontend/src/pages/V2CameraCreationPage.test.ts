@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zoneAtPoint } from "./V2CameraCreationPage";
+import { cameraPlacementsForRegistration, zoneAtPoint } from "./V2CameraCreationPage";
 
 const size = { widthMeters: 100, heightMeters: 100 };
 const zones = [
@@ -15,5 +15,11 @@ describe("camera existing-zone map selection", () => {
 
   it("does not select the unzoned gap between polygons", () => {
     expect(zoneAtPoint({ x: 50, y: 50 }, zones, size)).toBeUndefined();
+  });
+
+  it("shows existing Camera placements without duplicating the Camera being reconfigured", () => {
+    const placements = [{ cameraId: "camera-1" }, { cameraId: "camera-2" }];
+    expect(cameraPlacementsForRegistration(placements)).toEqual(placements);
+    expect(cameraPlacementsForRegistration(placements, "camera-1")).toEqual([{ cameraId: "camera-2" }]);
   });
 });

@@ -1,6 +1,7 @@
 import { v2Request } from "./http";
 import { createIdempotencyKey } from "./idempotency";
 import type { CameraObservation } from "../../../../shared/cameraMonitoring";
+import type { SiteBackgroundTransform, SiteMapBackground } from "./siteMap";
 
 export type V2Point = { xMeters: number; yMeters: number };
 export type V2Zone = { id: string; zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] };
@@ -9,8 +10,8 @@ export type V2Camera = {
   id: string; name: string; status: "active" | "inactive"; monitoringEnabled: boolean; sourceType: "laptop_camera" | "looped_video";
   isSimulation: boolean; placement: { zoneId: string; point: V2Point } | null;
   runtime: { connectionStatus?: string; cleanlinessState?: string; lastPeopleCount?: number; lastSampleAcceptedAt?: string | null } | null;
-  source: { contentUrl: string | null } | null;
-  registration: { status?: string; binCount?: number; referenceMediaId?: string | null } | null;
+  source: { contentUrl: string | null; sourceMediaId?: string | null; type?: "laptop_camera" | "looped_video"; durationSeconds?: number; width?: number; height?: number } | null;
+  registration: { status?: string; binCount?: number; referenceMediaId?: string | null; sourceWidth?: number; sourceHeight?: number; walkableFloorPolygon?: Array<{ x: number; y: number }>; bins?: V2RegisteredBin[] } | null;
   revision: number;
 };
 export type V2Cleaner = {
@@ -51,7 +52,7 @@ export type V2CameraDetail = {
 
 export type V2OperationsReadModel = {
   dashboard: V2Dashboard;
-  siteMap: { siteId: string; siteName: string; activeRevisionId: string; revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number; backgroundMediaId?: string | null; backgroundTransform?: Record<string, number> | null }; zones: V2Zone[]; cameraPlacements: Array<{ id: string; cameraId: string; zoneId: string; point: V2Point }>; cleanerStations: Array<{ id: string; cleanerId: string; zoneId: string | null; point: V2Point }> };
+  siteMap: { siteId: string; siteName: string; activeRevisionId: string; background?: SiteMapBackground | null; revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number; backgroundMediaId?: string | null; backgroundTransform?: SiteBackgroundTransform | null }; zones: V2Zone[]; cameraPlacements: Array<{ id: string; cameraId: string; cameraNameSnapshot?: string; zoneId: string; point: V2Point }>; cleanerStations: Array<{ id: string; cleanerId: string; cleanerNameSnapshot?: string; zoneId: string | null; point: V2Point }> };
   alerts: V2Alert[];
   cleaners: V2Cleaner[];
   workOrders: V2WorkOrder[];
@@ -124,7 +125,7 @@ export const updateV2CleanerStation = (cleanerId: string, point: V2Point) => v2R
 export type V2CameraDraft = {
   id: string;
   cameraId: string;
-  kind: "create" | "reconfigure";
+  kind: "create" | "reconfigure" | "physical_move";
   name: string;
   description: string | null;
   baseMapRevisionId: string;

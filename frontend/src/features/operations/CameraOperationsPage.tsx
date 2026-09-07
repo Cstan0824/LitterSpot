@@ -9,7 +9,11 @@ import { V2CameraMonitor } from "./V2CameraMonitor";
 import { CameraLiveView } from "./CameraLiveView";
 import { useSiteMonitoring } from "./SiteMonitoringProvider";
 import { RetainedCameraEvidence } from "../../components/RetainedCameraEvidence";
+import { SiteMapViewer } from "../../components/SiteMapViewer";
 import { V2CameraCreationPage } from "../../pages/V2CameraCreationPage";
+import { changeSiteMapCameraPlacement, getActiveSiteMap, type ActiveSiteMap } from "../../services/v2/siteMap";
+import { containingZoneId } from "../../services/v2/mapGeometry";
+import type { V2CameraDraft } from "../../services/v2/operations";
 import "./camera-list-header.css";
 import "./camera-detail-monitoring.css";
 
@@ -60,6 +64,32 @@ class ZonePlannerBoundary extends Component<{ children: ReactNode }, { failed: b
   }
 }
 
+function CameraMoveModal({ camera, cameraName, monitoringEnabled, onClose, onPublished, onPhysicalMove }: { camera: V2CameraDetail["camera"]; cameraName: string; monitoringEnabled: boolean; onClose: () => void; onPublished: () => Promise<void>; onPhysicalMove: (draft: V2CameraDraft) => void }) {
+  const [siteMap, setSiteMap] = useState<ActiveSiteMap>();
+  const [point, setPoint] = useState(camera.placement?.point ?? null);
+  const [mode, setMode] = useState<"map_position_correction" | "physical_camera_move">("map_position_correction");
+  const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { const controller = new AbortController(); void getActiveSiteMap(controller.signal).then(setSiteMap).catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "The active Site Map could not be loaded."); }); return () => controller.abort(); }, []);
+  const zoneId = point && siteMap ? containingZoneId(point, siteMap.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))) : null;
+  const zone = siteMap?.zones.find((item) => item.zoneId === zoneId);
+  const unchanged = Boolean(point && camera.placement && point.xMeters === camera.placement.point.xMeters && point.yMeters === camera.placement.point.yMeters);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!point || !zoneId || unchanged || reason.trim().length < 3 || !confirmed) return;
+    setBusy(true); setError("");
+    try {
+      const result = await changeSiteMapCameraPlacement({ cameraId: camera.id, point, mode, reason: reason.trim(), expectedCameraRevision: camera.revision, expectedMapRevisionId: camera.activeMapRevisionId });
+      if (result.status === "registration_required" && result.draft) { onPhysicalMove(result.draft); return; }
+      await onPublished(); onClose();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The Camera position could not be changed."); }
+    finally { setBusy(false); }
+  };
+  return <div className="camera-modal-scrim camera-move-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><form className="camera-move-modal" onSubmit={(event) => void submit(event)}><header><div><span>ROOT STRUCTURAL CONTROL</span><h2>Move {cameraName}.</h2><p>Choose whether this is a map correction or a real physical move.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close Camera move">×</button></header><main><section className="camera-move-map"><header><div><span>NEW CAMERA POINT</span><strong>{zone?.zoneNameSnapshot ?? "Place the Camera inside one Zone"}</strong></div>{point && <b>X {point.xMeters.toFixed(2)} · Y {point.yMeters.toFixed(2)} m</b>}</header>{siteMap ? <SiteMapViewer boundary={{ widthMeters: siteMap.revision.widthMeters, heightMeters: siteMap.revision.heightMeters }} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background} backgroundTransform={siteMap.revision.backgroundTransform} zones={siteMap.zones.map((item) => ({ id: item.zoneId, name: item.zoneNameSnapshot, polygon: item.polygon }))} cameras={siteMap.cameraPlacements.filter((item) => item.cameraId !== camera.id)} pointMarker={point ? { point, label: cameraName, tone: "camera" } : null} onPlacePoint={setPoint} /> : <div className="camera-map-loading">Loading the active Site Map…</div>}</section><aside><fieldset><legend>Move type</legend><label><input type="radio" name="move-mode" checked={mode === "map_position_correction"} onChange={() => setMode("map_position_correction")} /><span><b>Map position correction</b><small>The physical Camera did not move. Its source and Registration remain valid.</small></span></label><label><input type="radio" name="move-mode" checked={mode === "physical_camera_move"} onChange={() => setMode("physical_camera_move")} /><span><b>Physical Camera move</b><small>The Camera moved in real life. Fresh reference, floor, and bin plotting are required.</small></span></label></fieldset>{mode === "physical_camera_move" && monitoringEnabled && <p className="camera-move-warning">Disable monitoring before starting a Physical Camera Move.</p>}<label className="camera-move-reason">Reason<textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Explain why the Camera point is changing" /></label><label className="camera-move-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I confirm this point matches the Camera's real position.</span></label>{error && <p className="camera-modal-error" role="alert">{error}</p>}<dl><div><dt>Current</dt><dd>{camera.placement ? `X ${camera.placement.point.xMeters.toFixed(2)} · Y ${camera.placement.point.yMeters.toFixed(2)} m` : "Not recorded"}</dd></div><div><dt>New Zone</dt><dd>{zone?.zoneNameSnapshot ?? "Invalid placement"}</dd></div></dl></aside></main><footer><p>{mode === "map_position_correction" ? "Publishing creates a new Site Map revision immediately." : "Continue into fresh Camera Registration before the moved point becomes active."}</p><div><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary" disabled={busy || !zoneId || unchanged || reason.trim().length < 3 || !confirmed || mode === "physical_camera_move" && monitoringEnabled}>{busy ? "Saving…" : mode === "map_position_correction" ? "Publish correction" : "Continue to Registration"}</button></div></footer></form></div>;
+}
+
 const alertLabel = (kind: string) => ({ bin_overflow: "Bin overflow", floor_litter: "Floor litter", floor_spill: "Floor spill" }[kind] ?? kind.replaceAll("_", " "));
 const when = (value?: string | null) => value ? new Date(value).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "No recent signal";
 
@@ -86,6 +116,7 @@ function cameraStateFilterFrom(query: URLSearchParams): CameraStateFilter {
 }
 
 export function cameraDetailBackTarget(query: URLSearchParams) {
+  if (query.get("from") === "dashboard") return { hash: "/", label: "Back to Dashboard" };
   if (query.get("from") === "work") return { hash: "/history", label: "Back to Work" };
   if (query.get("from") === "team") return { hash: "/admin", label: "Back to Team" };
   if (query.get("from") === "cameras") {
@@ -256,11 +287,12 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
   const [zoneId, setZoneId] = useState(initialQuery.get("zoneId") ?? "all");
   const [cameraStateFilter, setCameraStateFilter] = useState<CameraStateFilter>(cameraStateFilterFrom(initialQuery));
   const [selectedId, setSelectedId] = useState<string | undefined>(initialQuery.get("cameraId") ?? undefined);
-  const [createdId, setCreatedId] = useState<string | undefined>(initialQuery.get("created") === "1" ? initialQuery.get("cameraId") ?? undefined : undefined);
   const [gridView, setGridView] = useState<"3x2" | "2x3" | "1x6">("3x2");
   const [showAdd, setShowAdd] = useState(false);
   const { monitor, state: monitoringState } = useSiteMonitoring();
   const [showReconfigure, setShowReconfigure] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+  const [physicalMoveDraft, setPhysicalMoveDraft] = useState<V2CameraDraft>();
   const [detail, setDetail] = useState<V2CameraDetail>();
   const [detailError, setDetailError] = useState("");
   const filterRail = useRef<HTMLElement>(null);
@@ -284,7 +316,6 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
       setSelectedId(query.get("cameraId") ?? undefined);
       setZoneId(query.get("zoneId") ?? "all");
       setCameraStateFilter(cameraStateFilterFrom(query));
-      setCreatedId(query.get("created") === "1" ? query.get("cameraId") ?? undefined : undefined);
     };
     addEventListener("hashchange", syncQuery);
     return () => removeEventListener("hashchange", syncQuery);
@@ -304,11 +335,9 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
     return () => { controller.abort(); window.removeEventListener("litterspot:camera-workflow", refresh); };
   }, [selectedId]);
 
-  const openCamera = (camera: CameraRecord, created = false) => {
+  const openCamera = (camera: CameraRecord) => {
     setSelectedId(camera.id);
-    if (created) setCreatedId(camera.id);
     const query = new URLSearchParams({ cameraId: camera.id, from: "cameras", zoneId, cameraState: cameraStateFilter });
-    if (created) query.set("created", "1");
     location.hash = `/cameras?${query.toString()}`;
   };
 
@@ -320,12 +349,13 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
     location.hash = `/cameras${query.size ? `?${query.toString()}` : ""}`;
   };
 
-  if (selected) { const back = cameraDetailBackTarget(new URLSearchParams(location.hash.split("?")[1] ?? "")); const sourceLabel = selectedLive?.camera.sourceType === "laptop_camera" ? "Laptop Camera" : "Looped video"; const binCount = selectedV2Camera?.registration?.binCount ?? 0; const registrationLabel = selectedV2Camera?.registration ? `Floor registered · ${binCount} ${binCount === 1 ? "bin" : "bins"} registered` : "Registration incomplete"; return <section className={`camera-detail-page camera-reference-detail ${createdId === selected.id ? "camera-created" : ""}`}>
-    <header className="camera-reference-heading"><button type="button" onClick={() => { setSelectedId(undefined); setCreatedId(undefined); location.hash = back.hash; }}>← {back.label}</button></header>
-    {createdId === selected.id && <div className="camera-created-banner"><b>Camera added</b><span>Registration is complete. Enable the Camera when you are ready.</span><button type="button" onClick={() => setCreatedId(undefined)}>Dismiss</button></div>}
+  if (selected) { const back = cameraDetailBackTarget(new URLSearchParams(location.hash.split("?")[1] ?? "")); const sourceLabel = selectedLive?.camera.sourceType === "laptop_camera" ? "Laptop Camera" : "Looped video"; const binCount = selectedV2Camera?.registration?.binCount ?? 0; const registrationLabel = selectedV2Camera?.registration ? `Floor registered · ${binCount} ${binCount === 1 ? "bin" : "bins"} registered` : "Registration incomplete"; return <section className="camera-detail-page camera-reference-detail">
+    <header className="camera-reference-heading"><button type="button" onClick={() => { setSelectedId(undefined); location.hash = back.hash; }}>← {back.label}</button></header>
     {showReconfigure && <V2CameraCreationPage cameraId={selected.id} canCreateCamera={canManageCameraPlacement} onClose={() => setShowReconfigure(false)} onPublished={async cameraId => { setShowReconfigure(false); await monitor.refresh(); await onCameraPublished?.(cameraId); }} />}
+    {showMove && detail?.camera && <CameraMoveModal camera={detail.camera} cameraName={selected.name} monitoringEnabled={Boolean(selectedV2Camera?.monitoringEnabled)} onClose={() => setShowMove(false)} onPublished={async () => { await monitor.refresh(); await onCameraPublished?.(selected.id); }} onPhysicalMove={(draft) => { setShowMove(false); setPhysicalMoveDraft(draft); }} />}
+    {physicalMoveDraft && <V2CameraCreationPage initialDraft={physicalMoveDraft} cameraId={selected.id} canCreateCamera onClose={() => setPhysicalMoveDraft(undefined)} onPublished={async cameraId => { setPhysicalMoveDraft(undefined); await monitor.refresh(); await onCameraPublished?.(cameraId); }} />}
     <div className="camera-reference-layout"><section className="camera-reference-visual"><CameraPreview record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} monitoringCamera={selectedV2Camera} mode="detail" /><footer className="camera-reference-identity"><div><span>CAMERA</span><h1>{selected.name}</h1><p>{sourceLabel}</p></div><div><span>ZONE</span><h2>{selected.zoneName}</h2><p>{registrationLabel}</p></div></footer></section>
-      <aside className="camera-reference-sidebar"><div className="camera-reference-configuration"><section className="camera-reference-info"><header><span>CAMERA INFORMATION</span><b className={selectedLive?.camera.monitoringEnabled && selectedLive?.lastReceivedAt && Date.now() - selectedLive.lastReceivedAt < 10000 ? "online" : "offline"}><i />{!selectedLive?.camera.monitoringEnabled ? "Disabled" : selectedLive?.lastReceivedAt && Date.now() - selectedLive.lastReceivedAt < 10000 ? "Online" : "Offline"}</b></header><dl><div><dt>Camera name</dt><dd>{selected.name}</dd></div><div><dt>Zone</dt><dd>{selected.zoneName}</dd></div><div><dt>Source</dt><dd>{selectedLive?.camera.sourceType === "laptop_camera" ? "Laptop Camera" : "Video source"}</dd></div><div><dt>Frame freshness</dt><dd>{selectedLive?.observation ? when(new Date(selectedLive.observation.capturedAtMs).toISOString()) : "Waiting for frames"}</dd></div></dl></section>{selectedV2Camera && <button className="camera-reference-reconfigure" type="button" onClick={() => setShowReconfigure(true)}>Reconfigure Camera</button>}</div>
+      <aside className="camera-reference-sidebar"><div className="camera-reference-configuration"><section className="camera-reference-info"><header><span>CAMERA INFORMATION</span><b className={selectedLive?.camera.monitoringEnabled && selectedLive?.lastReceivedAt && Date.now() - selectedLive.lastReceivedAt < 10000 ? "online" : "offline"}><i />{!selectedLive?.camera.monitoringEnabled ? "Disabled" : selectedLive?.lastReceivedAt && Date.now() - selectedLive.lastReceivedAt < 10000 ? "Online" : "Offline"}</b></header><dl><div><dt>Camera name</dt><dd>{selected.name}</dd></div><div><dt>Zone</dt><dd>{selected.zoneName}</dd></div><div><dt>Source</dt><dd>{selectedLive?.camera.sourceType === "laptop_camera" ? "Laptop Camera" : "Video source"}</dd></div><div><dt>Frame freshness</dt><dd>{selectedLive?.observation ? when(new Date(selectedLive.observation.capturedAtMs).toISOString()) : "Waiting for frames"}</dd></div></dl></section>{selectedV2Camera && <button className="camera-reference-reconfigure" type="button" onClick={() => setShowReconfigure(true)}>Reconfigure Camera</button>}{canManageCameraPlacement && detail?.camera && <button className="camera-reference-move" type="button" onClick={() => setShowMove(true)}>Move Camera</button>}</div>
         <section className="camera-reference-assignment"><header><span>CURRENT ASSIGNMENT</span><h2>{currentAssignment ? currentAssignment.title : "No active Work Order"}</h2></header>{currentAssignment ? <><div className="camera-supervision-meta"><span className={`work-priority ${currentAssignment.severity}`}>{currentAssignment.severity}</span><span className={`work-record-status ${currentAssignment.status}`}>{currentAssignment.status.replaceAll("_", " ")}</span></div><p><i aria-hidden="true" /><strong>{currentAssignment.cleanerNameSnapshot}</strong><span>{currentAssignment.managementMode === "orchestrated" ? "System assignment in progress" : "Supervisor-created Work in progress"}</span></p><small className="camera-supervision-note">{currentAssignment.managementMode === "orchestrated" ? "The system selected this response. You may cancel it if a Supervisor intervention is required." : "The Cleaner updates progress. Resolve or rework becomes available after Cleaner submission."}</small>{allowWorkActions && <CameraWorkCancel workId={currentAssignment.id} disabled={false} onDismiss={onDismissCameraWork} />}<button type="button" onClick={() => { location.hash = `/history?workId=${encodeURIComponent(currentAssignment.id)}`; }}>Open Work detail <b>→</b></button></> : <p className="camera-reference-empty">No active cleaning assignment.</p>}</section>
         <section className="camera-reference-history"><header><span>RECENT HISTORY</span><button type="button" onClick={() => { location.hash = `/history?camera=${encodeURIComponent(selected.code)}`; }}>View all →</button></header><div className="camera-history-thumbnails" aria-label="Recent evidence thumbnails">{detail?.recentHistory.filter((entry) => entry.snapshot).slice(0, 5).map((entry) => <button type="button" key={entry.id} onClick={() => entry.type === "alert" && (location.hash = `/alerts?alert=${entry.id}`)}><ProtectedSnapshot snapshot={entry.snapshot} alt={`${entry.issueType} snapshot`} /><i className={entry.severity} /></button>)}</div><ol>{detail?.recentHistory.slice(0, 5).map((entry) => <li key={`${entry.type}-${entry.id}`}><time>{entry.occurredAt ? new Date(entry.occurredAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Not recorded"}</time><p><strong>{alertLabel(entry.issueType)}</strong><span>{entry.type === "work" && entry.assignedCleanerName ? `${entry.status} · ${entry.assignedCleanerName}` : entry.status}</span></p></li>)}{!detail?.recentHistory.length && <li className="empty"><p><strong>No recent history</strong><span>Camera events will appear here.</span></p></li>}</ol></section><section className="camera-reference-history camera-orchestrator-trace"><header><span>SYSTEM LOG</span><button type="button" onClick={() => { location.hash = "/status"; }}>Open System →</button></header>{detail?.orchestratorTrace.length ? <ol>{detail.orchestratorTrace.map((run) => <li key={run.id}><time>{run.completedAt ? new Date(run.completedAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Running"}</time><p><strong>{run.type === "assignment" ? "Assignment decision" : "Review decision"}</strong><span>{run.decisionSummary ?? run.resultCode ?? run.status}</span></p></li>)}</ol> : <p className="camera-reference-empty">No system decision is linked to this Camera history.</p>}{detailError && <p className="camera-reference-empty">{detailError}</p>}</section></aside>
     </div>
@@ -356,6 +386,6 @@ export function CameraOperationsPage({ readOnly = false, allowWorkActions = fals
     </div>
     <div className="camera-grid-toolbar atlas-camera-grid-toolbar"><span>Camera grid</span><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([["1x6", "Single column", 1], ["2x3", "Two columns", 2], ["3x2", "Three columns", 6]] as const).map(([value, gridLabel, cells]) => <button className={gridView === value ? "active" : ""} aria-label={gridLabel} title={gridLabel} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div>
     <section className="camera-wall-grid" aria-label="Camera views" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{filtered.map((record) => { const cameraFeed = feeds.find((feed) => feed.id === record.id || feed.id === record.code || feed.name === record.name); const video = liveVideos.find((item) => item.cameraId === record.id || item.cameraId === record.code); const related = cameraAlerts(record, alerts); const monitored = v2Cameras.find((camera) => camera.id === record.id); const open = related.filter(unresolvedAlert); const currentLive = monitoringState.cameras[record.id]; const enabled = monitoringEnabledFor(record); const busy = Boolean(currentLive?.controlBusy); const condition = open.some((alert) => alert.severity === "critical") ? { label: "Action", tone: "action" } : open.length ? { label: "Watch", tone: "watch" } : { label: "Clear", tone: "clear" }; return <article role="link" tabIndex={0} aria-label={`Open ${record.name}`} className="camera-wall-card" key={record.id} onClick={() => openCamera(record)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openCamera(record); } }}><CameraPreview record={record} feed={cameraFeed} video={video} latestAlert={related[0]} monitoringCamera={monitored} /><footer><div><strong>{record.name}</strong><span>{record.code} · {record.zoneName}</span></div><div className="camera-card-footer-actions"><b className={`camera-card-status ${condition.tone}`}><i />{condition.label}</b>{monitored && <button type="button" className={`camera-card-power ${enabled ? "enabled" : "disabled"}`} disabled={busy} aria-label={`${enabled ? "Disable" : "Enable"} ${record.name}`} onClick={(event) => { event.stopPropagation(); void monitor.toggle(record.id); }}>{busy ? "Updating…" : enabled ? "Disable" : "Enable"}</button>}</div></footer></article>; })}{!filtered.length && <div className="camera-wall-empty"><span>NO CAMERAS MATCH THIS VIEW</span><p>Change the Zone or monitoring-state filter to show another Camera.</p></div>}</section>
-    {canManageCameraPlacement && showAdd && <V2CameraCreationPage canCreateCamera onClose={() => setShowAdd(false)} onPublished={async (cameraId) => { setShowAdd(false); await onCameraPublished?.(cameraId); location.hash = `/cameras?cameraId=${encodeURIComponent(cameraId)}&created=1&from=cameras`; }} />}
+    {canManageCameraPlacement && showAdd && <V2CameraCreationPage canCreateCamera onClose={() => setShowAdd(false)} onPublished={async (cameraId) => { setShowAdd(false); await onCameraPublished?.(cameraId); location.hash = `/cameras?cameraId=${encodeURIComponent(cameraId)}&from=cameras`; }} />}
   </section>;
 }

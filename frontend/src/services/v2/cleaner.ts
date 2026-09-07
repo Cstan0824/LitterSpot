@@ -3,6 +3,7 @@ import { firebaseAuth, firebaseDb } from "../../config/firebase";
 import { createIdempotencyKey } from "./idempotency";
 import { v2Request } from "./http";
 import type { V2Cleaner, V2Point, V2WorkOrder, V2Zone } from "./operations";
+import type { SiteBackgroundTransform } from "./siteMap";
 
 export type V2CleanerNotification = {
   id: string;
@@ -19,7 +20,7 @@ export type V2CleanerMap = {
   siteId: string;
   siteName: string;
   activeRevisionId: string;
-  revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number; backgroundMediaId: string | null; backgroundTransform: Record<string, number> | null };
+  revision: { widthMeters: number; heightMeters: number; gridSizeMeters: number; backgroundMediaId: string | null; backgroundTransform: SiteBackgroundTransform | null };
   zones: V2Zone[];
   station: { point: V2Point | null; zoneId: string | null; mapRevisionId: string } | null;
 };

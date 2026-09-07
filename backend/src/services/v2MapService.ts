@@ -176,7 +176,23 @@ export async function getV2CleanerMap(siteId: string, cleanerId: string) {
   };
 }
 
-export async function getV2MapDraft(siteId: string) { return readDraft(siteId); }
+export async function getV2MapDraft(siteId: string) {
+  const value = await readDraft(siteId);
+  const mediaId = typeof value.data.backgroundMediaId === "string" ? value.data.backgroundMediaId : null;
+  const background = mediaId ? await firestore.collection("mediaAssets").doc(mediaId).get() : null;
+  return {
+    ...value,
+    background: background?.exists && background.data()?.siteId === siteId ? { mediaId: background.id, contentUrl: `/api/media/${background.id}/content`, mimeType: background.data()?.mimeType ?? null, width: background.data()?.width ?? null, height: background.data()?.height ?? null, storageStatus: background.data()?.storageStatus ?? "missing" } : null,
+  };
+}
+
+export async function listV2RetiredZones(siteId: string) {
+  await siteForPrincipal(siteId);
+  const snapshot = await firestore.collection("zones").where("siteId", "==", siteId).limit(200).get();
+  return snapshot.docs
+    .filter((document) => document.data()?.lifecycleStatus === "retired" && Array.isArray(document.data()?.lastPolygon))
+    .map((document) => ({ id: document.id, zoneId: document.id, zoneNameSnapshot: String(document.data()?.lastZoneNameSnapshot ?? document.data()?.name ?? document.id), polygon: document.data()?.lastPolygon as Polygon, centroid: document.data()?.lastCentroid ?? null, areaSquareMeters: document.data()?.lastAreaSquareMeters ?? null, retiredAt: timestamp(document.data()?.retiredAt), retiredByUid: document.data()?.retiredByUid ?? null }));
+}
 
 export async function listV2MapRevisions(siteId: string) {
   await siteForPrincipal(siteId);
@@ -216,6 +232,8 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
   const draftRef = firestore.collection("siteMapDrafts").doc(input.siteId);
   const baseRevisionRef = firestore.collection("siteMapRevisions").doc(input.baseRevisionId);
   const [oldZones, oldCameras, oldCleaners, baseCameras] = await Promise.all([draftRef.collection("zoneGeometry").get(), draftRef.collection("cameraPlacements").get(), draftRef.collection("cleanerStations").get(), baseRevisionRef.collection("cameraPlacements").get()]);
+  const oldCameraById = new Map(oldCameras.docs.map((document) => [document.id, document.data()]));
+  const oldCleanerById = new Map(oldCleaners.docs.map((document) => [document.id, document.data()]));
   const baseCameraById = new Map(baseCameras.docs.map((document) => [document.id, document.data()]));
   const changedCameraIds = new Set<string>();
   for (const placement of input.cameraPlacements ?? []) {
@@ -244,9 +262,9 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
     for (const placement of input.cameraPlacements ?? []) {
       const correction = correctionByCameraId.get(placement.id);
       const base = baseCameraById.get(placement.id);
-      transaction.set(draftRef.collection("cameraPlacements").doc(placement.id), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: placement.id, point: placement.point, zoneId: containingPolygon(placement.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), changeMode: correction?.mode ?? null, changeReason: correction?.reason ?? null, previousPoint: correction ? base?.point ?? null : null, previousZoneId: correction ? base?.zoneId ?? null : null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
+      transaction.set(draftRef.collection("cameraPlacements").doc(placement.id), { ...oldCameraById.get(placement.id), schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: placement.id, point: placement.point, zoneId: containingPolygon(placement.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), changeMode: correction?.mode ?? null, changeReason: correction?.reason ?? null, previousPoint: correction ? base?.point ?? null : null, previousZoneId: correction ? base?.zoneId ?? null : null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
     }
-    for (const station of input.cleanerStations ?? []) transaction.set(draftRef.collection("cleanerStations").doc(station.id), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cleanerId: station.id, point: station.point, zoneId: containingPolygon(station.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
+    for (const station of input.cleanerStations ?? []) transaction.set(draftRef.collection("cleanerStations").doc(station.id), { ...oldCleanerById.get(station.id), schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cleanerId: station.id, point: station.point, zoneId: containingPolygon(station.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
     const auditRef = firestore.collection("auditEvents").doc();
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor: input.actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name ?? input.siteId), action: "site_map_draft_saved", resourceType: "SiteMapDraft", resourceId: input.siteId, outcome: "succeeded", before: { draftRevision: current.data()?.revision, widthMeters: current.data()?.widthMeters, heightMeters: current.data()?.heightMeters }, after: { draftRevision: nextRevision, widthMeters: input.widthMeters, heightMeters: input.heightMeters, zoneCount: input.zones.length, cameraPlacementCount: suppliedCameras.size, cleanerStationCount: suppliedCleaners.size, backgroundMediaId: input.backgroundMediaId ?? null }, requestId: input.requestId }));
   });
@@ -290,7 +308,8 @@ export async function publishV2MapDraft(siteId: string, actor: AuditActor, reque
   const auditRef = firestore.collection("auditEvents").doc();
   const placementCorrections = cameraPlacements.docs.filter((document) => document.data()?.changeMode === "map_position_correction");
   const placementAuditRefs = placementCorrections.map(() => firestore.collection("auditEvents").doc());
-  const priorZones = await firestore.collection("zones").where("siteId", "==", siteId).get();
+  const [priorZones, baseZoneGeometry] = await Promise.all([firestore.collection("zones").where("siteId", "==", siteId).get(), firestore.collection("siteMapRevisions").doc(String(data.baseRevisionId)).collection("zoneGeometry").get()]);
+  const baseZoneById = new Map(baseZoneGeometry.docs.map((document) => [document.id, document.data()]));
   await firestore.runTransaction(async (transaction) => {
     const [site, latestDraft, currentCameras] = await Promise.all([transaction.get(siteRef), transaction.get(draft.ref), transaction.get(firestore.collection("cameras").where("siteId", "==", siteId))]);
     if (!site.exists || site.data()?.activeMapRevisionId !== data.baseRevisionId) throw new HttpError(409, "Map draft is based on a stale revision.");
@@ -303,7 +322,10 @@ export async function publishV2MapDraft(siteId: string, actor: AuditActor, reque
     for (const collection of [zones, cameraPlacements, cleanerStations]) for (const doc of collection.docs) transaction.create(revisionRef.collection(doc.ref.parent.id).doc(doc.id), { ...doc.data(), publishedAt: FieldValue.serverTimestamp(), publishedByUid: actorUid });
     const activeZoneIds = new Set(zones.docs.map((document) => document.id));
     for (const zone of zones.docs) transaction.set(firestore.collection("zones").doc(zone.id), { schemaVersion: V2_SCHEMA_VERSION, zoneId: zone.id, siteId, name: zone.data().zoneNameSnapshot, nameNormalized: String(zone.data().zoneNameSnapshot).toLowerCase(), description: null, lifecycleStatus: "active", createdAt: FieldValue.serverTimestamp(), createdByUid: actorUid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid, retiredAt: null, retiredByUid: null, revision: FieldValue.increment(1) }, { merge: true });
-    for (const zone of priorZones.docs) if (!activeZoneIds.has(zone.id)) transaction.update(zone.ref, { lifecycleStatus: "retired", retiredAt: FieldValue.serverTimestamp(), retiredByUid: actorUid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid, revision: FieldValue.increment(1) });
+    for (const zone of priorZones.docs) if (!activeZoneIds.has(zone.id)) {
+      const geometry = baseZoneById.get(zone.id);
+      transaction.update(zone.ref, { lifecycleStatus: "retired", lastZoneNameSnapshot: geometry?.zoneNameSnapshot ?? zone.data()?.name ?? zone.id, lastPolygon: geometry?.polygon ?? zone.data()?.lastPolygon ?? null, lastCentroid: geometry?.centroid ?? zone.data()?.lastCentroid ?? null, lastAreaSquareMeters: geometry?.areaSquareMeters ?? zone.data()?.lastAreaSquareMeters ?? null, retiredAt: FieldValue.serverTimestamp(), retiredByUid: actorUid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid, revision: FieldValue.increment(1) });
+    }
     transaction.update(siteRef, { activeMapRevisionId: revisionRef.id, mapDraftExists: false, mapRevisionNumber: currentRevision, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid, revision: FieldValue.increment(1) });
     transaction.delete(draft.ref);
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, siteNameSnapshot: String(site.data()?.name), action: "site_map_published", resourceType: "SiteMapRevision", resourceId: revisionRef.id, outcome: "succeeded", before: { activeMapRevisionId: site.data()?.activeMapRevisionId }, after: { activeMapRevisionId: revisionRef.id, revisionNumber: currentRevision }, requestId }));

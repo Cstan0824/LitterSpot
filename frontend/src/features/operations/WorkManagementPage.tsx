@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { SiteMapViewer } from "../../components/SiteMapViewer";
 import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Zone } from "../../services/locationAPI";
 import type { Alert } from "./types";
 import type { V2OperationsReadModel, V2Point, V2WorkOrder } from "../../services/v2/operations";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
-import { clampWorkPoint, workPointFromFraction, workZoneAtPoint, workZoneCentroid } from "./workTargetMap";
+import { workZoneAtPoint, workZoneCentroid } from "./workTargetMap";
 import "./work-create-map-v2.css";
 
 type Point = { x: number; y: number };
@@ -54,36 +55,13 @@ function relativeActivity(value: string) {
   if (elapsed < 86_400_000) return `Updated ${Math.floor(elapsed / 3_600_000)} hr ago`;
   return `Updated ${clock(value)}`;
 }
-function workMapBackgroundStyle(siteMap: WorkSiteMap, backgroundUrl?: string): CSSProperties | undefined {
-  if (!backgroundUrl) return undefined;
-  const transform = siteMap.revision.backgroundTransform ?? {};
-  const x = Number(transform.xMeters ?? 0); const y = Number(transform.yMeters ?? 0);
-  const width = Number(transform.widthMeters ?? siteMap.revision.widthMeters); const height = Number(transform.heightMeters ?? siteMap.revision.heightMeters);
-  return { left: `${x / siteMap.revision.widthMeters * 100}%`, top: `${y / siteMap.revision.heightMeters * 100}%`, width: `${width / siteMap.revision.widthMeters * 100}%`, height: `${height / siteMap.revision.heightMeters * 100}%`, opacity: Number(transform.opacity ?? 1), backgroundImage: `url(${JSON.stringify(backgroundUrl)})` };
-}
-
-function WorkTargetMap({ siteMap, point, cameras, selectedCameraId, mode, backgroundUrl, onPoint, onCamera, readOnly = false }: { siteMap: WorkSiteMap; point: V2Point | null; cameras: WorkCameraOption[]; selectedCameraId: string; mode: "coordinate" | "camera"; backgroundUrl?: string; onPoint: (point: V2Point) => void; onCamera: (cameraId: string) => void; readOnly?: boolean }) {
-  const size = siteMap.revision;
-  const percentage = (value: V2Point) => ({ left: `${value.xMeters / size.widthMeters * 100}%`, top: `${value.yMeters / size.heightMeters * 100}%` });
-  const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
-    if (readOnly || mode !== "coordinate") return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    onPoint(workPointFromFraction((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height, size));
-  };
-  const moveWithKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (readOnly || mode !== "coordinate" || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-    event.preventDefault();
-    const current = point ?? { xMeters: size.widthMeters / 2, yMeters: size.heightMeters / 2 };
-    const step = Math.max(.25, Number(size.gridSizeMeters || 1));
-    onPoint(clampWorkPoint({ xMeters: current.xMeters + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0), yMeters: current.yMeters + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0) }, size));
-  };
-  return <div className={`work-target-map-v2 ${mode} ${readOnly ? "read-only" : ""}`} onPointerDown={(event) => { if (readOnly || mode !== "coordinate") return; event.currentTarget.setPointerCapture(event.pointerId); updateFromPointer(event); }} onPointerMove={(event) => { if (!readOnly && mode === "coordinate" && event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event); }} onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onKeyDown={moveWithKeyboard} role={readOnly ? "img" : mode === "coordinate" ? "application" : "group"} tabIndex={!readOnly && mode === "coordinate" ? 0 : undefined} aria-label={readOnly ? `Selected Manual Work point in ${point ? workZoneAtPoint(point, siteMap.zones)?.zoneNameSnapshot ?? "Unzoned area" : "the Site Map"}` : mode === "coordinate" ? "Active Site Map. Click or use arrow keys to place the Manual Work point." : "Active Site Map. Select a registered Camera as the Manual Work point."}>
-    <div className={`work-target-map-background ${backgroundUrl ? "has-image" : ""}`} style={workMapBackgroundStyle(siteMap, backgroundUrl)} />
-    <svg viewBox={`0 0 ${size.widthMeters} ${size.heightMeters}`} preserveAspectRatio="none" aria-hidden="true">{siteMap.zones.map((zone) => <polygon className={point && workZoneAtPoint(point, siteMap.zones)?.id === zone.id ? "selected" : ""} key={zone.id} points={zone.polygon.map((vertex) => `${vertex.xMeters},${vertex.yMeters}`).join(" ")} />)}</svg>
-    {siteMap.zones.map((zone) => { const centroid = workZoneCentroid(zone); return <span className="work-target-zone-label" key={zone.id} style={percentage(centroid)}>{zone.zoneNameSnapshot}</span>; })}
-    {cameras.map((camera) => mode === "camera" ? <button type="button" className={`work-target-camera ${selectedCameraId === camera.id ? "selected" : ""}`} key={camera.id} style={percentage(camera.point)} onPointerDown={(event) => event.stopPropagation()} onClick={() => onCamera(camera.id)} aria-label={`Use ${camera.name} as the Work point`}><i /><span>{camera.name}</span></button> : <span className="work-target-camera muted" key={camera.id} style={percentage(camera.point)} aria-hidden="true"><i /></span>)}
-    {point && mode === "coordinate" && <span className="work-target-pin" style={percentage(point)}><i /><b>Work point</b></span>}
-    <span className="work-target-map-hint">{readOnly ? "Selected Work point" : mode === "coordinate" ? "Click anywhere or use arrow keys to place the Work point" : "Select a Camera from the map or list"}</span>
+function WorkTargetMap({ siteMap, point, cameras, selectedCameraId, mode, onPoint, onCamera, readOnly = false }: { siteMap: WorkSiteMap; point: V2Point | null; cameras: WorkCameraOption[]; selectedCameraId: string; mode: "coordinate" | "camera"; onPoint: (point: V2Point) => void; onCamera: (cameraId: string) => void; readOnly?: boolean }) {
+  const zones = siteMap.zones.map((zone) => ({ id: zone.zoneId, name: zone.zoneNameSnapshot, polygon: zone.polygon }));
+  const cameraMarkers = cameras.map((camera) => ({ id: camera.id, cameraId: camera.id, cameraNameSnapshot: camera.name, point: camera.point, zoneId: camera.zoneId }));
+  const backgroundContentUrl = siteMap.background?.contentUrl ?? (siteMap.revision.backgroundMediaId ? `/api/media/${encodeURIComponent(siteMap.revision.backgroundMediaId)}/content` : null);
+  return <div className={`work-target-map-v2 shared ${mode} ${readOnly ? "read-only" : ""}`}>
+    <SiteMapViewer compact boundary={siteMap.revision} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background ?? null} backgroundContentUrl={backgroundContentUrl} backgroundTransform={siteMap.revision.backgroundTransform ?? null} zones={zones} cameras={cameraMarkers} selectedZoneId={point ? workZoneAtPoint(point, siteMap.zones)?.id : null} onSelectCamera={mode === "camera" && !readOnly ? onCamera : undefined} pointMarker={point ? { point, label: mode === "camera" ? cameras.find((camera) => camera.id === selectedCameraId)?.name ?? "Camera" : "Work point", tone: mode === "camera" ? "camera" : "work" } : null} onPlacePoint={mode === "coordinate" && !readOnly ? onPoint : undefined} />
+    <p className="work-target-map-shared-hint">{readOnly ? "Saved Work location" : mode === "coordinate" ? "Place mode is active. Zoom or pan with the controls, then click the map to set the Work point." : "Pan or zoom freely, then select a registered Camera marker."}</p>
   </div>;
 }
 
@@ -113,21 +91,11 @@ function WorkCreateModal({ siteMap, cleaners, cameras, availableCleanerIds, onCl
   const [cleanerQuery, setCleanerQuery] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [backgroundUrl, setBackgroundUrl] = useState<string>();
   const selectedCamera = cameras.find((camera) => camera.id === cameraId);
   const point = targetMode === "camera" ? selectedCamera?.point ?? null : coordinatePoint;
   const selectedZone = point ? workZoneAtPoint(point, siteMap.zones) : null;
   const locationName = targetMode === "camera" ? selectedCamera?.zoneName ?? "Choose a Camera" : point ? selectedZone?.zoneNameSnapshot ?? "Unzoned area" : "Place the Work point";
   const visibleCleaners = activeCleaners.filter((cleaner) => cleaner.fullName.toLowerCase().includes(cleanerQuery.toLowerCase()) || cleaner.staffCode.toLowerCase().includes(cleanerQuery.toLowerCase()));
-
-  useEffect(() => {
-    const mediaId = siteMap.revision.backgroundMediaId;
-    if (!mediaId) { setBackgroundUrl(undefined); return; }
-    const key = `manual-work-map:${siteMap.activeRevisionId}`;
-    const controller = new AbortController();
-    void loadAuthenticatedMedia(key, `/api/media/${encodeURIComponent(mediaId)}/content`, controller.signal).then(setBackgroundUrl).catch(() => setBackgroundUrl(undefined));
-    return () => { controller.abort(); releaseAuthenticatedMedia(key); };
-  }, [siteMap.activeRevisionId, siteMap.revision.backgroundMediaId]);
 
   useEffect(() => {
     const close = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape" && !pending) onClose(); };
@@ -154,7 +122,7 @@ function WorkCreateModal({ siteMap, cleaners, cameras, availableCleanerIds, onCl
       <section className="work-create-fields"><label>Work / issue type<select value={issue} disabled={pending} onChange={(event) => setIssue(event.target.value)}><option>General clean-up</option><option>Floor litter</option><option>Floor spill</option><option>Bin service</option><option>Inspection</option></select></label><label>Severity<select value={severity} disabled={pending} onChange={(event) => setSeverity(event.target.value as "warning" | "critical")}><option value="warning">Warning</option><option value="critical">Critical</option></select></label><label className="wide">Description / instruction<textarea value={description} disabled={pending} maxLength={1000} onChange={(event) => { setDescription(event.target.value); setError(""); }} placeholder="Describe the work the Cleaner needs to complete" /></label><div className="work-evidence-rule wide"><span>COMPLETION EVIDENCE</span><strong>1 Cleaner photo required</strong><small>The Supervisor reviews the submitted photo for both target types.</small></div></section>
       <section className="work-create-location"><header><div><span>WORK TARGET</span><strong>{locationName}</strong></div><div className="work-target-mode" role="group" aria-label="Choose Manual Work target type"><button type="button" className={targetMode === "coordinate" ? "active" : ""} aria-pressed={targetMode === "coordinate"} disabled={pending} onClick={() => { setTargetMode("coordinate"); setError(""); }}>Map point</button><button type="button" className={targetMode === "camera" ? "active" : ""} aria-pressed={targetMode === "camera"} disabled={pending || !cameras.length} onClick={() => { setTargetMode("camera"); setError(""); }}>Camera</button></div></header>
         {targetMode === "camera" && <label className="work-target-camera-select">Registered Camera<select value={cameraId} disabled={pending} onChange={(event) => { setCameraId(event.target.value); setError(""); }}><option value="">Select a Camera</option>{cameras.map((camera) => <option value={camera.id} key={camera.id}>{camera.name} · {camera.zoneName}</option>)}</select></label>}
-        <WorkTargetMap siteMap={siteMap} point={point} cameras={cameras} selectedCameraId={cameraId} mode={targetMode} backgroundUrl={backgroundUrl} onPoint={(next) => { setCoordinatePoint(next); setError(""); }} onCamera={(nextId) => { setCameraId(nextId); setError(""); }} />
+        <WorkTargetMap siteMap={siteMap} point={point} cameras={cameras} selectedCameraId={cameraId} mode={targetMode} onPoint={(next) => { setCoordinatePoint(next); setError(""); }} onCamera={(nextId) => { setCameraId(nextId); setError(""); }} />
         <div className="work-target-readout"><div><span>LOCATION</span><strong>{locationName}</strong><small>{targetMode === "camera" ? selectedCamera?.name ?? "No Camera selected" : selectedZone ? "Inside active Zone" : point ? "Outside active Zones" : "Waiting for map point"}</small></div><div><span>COORDINATES</span><strong>{point ? `X ${point.xMeters.toFixed(1)} m` : "Not selected"}</strong><small>{point ? `Y ${point.yMeters.toFixed(1)} m` : `Map ${siteMap.revision.widthMeters} × ${siteMap.revision.heightMeters} m`}</small></div></div>
       </section>
       <section className="work-create-cleaner"><header><div><span>ASSIGN CLEANER</span><strong>{cleanerId ? activeCleaners.find((cleaner) => cleaner.id === cleanerId)?.fullName ?? "Cleaner selected" : "Required at creation"}</strong></div><input value={cleanerQuery} disabled={pending} onChange={(event) => setCleanerQuery(event.target.value)} placeholder="Search available Cleaners" /></header><div>{visibleCleaners.map((cleaner) => <button type="button" disabled={pending} key={cleaner.id} className={cleanerId === cleaner.id ? "selected" : ""} onClick={() => { setCleanerId(cleanerId === cleaner.id ? "" : cleaner.id); setError(""); }}><i>{initials(cleaner.fullName)}</i><span><b>{cleaner.fullName}</b><small>{cleaner.staffCode} · {cleaner.assignedZoneName}</small></span>{cleanerId === cleaner.id && <em>✓</em>}</button>)}{!visibleCleaners.length && <p>{activeCleaners.length ? "No available Cleaners match this search." : "No Cleaner is currently available for assignment."}</p>}</div></section>
@@ -171,21 +139,12 @@ function WorkDetailDrawer({ work, siteMap, cleaners, availableCleanerIds, onClos
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [cancelling, setCancelling] = useState(false);
-  const [mapBackgroundUrl, setMapBackgroundUrl] = useState<string>();
   const activeCleaners = cleaners.filter((cleaner) => availableCleanerIds.has(cleaner.id) && `${cleaner.fullName} ${cleaner.staffCode}`.toLowerCase().includes(query.toLowerCase()));
   const cleaner = cleaners.find((item) => item.id === work.cleanerId);
   const mapZone = siteMap.zones.find((item) => item.id === work.zoneId);
   const fallbackPoint = mapZone ? workZoneCentroid(mapZone) : { xMeters: siteMap.revision.widthMeters / 2, yMeters: siteMap.revision.heightMeters / 2 };
   const mapPoint = work.point ? { xMeters: work.point.x, yMeters: work.point.y } : fallbackPoint;
   const point = { x: mapPoint.xMeters, y: mapPoint.yMeters };
-  useEffect(() => {
-    if (work.cameraId || !siteMap.revision.backgroundMediaId) { setMapBackgroundUrl(undefined); return; }
-    const mediaId = siteMap.revision.backgroundMediaId;
-    const key = `manual-work-detail-map:${siteMap.activeRevisionId}`;
-    const controller = new AbortController();
-    void loadAuthenticatedMedia(key, `/api/media/${encodeURIComponent(mediaId)}/content`, controller.signal).then(setMapBackgroundUrl).catch(() => setMapBackgroundUrl(undefined));
-    return () => { controller.abort(); releaseAuthenticatedMedia(key); };
-  }, [siteMap.activeRevisionId, siteMap.revision.backgroundMediaId, work.cameraId]);
   const runAction = (action: WorkAction, actionOutcome?: "passed" | "failed" | "inconclusive") => {
     if (!onAction || !reason.trim()) return;
     setPending(true);
@@ -199,7 +158,7 @@ function WorkDetailDrawer({ work, siteMap, cleaners, availableCleanerIds, onClos
         <div className={`work-proof-visual ${work.evidenceAvailable ? "submitted" : "waiting"}`}>
           {work.evidenceAvailable ? <><ProtectedWorkEvidence mediaId={work.evidenceMediaId} alt={`Completion evidence submitted for ${work.issue}`} /><span>COMPLETION EVIDENCE · 1 PHOTO</span><time>{clock(work.updatedAt)}</time></> : <div className="work-evidence-waiting"><strong>Waiting for evidence…</strong><small>The Cleaner must submit one completion photo before this Manual Work can be reviewed.</small></div>}
         </div>
-        <div className="work-proof-context"><span>WORK LOCATION</span><strong>{work.zoneName}</strong><small>Site coordinate · X {point.x.toFixed(1)}, Y {point.y.toFixed(1)}</small><WorkTargetMap siteMap={siteMap} point={mapPoint} cameras={[]} selectedCameraId="" mode="coordinate" backgroundUrl={mapBackgroundUrl} onPoint={() => undefined} onCamera={() => undefined} readOnly /></div>
+        <div className="work-proof-context"><span>WORK LOCATION</span><strong>{work.zoneName}</strong><small>Site coordinate · X {point.x.toFixed(1)}, Y {point.y.toFixed(1)}</small><WorkTargetMap siteMap={siteMap} point={mapPoint} cameras={[]} selectedCameraId="" mode="coordinate" onPoint={() => undefined} onCamera={() => undefined} readOnly /></div>
       </section>
       <aside className="work-proof-sidebar">
         <section className="work-proof-cleaner"><span>ASSIGNED CLEANER</span><strong>{cleaner?.fullName ?? "No Cleaner assigned"}</strong><dl><div><dt>Target</dt><dd>{work.zoneName}</dd></div><div><dt>Submitted</dt><dd>{work.evidenceAvailable ? clock(work.updatedAt) : "Waiting for evidence"}</dd></div></dl></section>
@@ -215,7 +174,7 @@ function WorkDetailDrawer({ work, siteMap, cleaners, availableCleanerIds, onClos
     <div className="work-detail-status">{statusOptions.map((status) => <button type="button" disabled className={work.status === status ? "active" : ""} key={status}>{status}</button>)}</div>
     <section className="work-detail-overview"><span className={`work-origin ${work.origin}`}>{work.origin === "ai" ? "AI Alert" : "Manual"}</span><span className={`work-priority ${work.priority.toLowerCase()}`}>{work.priority} priority</span><p>{work.description}</p><dl><div><dt>Zone</dt><dd>{work.zoneName}</dd></div><div><dt>Location</dt><dd>{work.point ? `Map point · X ${point.x.toFixed(1)}, Y ${point.y.toFixed(1)}` : "Camera location"}</dd></div><div><dt>Camera</dt><dd>{work.cameraName ?? "Not linked"}</dd></div><div><dt>Updated</dt><dd>{clock(work.updatedAt)}</dd></div></dl></section>
     {work.origin === "ai" && <section className="work-ai-context"><header><span>DETECTION CONTEXT</span><b>{work.alertId ? `ALERT ${work.alertId}` : "AI ALERT"}</b></header>{work.evidenceAvailable && <img src="/mock/spill.jpg" alt="Alert evidence" />}<p>{work.cameraName ?? "Camera not reported"} · detected {work.detectionTime ? clock(work.detectionTime) : "—"}</p>{work.cameraId && <button type="button" onClick={() => { const query = new URLSearchParams({ cameraId: work.cameraId!, zoneId: work.zoneId ?? "all", from: "work" }); location.hash = `/cameras?${query.toString()}`; }}>Open camera context →</button>}</section>}
-    {work.origin === "manual" && <section className="work-manual-context"><header><span>MAP LOCATION</span><b>Custom point</b></header><WorkTargetMap siteMap={siteMap} point={mapPoint} cameras={[]} selectedCameraId="" mode="coordinate" backgroundUrl={mapBackgroundUrl} onPoint={() => undefined} onCamera={() => undefined} readOnly /><p>Selected map location in {work.zoneName}.</p></section>}
+    {work.origin === "manual" && <section className="work-manual-context"><header><span>MAP LOCATION</span><b>Custom point</b></header><WorkTargetMap siteMap={siteMap} point={mapPoint} cameras={[]} selectedCameraId="" mode="coordinate" onPoint={() => undefined} onCamera={() => undefined} readOnly /><p>Selected map location in {work.zoneName}.</p></section>}
     <section className="work-reassign"><header><div><span>ASSIGNED CLEANER</span><h3>{cleaner ? cleaner.fullName : "No Cleaner available"}</h3></div>{!readOnly && <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search available Cleaners" />}</header><div>{activeCleaners.slice(0, 5).map((person) => <button type="button" disabled={readOnly} className={selectedCleanerId === person.id ? "selected" : ""} key={person.id} onClick={() => { setSelectedCleanerId(person.id); setMessage(""); }}><i>{initials(person.fullName)}</i><span><b>{person.fullName}</b><small>{person.staffCode} · {person.assignedZoneName}</small></span>{person.id === work.cleanerId ? <em>Current</em> : selectedCleanerId === person.id ? <em>Selected</em> : null}</button>)}</div></section>
     {!readOnly && !["Resolved", "Dismissed"].includes(work.status) && <section className="work-action-console"><header><span>SUPERVISOR ACTION</span><h3>Control this response.</h3><p>Actions are recorded in the Work history and refresh the linked Alert.</p></header><label>Reason<textarea value={reason} onChange={(event) => { setReason(event.target.value); setMessage(""); }} placeholder="Explain this operational decision" /></label>{work.status === "Awaiting Review" && <div className="work-review-outcomes" role="group" aria-label="Verification outcome">{(["passed", "failed", "inconclusive"] as const).map((value) => <button type="button" className={outcome === value ? "selected" : ""} key={value} onClick={() => setOutcome(value)}>{value === "passed" ? "Pass review" : value === "failed" ? "Request rework" : "Inconclusive"}</button>)}</div>}<div className="work-action-buttons">{selectedCleanerId && selectedCleanerId !== work.cleanerId && <button type="button" onClick={() => { if (!onAction || !reason.trim()) return; setPending(true); setMessage(""); void onAction("reassign", { cleanerId: selectedCleanerId, reason: reason.trim() }).catch((error) => setMessage(error instanceof Error ? error.message : "Reassignment failed.")).finally(() => setPending(false)); }} disabled={!reason.trim() || pending}>Reassign Cleaner</button>}{work.managementMode === "orchestrated" && <button type="button" className="outline-button" onClick={() => { if (!onAction || !reason.trim()) return; setPending(true); setMessage(""); void onAction("takeover", { reason: reason.trim() }).catch((error) => setMessage(error instanceof Error ? error.message : "Takeover failed.")).finally(() => setPending(false)); }} disabled={!reason.trim() || pending}>Take over</button>}{work.status === "Awaiting Review" && <button type="button" onClick={() => { if (!onAction || !reason.trim()) return; setPending(true); setMessage(""); void onAction("verify", { reason: reason.trim(), outcome }).catch((error) => setMessage(error instanceof Error ? error.message : "Review failed.")).finally(() => setPending(false)); }} disabled={!reason.trim() || pending}>{outcome === "passed" ? "Resolve Work" : outcome === "failed" ? "Request rework" : "Record review"}</button>}{work.status === "Awaiting Review" && work.verificationOutcome && <button type="button" className="outline-button" onClick={() => { if (!onAction || !reason.trim()) return; setPending(true); setMessage(""); void onAction("override", { reason: reason.trim(), outcome }).catch((error) => setMessage(error instanceof Error ? error.message : "Override failed.")).finally(() => setPending(false)); }} disabled={!reason.trim() || pending}>Override review</button>}<button type="button" className="danger" onClick={() => { if (!onAction || !reason.trim()) return; setPending(true); setMessage(""); void onAction("dismiss", { reason: reason.trim() }).catch((error) => setMessage(error instanceof Error ? error.message : "Dismissal failed.")).finally(() => setPending(false)); }} disabled={!reason.trim() || pending}>Dismiss Work</button></div>{message && <p className="work-action-message">{message}</p>}</section>}
   </aside></div>;

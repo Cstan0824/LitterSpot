@@ -46,6 +46,7 @@ run("V2 composite Camera workflow", () => {
   it("supports pre-Camera reference upload, plotting, validation, and reconfiguration publication", async () => {
     const started = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${regularToken}`).send({ kind: "reconfigure", cameraId: laptopCameraId, name: "Laptop Camera", sourceType: "laptop_camera" });
     expect(started.status).toBe(201); const draftId = started.body.draft.id;
+    expect(started.body.draft).toMatchObject({ referenceMediaId: reference1, registration: { referenceMediaId: reference1, sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: expect.any(Array), bins: [] } });
     const reference = await request(app).post(`/api/camera-creation/drafts/${draftId}/reference`).set("Authorization", `Bearer ${regularToken}`).attach("image", Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { filename: "reference.jpg", contentType: "image/jpeg" });
     expect(reference.status).toBe(201);
     const registrationSaved = await request(app).put(`/api/camera-creation/drafts/${draftId}/registration`).set("Authorization", `Bearer ${regularToken}`).send({ sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], bins: [] });

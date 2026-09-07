@@ -1664,14 +1664,15 @@ All routes require an active Site Supervisor. Mutations are Root-only except the
 | Method | Route | Behaviour |
 | --- | --- | --- |
 | GET | `/api/site-map` | Active Site Map, user-defined boundary, coordinate convention, background metadata, Zones, Camera Placements, and Cleaner Station Points. |
-| GET | `/api/site-map/draft` | Root only. Recover the Site's one editable draft and its geometry. |
+| GET | `/api/site-map/draft` | Root only. Recover the Site's one editable draft, geometry, and authenticated background metadata. |
+| GET | `/api/site-map/retired-zones` | Root only. List retired stable Zones that retain their last published name and geometry for restoration. |
 | POST | `/api/site-map/draft/start` | Root only. Copies the active revision into a new draft and rejects a second concurrent draft. |
 | POST | `/api/site-map/draft` | Root only. Saves one complete valid draft snapshot using `expectedRevision` concurrency. |
 | POST | `/api/site-map/draft/validate` | Root only. Revalidates geometry, background ownership, and active Camera coverage, then records a success or failure audit. |
 | POST | `/api/site-map/draft/publish` | Root only. Revalidates and atomically publishes the immutable replacement revision. |
 | DELETE | `/api/site-map/draft` | Root only. Discards the draft without changing the active revision. |
 | POST | `/api/site-map/background` | Root-only multipart `image`. Stores one Site-owned configuration image and returns its media ID, content URL, MIME type, width, and height. |
-| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Starts or publishes a confirmed Camera placement change. |
+| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Publishes a confirmed `map_position_correction`, or starts a `physical_camera_move` draft that must continue through fresh Camera Registration. |
 | PUT | `/api/site-map/station-points/{cleanerId}` | Root or Regular. Publishes one in-boundary Station Point; `zoneId` may be null. |
 
 Site Map draft body:

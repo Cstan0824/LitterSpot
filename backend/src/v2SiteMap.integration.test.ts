@@ -115,6 +115,10 @@ run("V2 Site Map workflow", () => {
     await request(app).post("/api/site-map/draft/validate").set("Authorization", `Bearer ${token}`);
     expect((await request(app).post("/api/site-map/draft/publish").set("Authorization", `Bearer ${token}`)).status).toBe(200);
     expect((await firestore.collection("zones").doc(zoneB).get()).data()?.lifecycleStatus).toBe("retired");
+    const retired = await request(app).get("/api/site-map/retired-zones").set("Authorization", `Bearer ${token}`);
+    expect(retired.status).toBe(200);
+    expect(retired.body.zones).toEqual(expect.arrayContaining([expect.objectContaining({ zoneId: zoneB, zoneNameSnapshot: "Zone B", polygon: expect.any(Array) })]));
+    expect((await request(app).get("/api/site-map/retired-zones").set("Authorization", `Bearer ${regularToken}`)).status).toBe(403);
   });
 
   it("rejects overlapping geometry", async () => {
@@ -132,6 +136,8 @@ run("V2 Site Map workflow", () => {
   });
 
   it("recovers one existing draft and rejects stale concurrent saves", async () => {
+    const activeRevisionId = String((await firestore.collection("sites").doc(siteId).get()).data()?.activeMapRevisionId);
+    await firestore.collection("siteMapRevisions").doc(activeRevisionId).collection("cleanerStations").doc(cleanerId).set({ schemaVersion: 2, siteId, cleanerId, cleanerNameSnapshot: "Map Cleaner", point: { xMeters: 10, yMeters: 80 }, zoneId: null });
     const map = await currentMap();
     const draft = await startDraft();
     const cameraWhileDrafting = await request(app).post("/api/camera-creation/drafts/start").set("Authorization", `Bearer ${token}`).send({ kind: "create", name: "Blocked Camera", sourceType: "laptop_camera", placement: { point: { xMeters: 10, yMeters: 10 } } });
@@ -141,7 +147,10 @@ run("V2 Site Map workflow", () => {
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.details.code).toBe("site_map_draft_exists");
     const body = { baseRevisionId: map.activeRevisionId, expectedRevision: draft.revision, widthMeters: map.revision.widthMeters, heightMeters: map.revision.heightMeters, gridSizeMeters: map.revision.gridSizeMeters, backgroundMediaId: map.revision.backgroundMediaId ?? null, backgroundTransform: map.revision.backgroundTransform ?? null, zones: map.zones.map((zone) => ({ zoneId: zone.zoneId, zoneNameSnapshot: zone.zoneNameSnapshot, polygon: zone.polygon })), cameraPlacements: map.cameraPlacements.map((placement) => ({ id: placement.id, point: placement.point })), cleanerStations: map.cleanerStations.map((station) => ({ id: station.id, point: station.point })) };
-    expect((await request(app).post("/api/site-map/draft").set("Authorization", `Bearer ${token}`).send(body)).status).toBe(200);
+    const saved = await request(app).post("/api/site-map/draft").set("Authorization", `Bearer ${token}`).send(body);
+    expect(saved.status).toBe(200);
+    const savedDraft = await request(app).get("/api/site-map/draft").set("Authorization", `Bearer ${token}`);
+    expect(savedDraft.body.cleanerStations).toEqual(expect.arrayContaining([expect.objectContaining({ cleanerNameSnapshot: "Map Cleaner" })]));
     const stale = await request(app).post("/api/site-map/draft").set("Authorization", `Bearer ${token}`).send(body);
     expect(stale.status).toBe(409);
     expect(stale.body.details.code).toBe("site_map_draft_revision_conflict");

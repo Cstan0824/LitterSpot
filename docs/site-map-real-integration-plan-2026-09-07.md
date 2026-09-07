@@ -23,6 +23,8 @@ Phase 1 exit gate: direct API requests cannot publish invalid geometry, bypass R
 
 ## Phase 2: shared Map Viewer and real Site page
 
+Status: completed 2026-09-07. See [`site-map-phase-2-completed-brief.md`](site-map-phase-2-completed-brief.md).
+
 Replace the Site prototype with a backend-connected Root workspace and Regular read-only view.
 
 - Build one reusable Map Viewer that preserves the user-defined boundary aspect ratio inside a fixed viewer.
@@ -39,6 +41,8 @@ Replace the Site prototype with a backend-connected Root workspace and Regular r
 Phase 2 exit gate: a Root can create and publish a valid Site Map revision through the product UI, a Regular Supervisor cannot mutate it, and failed validation leaves the active map unchanged.
 
 ## Phase 3: every placement workflow and end-to-end acceptance
+
+Status: completed 2026-09-07. See [`site-map-phase-3-completed-brief.md`](site-map-phase-3-completed-brief.md). Cloud acceptance remains intentionally deferred while the project stays in the quota-safe emulator environment.
 
 Adopt the shared Map Viewer and geometry rules everywhere coordinates are created or read.
 

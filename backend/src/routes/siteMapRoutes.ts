@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
 import { requireRootSupervisor } from "../middleware/requireRole.js";
-import { deleteV2MapDraft, getV2Map, getV2MapDraft, listV2MapRevisions, publishV2CleanerStation, publishV2MapDraft, saveV2MapDraft, startV2MapDraft, validateV2MapDraft } from "../services/v2MapService.js";
+import { deleteV2MapDraft, getV2Map, getV2MapDraft, listV2MapRevisions, listV2RetiredZones, publishV2CleanerStation, publishV2MapDraft, saveV2MapDraft, startV2MapDraft, validateV2MapDraft } from "../services/v2MapService.js";
 import { cameraPlacementChangeSchema, mapPointSchema, siteMapDraftInputSchema } from "../schemas/siteMap.js";
 import { uploadV2SiteBackground } from "../services/v2SiteBackgroundService.js";
 import { changeV2CameraPlacement } from "../services/v2CameraPlacementService.js";
@@ -14,9 +14,10 @@ const backgroundUpload = multer({ storage: multer.memoryStorage(), limits: { fil
 
 siteMapRoutes.get("/", async (req, res) => res.json({ map: await getV2Map(String(req.supervisor.siteId ?? req.query.siteId)) }));
 siteMapRoutes.get("/revisions", async (req, res) => res.json({ revisions: await listV2MapRevisions(String(req.supervisor.siteId)) }));
+siteMapRoutes.get("/retired-zones", requireRootSupervisor, async (req, res) => res.json({ zones: await listV2RetiredZones(String(req.supervisor.siteId)) }));
 siteMapRoutes.get("/draft", requireRootSupervisor, async (req, res) => {
   const map = await getV2MapDraft(String(req.supervisor.siteId));
-  return res.json({ draft: { id: map.draft.id, ...map.data }, zones: map.zones.docs.map((document) => ({ id: document.id, ...document.data() })), cameraPlacements: map.cameraPlacements.docs.map((document) => ({ id: document.id, ...document.data() })), cleanerStations: map.cleanerStations.docs.map((document) => ({ id: document.id, ...document.data() })) });
+  return res.json({ draft: { id: map.draft.id, ...map.data }, background: map.background, zones: map.zones.docs.map((document) => ({ id: document.id, ...document.data() })), cameraPlacements: map.cameraPlacements.docs.map((document) => ({ id: document.id, ...document.data() })), cleanerStations: map.cleanerStations.docs.map((document) => ({ id: document.id, ...document.data() })) });
 });
 siteMapRoutes.post("/draft/start", requireRootSupervisor, async (req, res) => res.status(201).json({ draft: await startV2MapDraft(String(req.supervisor.siteId), auditActor(req), req.requestId) }));
 siteMapRoutes.post("/draft", requireRootSupervisor, async (req, res) => {

@@ -85,7 +85,7 @@ No credential, token, Web API key, password, or Admin JSON content was read into
 | --- | --- | --- | --- | --- |
 | Read Dashboard | `GET /api/dashboard/v2` | Supervisor | Root or regular | missing, Phase 12.2 |
 | Refresh Dashboard | `POST /api/dashboard/v2/refresh` | Supervisor | Root or regular | missing, Phase 12.2 |
-| Read published Site Map | `GET /api/site-map` | Supervisor | Root or regular | missing, Phase 12.2 |
+| Read published Site Map | `GET /api/site-map` | Supervisor | Root or regular | integrated in Site administration |
 | Navigate between product pages | Client routing | Supervisor | Root or regular | local React-only |
 
 ### Site Map and Cameras
@@ -93,8 +93,8 @@ No credential, token, Web API key, password, or Admin JSON content was read into
 | Action | V2 endpoint | Role | Authority | Current state |
 | --- | --- | --- | --- | --- |
 | Read map revisions | `GET /api/site-map/revisions` | Supervisor | Root or regular | missing |
-| Read/create map draft | `GET /api/site-map/draft`, `POST /api/site-map/draft` | Supervisor | Root for create/mutation | missing |
-| Validate/publish/delete map draft | `POST /api/site-map/draft/validate`, `POST /api/site-map/draft/publish`, `DELETE /api/site-map/draft` | Supervisor | Root | missing |
+| Read/create map draft | `GET /api/site-map/draft`, `POST /api/site-map/draft/start`, `POST /api/site-map/draft` | Supervisor | Root for create/mutation | integrated in Site administration |
+| Validate/publish/delete map draft | `POST /api/site-map/draft/validate`, `POST /api/site-map/draft/publish`, `DELETE /api/site-map/draft` | Supervisor | Root | integrated in Site administration |
 | Read V2 Cameras | `GET /api/camera-creation/cameras` | Supervisor | Root or regular | missing, Phase 12.2 |
 | Start Camera creation draft | `POST /api/camera-creation/drafts/start` | Supervisor | Root | current V1 action; V2 Phase 12.5 |
 | Start Camera reconfiguration draft | `POST /api/camera-creation/drafts/start` with `kind=reconfigure` | Supervisor | Root or regular | current V1 action; V2 Phase 12.5 |
@@ -152,7 +152,7 @@ No credential, token, Web API key, password, or Admin JSON content was read into
 | Pause/resume Orchestrator | `POST /api/orchestrator/v2/status` | Supervisor | Root or regular | missing, Phase 12.7 |
 | Read Orchestrator Runs | `GET /api/orchestrator/v2/runs`, `GET /api/orchestrator/v2/runs/:runId` | Supervisor | Root or regular | missing, Phase 12.7 |
 | Read Supervisor notifications | `GET /api/operations/v2/notifications` plus recipient-only Firestore listener | Supervisor | Own UID and Site | missing, later integration |
-| Read audit events | `GET /api/operations/v2/audit-events` | Supervisor | Root | missing, Phase 13 UI |
+| Read audit events | `GET /api/operations/v2/audit-events` | Supervisor | Root | integrated for Site structural actions; broader Site audit expansion remains |
 
 ### Superadmin
 
