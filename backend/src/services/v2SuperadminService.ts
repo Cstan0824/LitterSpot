@@ -111,8 +111,8 @@ export async function recoverV2Root(input: {
   const site = await siteRef.get();
   if (!site.exists) throw new HttpError(404, "Site not found.");
   const currentRootUid = String(site.data()?.rootSupervisorUid ?? "");
-  if (!currentRootUid) throw new HttpError(409, "Site has no Root Supervisor reference.");
   if (input.mode === "reset_existing") {
+    if (!currentRootUid) throw new HttpError(409, "Site has no Root Supervisor reference. Replace the Root account instead.");
     await firebaseAuth.updateUser(currentRootUid, { password: input.password, displayName: input.displayName.trim(), disabled: false });
     const auditRef = firestore.collection("auditEvents").doc();
     await firestore.runTransaction(async (transaction) => {
@@ -133,21 +133,27 @@ export async function recoverV2Root(input: {
     newUid = (await createIdentityAuthUser({ operation: started.operation, email: input.email, password: input.password, displayName: input.displayName })).uid;
     const auditRef = firestore.collection("auditEvents").doc();
     await firestore.runTransaction(async (transaction) => {
-      const [currentSite, currentProfile, currentAccount, operation, reservation] = await Promise.all([
-        transaction.get(siteRef), transaction.get(firestore.collection("supervisors").doc(currentRootUid)), transaction.get(firestore.collection("userAccounts").doc(currentRootUid)), transaction.get(started.operation), transaction.get(started.reservation),
-      ]);
-      if (!currentSite.exists || currentSite.data()?.rootSupervisorUid !== currentRootUid) throw new HttpError(409, "Root Supervisor changed during recovery.");
-      if (!currentProfile.exists || !currentAccount.exists || operation.data()?.status !== "auth_created" || reservation.data()?.operationId !== operationId) throw new HttpError(409, "Root recovery state is incomplete.");
+      const [currentSite, operation, reservation] = await Promise.all([transaction.get(siteRef), transaction.get(started.operation), transaction.get(started.reservation)]);
+      const liveRootUid = String(currentSite.data()?.rootSupervisorUid ?? "");
+      if (!currentSite.exists || liveRootUid !== currentRootUid) throw new HttpError(409, "Root Supervisor changed during recovery.");
+      const [currentProfile, currentAccount] = currentRootUid ? await Promise.all([
+        transaction.get(firestore.collection("supervisors").doc(currentRootUid)),
+        transaction.get(firestore.collection("userAccounts").doc(currentRootUid)),
+      ]) : [null, null];
+      if (currentRootUid && (!currentProfile?.exists || !currentAccount?.exists)) throw new HttpError(409, "Root recovery state is incomplete.");
+      if (operation.data()?.status !== "auth_created" || reservation.data()?.operationId !== operationId) throw new HttpError(409, "Root recovery state is incomplete.");
       transaction.create(firestore.collection("userAccounts").doc(newUid!), { schemaVersion: V2_SCHEMA_VERSION, uid: newUid, role: "supervisor", siteId: input.siteId, profileId: newUid, authority: "root", emailNormalized: normalizeIdentityEmail(input.email!), displayName: input.displayName.trim(), status: "active", lastLoginAt: null, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: 1 });
       transaction.create(firestore.collection("supervisors").doc(newUid!), { schemaVersion: V2_SCHEMA_VERSION, uid: newUid, siteId: input.siteId, authority: "root", fullName: input.displayName.trim(), phone: null, status: "active", createdAt: FieldValue.serverTimestamp(), createdByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, deactivatedAt: null, deactivatedByUid: null, revision: 1 });
-      transaction.update(currentProfile.ref, { authority: "regular", status: "inactive", deactivatedAt: FieldValue.serverTimestamp(), deactivatedByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
-      transaction.update(currentAccount.ref, { authority: "regular", status: "inactive", updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
+      if (currentProfile && currentAccount) {
+        transaction.update(currentProfile.ref, { authority: "regular", status: "inactive", deactivatedAt: FieldValue.serverTimestamp(), deactivatedByUid: actor.uid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
+        transaction.update(currentAccount.ref, { authority: "regular", status: "inactive", updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
+      }
       transaction.update(siteRef, { rootSupervisorUid: newUid, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actor.uid, revision: FieldValue.increment(1) });
       transaction.update(started.reservation, { uid: newUid, profileId: newUid, state: "active", updatedAt: FieldValue.serverTimestamp() });
       transaction.update(started.operation, { authUid: newUid, profileId: newUid, status: "completed", lastCompletedStep: "firestore_committed", updatedAt: FieldValue.serverTimestamp(), completedAt: FieldValue.serverTimestamp() });
       transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "root_replaced", resourceType: "Supervisor", resourceId: newUid, outcome: "succeeded", reason: input.reason, before: { rootSupervisorUid: currentRootUid }, after: { rootSupervisorUid: newUid }, requestId }));
     });
-    await firebaseAuth.updateUser(currentRootUid, { disabled: true });
+    if (currentRootUid) await firebaseAuth.updateUser(currentRootUid, { disabled: true });
     return { rootSupervisorUid: newUid, mode: input.mode };
   } catch (error) {
     await compensateIdentityOperation({ operation: started.operation, reservation: started.reservation, authUid: newUid, errorCode: "root_recovery_failed" });

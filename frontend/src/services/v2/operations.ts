@@ -59,16 +59,23 @@ export type V2OperationsReadModel = {
   cameras: V2Camera[];
 };
 
+export const getV2DashboardResource = async (signal?: AbortSignal) => (await v2Request<{ dashboard: V2Dashboard }>("/api/dashboard/v2", { signal })).dashboard;
+export const getV2SiteMapResource = async (signal?: AbortSignal) => (await v2Request<{ map: V2OperationsReadModel["siteMap"] }>("/api/site-map", { signal })).map;
+export const getV2AlertsResource = async (signal?: AbortSignal) => (await v2Request<{ alerts: V2Alert[] }>("/api/alerts", { signal })).alerts;
+export const getV2CleanersResource = async (signal?: AbortSignal) => (await v2Request<{ cleaners: V2Cleaner[] }>("/api/cleaners", { signal })).cleaners;
+export const getV2WorkOrdersResource = async (signal?: AbortSignal) => (await v2Request<{ workOrders: V2WorkOrder[] }>("/api/work-orders?status=all&limit=100", { signal })).workOrders;
+export const getV2CamerasResource = async (signal?: AbortSignal) => (await v2Request<{ cameras: V2Camera[] }>("/api/camera-creation/cameras", { signal })).cameras;
+
 export async function getV2OperationsReadModel(signal?: AbortSignal): Promise<V2OperationsReadModel> {
   const [dashboard, siteMap, alerts, cleaners, workOrders, cameras] = await Promise.all([
-    v2Request<{ dashboard: V2Dashboard }>("/api/dashboard/v2", { signal }),
-    v2Request<{ map: V2OperationsReadModel["siteMap"] }>("/api/site-map", { signal }),
-    v2Request<{ alerts: V2Alert[] }>("/api/alerts", { signal }),
-    v2Request<{ cleaners: V2Cleaner[] }>("/api/cleaners", { signal }),
-    v2Request<{ workOrders: V2WorkOrder[] }>("/api/work-orders?status=all&limit=100", { signal }),
-    v2Request<{ cameras: V2Camera[] }>("/api/camera-creation/cameras", { signal }),
+    getV2DashboardResource(signal),
+    getV2SiteMapResource(signal),
+    getV2AlertsResource(signal),
+    getV2CleanersResource(signal),
+    getV2WorkOrdersResource(signal),
+    getV2CamerasResource(signal),
   ]);
-  return { dashboard: dashboard.dashboard, siteMap: siteMap.map, alerts: alerts.alerts, cleaners: cleaners.cleaners, workOrders: workOrders.workOrders, cameras: cameras.cameras };
+  return { dashboard, siteMap, alerts, cleaners, workOrders, cameras };
 }
 
 export async function getV2AlertDetail(alertId: string, signal?: AbortSignal) {

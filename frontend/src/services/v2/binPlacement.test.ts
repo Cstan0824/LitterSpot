@@ -9,6 +9,8 @@ describe("V2 Bin Placement client", () => {
   beforeEach(() => request.mockReset().mockResolvedValue({}));
 
   it("uses the requested free-form lookback for cached and explicit refresh calls", async () => {
+    await getBinPlacementRecommendations();
+    expect(request).toHaveBeenCalledWith("/api/bin-placement/v2/recommendations", { signal: undefined });
     await getBinPlacementRecommendations(11);
     expect(request).toHaveBeenCalledWith("/api/bin-placement/v2/recommendations?days=11", { signal: undefined });
     await refreshBinPlacementRecommendations(9);

@@ -186,10 +186,10 @@ function ServiceStatus({ view, health }: { view: V2SystemView; health?: V2Servic
   </section>;
 }
 
-export function SystemPage() {
-  const [view, setView] = useState<V2SystemView>();
+export function SystemPage({ readOnly = false, initialView, loadView = getV2SystemView, loadRun = getV2OrchestratorRunDetail }: { readOnly?: boolean; initialView?: V2SystemView; loadView?: (signal?: AbortSignal) => Promise<V2SystemView>; loadRun?: (runId: string, signal?: AbortSignal) => Promise<V2OrchestratorRunDetail> } = {}) {
+  const [view, setView] = useState<V2SystemView | undefined>(initialView);
   const [health, setHealth] = useState<V2ServiceHealth>();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialView);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date>();
@@ -212,7 +212,7 @@ export function SystemPage() {
     summaryController.current = controller;
     if (background) setRefreshing(true); else setLoading(true);
     try {
-      const result = await getV2SystemView(controller.signal);
+      const result = await loadView(controller.signal);
       setView(result);
       setLastUpdated(new Date());
       setLoadError("");
@@ -222,7 +222,7 @@ export function SystemPage() {
     } finally {
       if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
     }
-  }, []);
+  }, [loadView]);
 
   useEffect(() => {
     void loadSystem();
@@ -250,14 +250,14 @@ export function SystemPage() {
     setDetailLoading((current) => ({ ...current, [runId]: true }));
     setDetailErrors((current) => ({ ...current, [runId]: "" }));
     try {
-      const result = await getV2OrchestratorRunDetail(runId, controller.signal);
+      const result = await loadRun(runId, controller.signal);
       setRunDetails((current) => ({ ...current, [runId]: result }));
     } catch (error) {
       if (!controller.signal.aborted) setDetailErrors((current) => ({ ...current, [runId]: error instanceof Error ? error.message : "Run details could not be loaded." }));
     } finally {
       if (!controller.signal.aborted) setDetailLoading((current) => ({ ...current, [runId]: false }));
     }
-  }, []);
+  }, [loadRun]);
 
   function toggleRun(runId: string) {
     if (expandedRun === runId) { setExpandedRun(null); return; }
@@ -308,7 +308,7 @@ export function SystemPage() {
           <div><dt>Last successful activity</dt><dd>{formatDate(view.configuration.lastSuccessfulRunAt, "None recorded")}</dd></div>
           <div><dt>Assignment provider</dt><dd>{view.configuration.provider} · {readable(view.runtime.providerConnectivity)}</dd></div>
         </dl>
-        <div className="system-command-action"><small>Pause and resume changes are recorded for this Site.</small>{view.configuration.status === "running" ? <button type="button" disabled={statusPending} onClick={() => { setStatusError(""); setPauseOpen(true); }}>Pause orchestrator</button> : <button type="button" disabled={statusPending} onClick={() => void changeStatus("running")}>{statusPending ? "Resuming…" : "Resume orchestrator"}</button>}{statusError && !pauseOpen && <p role="alert">{statusError}</p>}</div>
+        {!readOnly && <div className="system-command-action"><small>Pause and resume changes are recorded for this Site.</small>{view.configuration.status === "running" ? <button type="button" disabled={statusPending} onClick={() => { setStatusError(""); setPauseOpen(true); }}>Pause orchestrator</button> : <button type="button" disabled={statusPending} onClick={() => void changeStatus("running")}>{statusPending ? "Resuming…" : "Resume orchestrator"}</button>}{statusError && !pauseOpen && <p role="alert">{statusError}</p>}</div>}
       </section>
 
       <section className="system-workload" aria-label="Current automated workflow workload">
@@ -349,7 +349,7 @@ export function SystemPage() {
       </section>
     </>}
 
-    {pauseOpen && <div className="system-dialog-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !statusPending) setPauseOpen(false); }}><section className="system-pause-dialog" role="dialog" aria-modal="true" aria-labelledby="system-pause-title">
+    {!readOnly && pauseOpen && <div className="system-dialog-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !statusPending) setPauseOpen(false); }}><section className="system-pause-dialog" role="dialog" aria-modal="true" aria-labelledby="system-pause-title">
       <header><div><span>Operational control</span><h2 id="system-pause-title">Pause the Orchestrator?</h2></div><button type="button" disabled={statusPending} onClick={() => setPauseOpen(false)} aria-label="Close pause dialog">×</button></header>
       <p>New Alerts will remain waiting. Automatic assignment and cleaning review will stop until a Supervisor resumes the Orchestrator.</p>
       <label>Reason <span>Optional</span><textarea value={pauseReason} disabled={statusPending} onChange={(event) => { setPauseReason(event.target.value); setStatusError(""); }} placeholder="Why are you pausing automation?" maxLength={500} /></label>

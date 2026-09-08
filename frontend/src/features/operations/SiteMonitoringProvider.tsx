@@ -3,6 +3,8 @@ import { firebaseAuth } from "../../config/firebase";
 import { SiteCameraMonitoring } from "../../../../shared/cameraMonitoring";
 
 const MonitoringContext = createContext<SiteCameraMonitoring | null>(null);
+const emptyMonitoringState = { status: "idle", owner: false, cameras: {}, error: "" } as unknown as ReturnType<SiteCameraMonitoring["snapshot"]>;
+const emptySubscribe = () => () => undefined;
 export function SiteMonitoringProvider({ children }: { children: ReactNode }) {
   const monitor = useMemo(() => new SiteCameraMonitoring(async (path, options = {}) => {
     const user = firebaseAuth.currentUser; if (!user) throw new Error("Sign in to monitor Cameras.");
@@ -17,4 +19,10 @@ export function useSiteMonitoring() {
   if (!monitor) throw new Error("Camera views require a Supervisor monitoring provider.");
   const state = useSyncExternalStore(monitor.subscribe, monitor.snapshot);
   return { monitor, state };
+}
+
+export function useOptionalSiteMonitoring() {
+  const monitor = useContext(MonitoringContext);
+  const state = useSyncExternalStore(monitor?.subscribe ?? emptySubscribe, monitor?.snapshot ?? (() => emptyMonitoringState));
+  return monitor ? { monitor, state } : null;
 }

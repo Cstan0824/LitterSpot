@@ -58,9 +58,9 @@ Commercially related venues with separate operational teams are separate Sites a
 - initial Site Map dimensions and optional background;
 - first Root Supervisor email and password.
 
-**Confirmed** The Superadmin can access all operational data and Root Supervisor capabilities for any selected Site.
+**Confirmed** The Superadmin can access the operational data for any selected Site without impersonating a Site Supervisor.
 
-The Superadmin interface has a Site selector. After selecting a Site, the Superadmin can enter the same operational pages and perform the same actions as that Site's Root Supervisor. Superadmin actions retain the Superadmin actor identity in audit history.
+The Superadmin interface has a Site selector. After selecting a Site, the Superadmin can enter Site View, which reuses the existing Supervisor pages and navigation while omitting actions. The UI does not repeatedly label this context as read-only. The Superadmin account modal identifies the selected Site and provides **Exit Site**, which returns to that Site's Superadmin detail page.
 
 **Confirmed** The Superadmin can deactivate an entire Site. Deactivation blocks all Site Supervisor and Cleaner access, stops new monitoring and Orchestrator actions, and preserves historical records.
 
@@ -86,7 +86,7 @@ The simple first-version Superadmin area includes:
 
 **Confirmed** The separate Superadmin interface does not perform daily operational actions such as dismissing Alerts, manually assigning or replacing Cleaners, resolving Work Orders, or overriding Verification. Those actions remain in the Client Supervisor product area.
 
-Superadmin Site administration may still perform structural changes that overlap Root authority, such as creating/deactivating Zones or Cameras, and those changes are audited as Superadmin actions.
+Superadmin Site administration does not expose Root Supervisor operational or structural controls. Site lifecycle, Root account recovery, and supported operation recovery remain in the separate Superadmin interface and are audited as Superadmin actions.
 
 **Confirmed Superadmin audit requirement** Every privileged Superadmin action performed against or on behalf of a Site must create an immutable Superadmin Audit Event.
 
@@ -1262,13 +1262,14 @@ Manual work begins at Work Order creation and can target either a Camera or a co
 
 - Site replaces the unnecessary one-to-one Client Organization entity and is both tenant boundary and venue.
 - Creating a client means creating a Site, initial map configuration, and first Root Supervisor in one workflow.
-- The Superadmin selects a Site and can access all of its operational data and Root Supervisor capabilities without impersonating that user.
+- The Superadmin selects a Site and can access its operational data in Site View without impersonating a Supervisor or receiving Root-equivalent mutation controls.
 - Superadmin actions retain Superadmin identity in audit history.
 - The Superadmin can deactivate a Site and recover or replace its Root Supervisor.
 - Site deactivation is allowed with active operations and the Site can later be reactivated.
 - Inactive Sites block Supervisor/Cleaner access and stop monitoring and Orchestrator activity while preserving history.
 - Site deactivation dismisses active Alerts and Work Orders with reason `site_deactivated`; reactivation does not reopen them.
 - Superadmin uses a separate Superadmin-only application area.
+- Site View reuses Supervisor pages, quietly omits unavailable actions, and provides Exit Site from the Superadmin account modal.
 - Every privileged Superadmin action against a Site creates an immutable Superadmin Audit Event.
 - Reads are not audited; every mutation and operational/structural change is audited.
 - Root Supervisors can view Superadmin Audit Events affecting their Site.

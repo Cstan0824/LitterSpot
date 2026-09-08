@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
 import { get } from "node:http";
@@ -11,13 +11,24 @@ const exportRoot = join(localRoot, "firebase-emulator-data");
 const mediaRoot = join(localRoot, "emulator-media");
 const configPath = join(localRoot, "firebase-emulator-dev.json");
 const pidFile = join(localRoot, "local-services.json");
+const fixtureRoot = join(root, "fixtures", "emulator");
+const fixtureExportRoot = join(fixtureRoot, "firebase-emulator-data");
+const fixtureMediaRoot = join(fixtureRoot, "media");
 const firebaseCli = join(root, "node_modules", "firebase-tools", "lib", "bin", "firebase.js");
 const python = process.platform === "win32" ? join(root, ".venv", "Scripts", "python.exe") : join(root, ".venv", "bin", "python");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const token = "local-playground-token";
 const project = "demo-litterspot";
 const children = [];
-mkdirSync(localRoot, { recursive: true }); mkdirSync(mediaRoot, { recursive: true });
+mkdirSync(localRoot, { recursive: true });
+const localSnapshotExists = existsSync(join(exportRoot, "firebase-export-metadata.json"));
+const teamFixtureExists = existsSync(join(fixtureExportRoot, "firebase-export-metadata.json")) && existsSync(fixtureMediaRoot);
+if (!localSnapshotExists && teamFixtureExists) {
+  cpSync(fixtureExportRoot, exportRoot, { recursive: true, errorOnExist: true });
+  cpSync(fixtureMediaRoot, mediaRoot, { recursive: true, errorOnExist: true });
+  console.log("Initialized local Firebase and media data from the shared team fixture.");
+}
+mkdirSync(mediaRoot, { recursive: true });
 
 writeFileSync(configPath, JSON.stringify({
   firestore: { database: "(default)", rules: join(root, "firestore.rules"), indexes: join(root, "firestore.indexes.json") },

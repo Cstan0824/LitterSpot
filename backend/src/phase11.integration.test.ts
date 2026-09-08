@@ -98,7 +98,9 @@ run("Phase 11 service regressions",()=>{
     await s.minute("2026-09-07T00:00:00Z","recent",5);
     await rebuildDailySummary(s.siteId,"2026-09-07",now);
     const snapshot=await refreshBinPlacement(s.siteId,2,actor,now,false);
+    const maintenanceState=await firestore.collection("phase11MaintenanceStates").doc(s.siteId).get();
     expect(snapshot.availableDays).toBe(1);
+    expect(maintenanceState.data()?.recommendationLookbackDays).toBe(2);
     expect(snapshot.status).toBe("insufficient_data");
     expect(snapshot.zoneRankings.find((z:any)=>z.zoneId===s.a).totalScore).toBeNull();
     await expect(implementBinPlacement(s.siteId,s.a,actor,undefined,now)).rejects.toMatchObject({status:409});

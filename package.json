@@ -28,6 +28,12 @@
     "stop": "node scripts/stop-local.mjs",
     "start:local": "node scripts/start-api.mjs",
     "start:emulator": "node scripts/start-emulator-dev.mjs",
+    "fixture:emulator:update": "node scripts/prepare-team-emulator-fixture.mjs",
+    "fixture:emulator:reset": "node scripts/reset-team-emulator-fixture.mjs",
+    "fixture:emulator:verify": "node scripts/verify-team-emulator-fixture.mjs",
+    "media:compress:emulator": "node scripts/compress-emulator-videos.mjs",
+    "media:compress:emulator:apply": "node scripts/compress-emulator-videos.mjs --apply",
+    "media:sync:emulator": "node scripts/sync-emulator-media-metadata.mjs",
     "stop:local": "node scripts/stop-local.mjs"
   },
   "devDependencies": {

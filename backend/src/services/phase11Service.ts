@@ -124,7 +124,10 @@ export async function refreshBinPlacement(siteId: string, days: number, actor: a
     calculatedAt:Timestamp.fromDate(now),calculatedBy:actor,policyVersion:"bin-placement-v3",sourceFingerprint:input.fingerprint,
     status:sufficient.length===0?"insufficient_data":input.summaries.length<days?"partial_data":"ready",
     zoneRankings:rankings,sourceSummaryIds:input.summaries.map(s=>s.id),nextScheduledRefreshAt:Timestamp.fromDate(siteMidnight(shiftDate(siteLocalDate(now,input.tz),1),input.tz))};
-  await firestore.collection("binPlacementSnapshots").doc(siteId).set(data);
+  await Promise.all([
+    firestore.collection("binPlacementSnapshots").doc(siteId).set(data),
+    firestore.collection("phase11MaintenanceStates").doc(siteId).set({ schemaVersion: 2, siteId, recommendationLookbackDays: days, updatedAt: Timestamp.fromDate(now) }, { merge: true }),
+  ]);
   return safe(data);
 }
 export async function getBinPlacementSnapshot(siteId: string, days?: number, now = new Date(), _legacyCatchUp?: boolean) {

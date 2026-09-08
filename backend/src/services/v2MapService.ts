@@ -14,9 +14,9 @@ type PointDraft = { id: string; point: MapPoint; label: string };
 type CameraPlacementCorrection = { cameraId: string; mode: "map_position_correction"; reason: string; confirmation: true };
 
 function timestamp(value: unknown) { return value instanceof Timestamp ? value.toDate().toISOString() : null; }
-async function siteForPrincipal(siteId: string) {
+async function siteForPrincipal(siteId: string, allowInactive = false) {
   const site = await firestore.collection("sites").doc(siteId).get();
-  if (!site.exists || site.data()?.status !== "active") throw new HttpError(404, "Active Site not found.");
+  if (!site.exists || !allowInactive && site.data()?.status !== "active") throw new HttpError(404, allowInactive ? "Site not found." : "Active Site not found.");
   return site.data()!;
 }
 
@@ -121,8 +121,8 @@ export async function startV2MapDraft(siteId: string, actor: AuditActor, request
   return presentDraft(await readDraft(siteId));
 }
 
-export async function getV2Map(siteId: string) {
-  const site = await siteForPrincipal(siteId);
+export async function getV2Map(siteId: string, options: { allowInactive?: boolean } = {}) {
+  const site = await siteForPrincipal(siteId, Boolean(options.allowInactive));
   const revisionId = String(site.activeMapRevisionId ?? "");
   const revision = await firestore.collection("siteMapRevisions").doc(revisionId).get();
   if (!revision.exists) throw new HttpError(409, "Active Site Map revision is missing.");

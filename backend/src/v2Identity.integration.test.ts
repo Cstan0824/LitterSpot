@@ -22,6 +22,8 @@ run("V2 identity and Site workflow", () => {
   const rootEmail = `root-${suffix}@example.test`;
   const regularEmail = `regular-${suffix}@example.test`;
   const replacementRootEmail = `replacement-root-${suffix}@example.test`;
+  const missingRootEmail = `missing-root-${suffix}@example.test`;
+  const repairedRootEmail = `repaired-root-${suffix}@example.test`;
   const password = "Emulator-password-123!";
   let superadminToken = "";
   let rootToken = "";
@@ -37,7 +39,7 @@ run("V2 identity and Site workflow", () => {
   });
 
   afterAll(async () => {
-    for (const email of [superadminEmail, rootEmail, regularEmail, replacementRootEmail]) {
+    for (const email of [superadminEmail, rootEmail, regularEmail, replacementRootEmail, missingRootEmail, repairedRootEmail]) {
       const user = await firebaseAuth.getUserByEmail(email).catch(() => null);
       if (user) await firebaseAuth.deleteUser(user.uid).catch(() => undefined);
     }
@@ -57,6 +59,52 @@ run("V2 identity and Site workflow", () => {
     const me = await request(app).get("/api/me").set("Authorization", `Bearer ${rootToken}`);
     expect(me.status).toBe(200);
     expect(me.body.supervisor).toMatchObject({ uid: rootUid, displayName: "Root Supervisor" });
+  });
+
+  it("provides a bounded Superadmin Site projection and read-only Site View", async () => {
+    const sites = await request(app).get("/api/superadmin/sites").set("Authorization", `Bearer ${superadminToken}`);
+    expect(sites.status).toBe(200);
+    const listed = sites.body.sites.find((site: { id: string }) => site.id === siteId);
+    expect(listed).toMatchObject({ id: siteId, status: "active", rootSupervisor: { uid: rootUid, email: rootEmail }, activeMap: { widthMeters: 200, heightMeters: 120, gridSizeMeters: 5 } });
+    expect(listed).not.toHaveProperty("createdByUid");
+
+    const detail = await request(app).get(`/api/superadmin/sites/${siteId}`).set("Authorization", `Bearer ${superadminToken}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toMatchObject({ site: { id: siteId }, counts: { zones: 0, cameras: 0, cleaners: 0, alerts: 0, workOrders: 0 } });
+
+    const view = await request(app).get(`/api/superadmin/sites/${siteId}/view/operations`).set("Authorization", `Bearer ${superadminToken}`);
+    expect(view.status).toBe(200);
+    expect(view.body).toMatchObject({ site: { id: siteId }, siteMap: { siteId }, alerts: [], cleaners: [], workOrders: [], cameras: [] });
+    expect(view.body.system).toHaveProperty("configuration");
+
+    const audit = await request(app).get(`/api/superadmin/audit-events?siteId=${siteId}`).set("Authorization", `Bearer ${superadminToken}`);
+    expect(audit.status).toBe(200);
+    expect(audit.body.events.length).toBeGreaterThan(0);
+    expect(audit.body.events.every((event: { actorRole: string }) => event.actorRole === "superadmin")).toBe(true);
+
+    const mutation = await request(app).post(`/api/superadmin/sites/${siteId}/view/operations`).set("Authorization", `Bearer ${superadminToken}`).send({ action: "mutate" });
+    expect(mutation.status).toBe(403);
+    expect((await request(app).get(`/api/superadmin/sites/missing-site/view/operations`).set("Authorization", `Bearer ${superadminToken}`)).status).toBe(404);
+    expect((await request(app).get(`/api/superadmin/sites/${siteId}/view/media/foreign-media/content`).set("Authorization", `Bearer ${superadminToken}`)).status).toBe(404);
+    expect((await request(app).get(`/api/superadmin/sites/${siteId}/view/system/runs/missing-run`).set("Authorization", `Bearer ${superadminToken}`)).status).toBe(404);
+    expect((await request(app).post(`/api/superadmin/sites/${siteId}/view/system/runs/missing-run`).set("Authorization", `Bearer ${superadminToken}`).send({})).status).toBe(403);
+  });
+
+  it("replaces a missing Root reference through the recovery workflow", async () => {
+    const created = await request(app).post("/api/superadmin/sites").set("Authorization", `Bearer ${superadminToken}`).send({
+      name: `Recovery ${suffix}`, timeZone: "Asia/Kuala_Lumpur", widthMeters: 100, heightMeters: 80, gridSizeMeters: 5,
+      rootEmail: missingRootEmail, rootPassword: password, rootDisplayName: "Missing Root", idempotencyKey: `create-missing-root-${suffix}`,
+    });
+    expect(created.status).toBe(201);
+    await firestore.collection("sites").doc(created.body.siteId).update({ rootSupervisorUid: null });
+
+    const reset = await request(app).post(`/api/superadmin/sites/${created.body.siteId}/root-recovery`).set("Authorization", `Bearer ${superadminToken}`).send({ mode: "reset_existing", password, displayName: "Reset Root", reason: "missing reference", idempotencyKey: `reset-missing-${suffix}` });
+    expect(reset.status).toBe(409);
+
+    const replaced = await request(app).post(`/api/superadmin/sites/${created.body.siteId}/root-recovery`).set("Authorization", `Bearer ${superadminToken}`).send({ mode: "replace", email: repairedRootEmail, password, displayName: "Repaired Root", reason: "missing reference", idempotencyKey: `replace-missing-${suffix}` });
+    expect(replaced.status).toBe(200);
+    expect((await firestore.collection("sites").doc(created.body.siteId).get()).data()?.rootSupervisorUid).toBe(replaced.body.result.rootSupervisorUid);
+    expect(await signIn(repairedRootEmail, password)).toEqual(expect.any(String));
   });
 
   it("allows only Root to create and manage a Regular Supervisor", async () => {
@@ -102,6 +150,9 @@ run("V2 identity and Site workflow", () => {
     const response = await request(app).patch(`/api/superadmin/sites/${siteId}/status`).set("Authorization", `Bearer ${superadminToken}`).send({ status: "inactive", reason: "integration test" });
     expect(response.status).toBe(200);
     expect((await request(app).get("/api/me").set("Authorization", `Bearer ${rootToken}`)).status).toBe(403);
+    const inactiveView = await request(app).get(`/api/superadmin/sites/${siteId}/view/operations`).set("Authorization", `Bearer ${superadminToken}`);
+    expect(inactiveView.status).toBe(200);
+    expect(inactiveView.body.site).toMatchObject({ id: siteId, status: "inactive" });
     const operation = await firestore.collection("siteOperations").where("siteId", "==", siteId).where("type", "==", "deactivate").get();
     expect(operation.docs[0].data().status).toBe("completed");
     const reactivated = await request(app).patch(`/api/superadmin/sites/${siteId}/status`).set("Authorization", `Bearer ${superadminToken}`).send({ status: "active", reason: "integration test complete" });

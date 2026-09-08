@@ -126,6 +126,10 @@ _Avoid_: Leave record, Cleaner online status
 An immutable record of a privileged Superadmin access or action against a selected Site, attributed to the Superadmin rather than a Site Supervisor.
 _Avoid_: Root Supervisor history, editable activity log
 
+**Superadmin Site View**:
+The existing Site operational interface opened for one selected Site by an authenticated LitterSpot Superadmin. It presents Site data without impersonating a Supervisor and exposes no daily, account, monitoring, or structural mutation controls. The Superadmin account control identifies the selected Site and provides Exit Site.
+_Avoid_: Root mode, impersonation, read-only banner
+
 **Monitoring Session**:
 A Supervisor-console-owned prototype session that plays or captures enabled Camera sources and periodically submits sampled frames while at least one authenticated Supervisor console is open. It continues across page navigation and stops after the last Supervisor console disappears. Cleaner mobile sessions never own or keep it alive.
 _Avoid_: Camera stream, processing job

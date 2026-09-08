@@ -11,6 +11,7 @@ import {
   type BinPlacementSnapshot,
   type BinPlacementZoneRanking,
 } from "../../services/v2/binPlacement";
+import { initialBinPlacementLookback, lookbackFromSnapshot } from "./binPlacementLookback";
 
 type Metric = "cleaningFrequency" | "binOverflowFrequency";
 
@@ -90,8 +91,7 @@ function factorValue(ranking: BinPlacementZoneRanking, factor: "peopleActivity" 
 }
 
 export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
-  const [lookbackInput, setLookbackInput] = useState("30");
-  const [appliedLookback, setAppliedLookback] = useState(30);
+  const [lookbackInput, setLookbackInput] = useState(initialBinPlacementLookback);
   const [comparisonInput, setComparisonInput] = useState("7");
   const [appliedComparisonDays, setAppliedComparisonDays] = useState(7);
   const [snapshot, setSnapshot] = useState<BinPlacementSnapshot>();
@@ -108,6 +108,7 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
 
   const acceptSnapshot = useCallback((next: BinPlacementSnapshot) => {
     setSnapshot(next);
+    setLookbackInput(lookbackFromSnapshot(next));
     setSelectedZoneId((current) => next.zoneRankings.some((ranking) => ranking.zoneId === current) ? current : next.zoneRankings[0]?.zoneId ?? "");
   }, []);
 
@@ -119,12 +120,12 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError("");
-    void Promise.all([getBinPlacementRecommendations(appliedLookback, controller.signal), getBinPlacementInterventions(controller.signal)])
+    void Promise.all([getBinPlacementRecommendations(undefined, controller.signal), getBinPlacementInterventions(controller.signal)])
       .then(([recommendations, history]) => { acceptSnapshot(recommendations.snapshot); acceptInterventions(history.interventions); })
       .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Bin Placement data could not be loaded."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [acceptInterventions, acceptSnapshot, appliedLookback]);
+  }, [acceptInterventions, acceptSnapshot]);
 
   useEffect(() => {
     if (!selectedInterventionId) { setComparison(undefined); return; }
@@ -146,7 +147,7 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
     setRefreshing(true); setError(""); setMessage("");
     try {
       const [recommendations, history] = await Promise.all([refreshBinPlacementRecommendations(days), getBinPlacementInterventions()]);
-      setAppliedLookback(days); acceptSnapshot(recommendations.snapshot); acceptInterventions(history.interventions);
+      acceptSnapshot(recommendations.snapshot); acceptInterventions(history.interventions);
       setMessage(`Recommendations refreshed using ${days} completed local days.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Recommendations could not be refreshed."); }
     finally { setRefreshing(false); }
@@ -157,7 +158,7 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
     setImplementingZoneId(ranking.zoneId); setError(""); setMessage("");
     try {
       const result = await implementBinPlacement(ranking.zoneId, snapshot.calculatedAt);
-      const [recommendations, history] = await Promise.all([getBinPlacementRecommendations(appliedLookback), getBinPlacementInterventions()]);
+      const [recommendations, history] = await Promise.all([getBinPlacementRecommendations(), getBinPlacementInterventions()]);
       acceptSnapshot(recommendations.snapshot); acceptInterventions(history.interventions, result.intervention.id);
       setMessage(`${ranking.zoneNameSnapshot} was recorded as implemented at ${dateTime(result.intervention.implementedAt)}.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "The bin placement could not be recorded."); }

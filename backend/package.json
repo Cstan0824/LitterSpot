@@ -23,6 +23,7 @@
     "v2:clear-emulator-operations": "tsx src/scripts/v2/clearEmulatorOperationalData.ts",
     "v2:bootstrap-development": "tsx src/scripts/v2/bootstrapDevelopmentSite.ts",
     "v2:seed-phase11": "tsx src/scripts/v2/seedPhase11Development.ts",
+    "v2:seed-shared-demo": "tsx src/scripts/v2/seedSharedDemoOperations.ts",
     "v2:prepare-integration-baseline": "tsx src/scripts/v2/prepareIntegrationBaseline.ts",
     "v2:smoke-orchestrator-provider": "tsx src/scripts/v2/smokeOrchestratorProvider.ts",
     "test": "vitest run"

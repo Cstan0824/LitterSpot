@@ -10,13 +10,13 @@ import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { FieldStationShell } from "./components/FieldStationShell";
-import { RoleIntegrationPendingPage } from "./components/RoleIntegrationPendingPage";
 import { CleanerMobileApp } from "./features/cleaner/CleanerMobileApp";
 import { SessionProvider, useSession } from "./session/SessionProvider";
 import { supervisorRouteFromHash, type SupervisorRoute } from "./services/v2/routing";
 import { deriveSupervisorCapabilities } from "./services/v2/session";
 import { sessionErrorCopy } from "./services/v2/errors";
 import { SiteMonitoringProvider } from "./features/operations/SiteMonitoringProvider";
+import { SuperadminApp } from "./features/superadmin/SuperadminApp";
 
 type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "status";
 
@@ -44,7 +44,7 @@ function App() {
 
   const session = sessionState.session;
   if (session.role === "cleaner") return <CleanerMobileApp session={session.cleaner} onLogout={() => { void sessionState.signOut(); }} />;
-  if (session.role !== "supervisor") return <RoleIntegrationPendingPage session={session} onLogout={() => { void sessionState.signOut(); }} />;
+  if (session.role === "superadmin") return <SuperadminApp profile={session.superadmin} onLogout={() => { void sessionState.signOut(); }} />;
 
   const supervisor = session.supervisor;
   const capabilities = deriveSupervisorCapabilities(supervisor.authority);

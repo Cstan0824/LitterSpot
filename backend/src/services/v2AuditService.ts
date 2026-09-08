@@ -71,11 +71,12 @@ function timestamp(value: unknown) {
   return value instanceof Timestamp ? value.toDate().toISOString() : null;
 }
 
-export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: string; limit?: number } = {}) {
+export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: string; actorRole?: "superadmin" | "supervisor"; limit?: number } = {}) {
   const limit = Math.min(filters.limit ?? 100, 200);
   let query = firestore.collection("auditEvents").orderBy("occurredAt", "desc").limit(limit);
   if (filters.siteId) query = query.where("siteId", "==", filters.siteId);
   if (filters.actorUid) query = query.where("actorUid", "==", filters.actorUid);
+  if (filters.actorRole) query = query.where("actorRole", "==", filters.actorRole);
   let documents: FirebaseFirestore.QueryDocumentSnapshot[];
   try {
     documents = (await query.get()).docs;
@@ -89,6 +90,7 @@ export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: s
     documents = fallback.docs
       .filter((doc) => !filters.siteId || doc.data().siteId === filters.siteId)
       .filter((doc) => !filters.actorUid || doc.data().actorUid === filters.actorUid)
+      .filter((doc) => !filters.actorRole || doc.data().actorRole === filters.actorRole)
       .sort((left, right) => {
         const leftTime = left.data().occurredAt instanceof Timestamp ? left.data().occurredAt.toMillis() : 0;
         const rightTime = right.data().occurredAt instanceof Timestamp ? right.data().occurredAt.toMillis() : 0;

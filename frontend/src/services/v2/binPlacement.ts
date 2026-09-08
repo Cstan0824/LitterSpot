@@ -98,8 +98,8 @@ export type BinPlacementComparison = {
   boundaryPolicy: string;
 };
 
-export const getBinPlacementRecommendations = (days: number, signal?: AbortSignal) =>
-  v2Request<{ snapshot: BinPlacementSnapshot }>(`/api/bin-placement/v2/recommendations?days=${encodeURIComponent(days)}`, { signal });
+export const getBinPlacementRecommendations = (days?: number, signal?: AbortSignal) =>
+  v2Request<{ snapshot: BinPlacementSnapshot }>(`/api/bin-placement/v2/recommendations${days === undefined ? "" : `?days=${encodeURIComponent(days)}`}`, { signal });
 
 export const refreshBinPlacementRecommendations = (days: number) =>
   v2Request<{ snapshot: BinPlacementSnapshot }>("/api/bin-placement/v2/recommendations/refresh", { method: "POST", json: { days } });

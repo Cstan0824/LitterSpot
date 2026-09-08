@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Alert, Camera, FrameResult } from "./types";
 import { getLiveVideos, subscribeLiveVideo, type LiveVideo } from "../pipeline/liveVideoStore";
 import { createCleaner, getCleaners, updateCleanerStatus, type Cleaner } from "../../services/cleanerAPI";
 import { createCamera, createSite, createZone, getCameras, getSites, getZones, updateCamera, updateSite, updateZone, type CameraRecord, type Site, type Zone } from "../../services/locationAPI";
 import { evaluateBinReplacement, type BinReplacementRecommendation } from "../../services/binReplacementAPI";
-import { assignV2Alert, createV2Cleaner, createV2ManualWork, dismissV2Alert, dismissV2Work, getV2OperationsReadModel, overrideV2Verification, reassignV2Work, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, verifyV2Work, type CreateV2CleanerInput, type V2Alert, type V2Cleaner, type V2OperationsReadModel, type V2Point, type V2WeeklySchedule, type V2WorkOrder } from "../../services/v2/operations";
-import { createV2RegularSupervisor, getV2Supervisors, updateV2SupervisorAccount, type CreateV2RegularSupervisorInput, type V2SupervisorListItem, type V2SupervisorManagementItem } from "../../services/v2/supervisors";
+import { assignV2Alert, createV2Cleaner, createV2ManualWork, dismissV2Alert, dismissV2Work, overrideV2Verification, reassignV2Work, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, verifyV2Work, type CreateV2CleanerInput, type V2Alert, type V2Cleaner, type V2OperationsReadModel, type V2Point, type V2WeeklySchedule, type V2WorkOrder } from "../../services/v2/operations";
+import { createV2RegularSupervisor, updateV2SupervisorAccount, type CreateV2RegularSupervisorInput, type V2SupervisorListItem, type V2SupervisorManagementItem } from "../../services/v2/supervisors";
 import { FieldStationNavigation } from "../../components/FieldStationNavigation";
 import { GeographicOperationsDashboard } from "./GeographicOperationsDashboard";
 import { CameraOperationsPage } from "./CameraOperationsPage";
@@ -17,6 +17,9 @@ import { BinPlacementAnalysisPage } from "./BinPlacementAnalysisPage";
 import { alertZoneDisplayName } from "./alertPresentation";
 import { SystemPage } from "../../pages/SystemPage";
 import { SiteAdministrationPage } from "../../pages/SiteAdministrationPage";
+import { createWorkflowRefreshScheduler } from "./workflowRefreshScheduler";
+import { coreOperationsResources, invalidateOperationsResources, readOperationsResources, type OperationsResourceKey } from "../../services/v2/operationsResourceCache";
+import { resourcesAfterMutation, resourcesForPage, type OperationsMutation } from "./operationsRefreshPolicy";
 
 type Page = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "status";
 type AdminProfile = { displayName: string; email: string; authority: "root" | "regular" };
@@ -27,7 +30,11 @@ const statusClass = (value: string) => value.replaceAll("_", "-");
 
 const activeAlert = (status: string) => !["resolved", "dismissed"].includes(status);
 
-function adaptV2Operations(model: V2OperationsReadModel) {
+export function supervisorCameraPageAccess(capabilities: SupervisorCapabilities) {
+  return { readOnly: false, allowWorkActions: true, canManageCameraPlacement: capabilities.manageCameraPlacement };
+}
+
+export function adaptV2Operations(model: V2OperationsReadModel) {
   const site: Site = { id: model.siteMap.siteId, name: model.siteMap.siteName, description: null, timezone: "Asia/Kuala_Lumpur", status: "active", createdAt: null, updatedAt: null };
   const zoneName = new Map(model.siteMap.zones.map((zone) => [zone.id, zone.zoneNameSnapshot]));
   const zones: Zone[] = model.siteMap.zones.map((zone) => ({ id: zone.id, siteId: model.siteMap.siteId, siteName: model.siteMap.siteName, name: zone.zoneNameSnapshot, code: null, description: null, status: "active", createdAt: null, updatedAt: null }));
@@ -198,6 +205,7 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
   const [supervisorsError, setSupervisorsError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const modelRef = useRef<V2OperationsReadModel | undefined>(undefined);
   useEffect(() => {
     if (!drawerOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -209,34 +217,86 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
     return () => removeEventListener("keydown", closeOnEscape);
   }, [drawerOpen]);
   useEffect(() => subscribeLiveVideo(() => setLiveVideos(getLiveVideos())), []);
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true); setError(undefined);
+  const acceptModel = useCallback((model: V2OperationsReadModel) => {
+    modelRef.current = model;
+    const data = adaptV2Operations(model);
+    setStaff(data.staff); setSites(data.sites); setZones(data.zones); setCameraRecords(data.cameras); setAllAlerts(data.alerts);
+    setAvailabilityById(data.availabilityById); setStationById(data.stationById); setScheduleSummaryById(data.scheduleSummaryById); setV2Dashboard(data.dashboard); setV2WorkOrders(data.workOrders); setV2Alerts(model.alerts);
+    setV2Model(model); setStaffError(undefined); setLocationError(undefined);
+  }, []);
+  const loadInitial = useCallback(async () => {
+    setLoading(true); setError(undefined);
     try {
-      const model = await getV2OperationsReadModel();
-      const data = adaptV2Operations(model);
-      setStaff(data.staff); setSites(data.sites); setZones(data.zones); setCameraRecords(data.cameras); setAllAlerts(data.alerts);
-      setAvailabilityById(data.availabilityById); setStationById(data.stationById); setScheduleSummaryById(data.scheduleSummaryById); setV2Dashboard(data.dashboard); setV2WorkOrders(data.workOrders); setV2Alerts(model.alerts);
-      setV2Model(model);
-      setStaffError(undefined); setLocationError(undefined);
+      const resources = await readOperationsResources(coreOperationsResources);
+      acceptModel(resources);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "Cloud application data could not be loaded.";
       setError(message); setStaffError(message); setLocationError(message);
     } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { if (page !== "site") void load(); }, [load, page]);
-  const loadSupervisors = useCallback(async () => {
+  }, [acceptModel]);
+  const refreshCoreResources = useCallback(async (keys: readonly OperationsResourceKey[], force = false) => {
+    const coreKeys = keys.filter((key): key is keyof V2OperationsReadModel => key !== "supervisors");
+    if (!coreKeys.length) return;
+    const resources = await readOperationsResources(coreKeys, { force });
+    const current = modelRef.current;
+    if (current) acceptModel({ ...current, ...resources });
+  }, [acceptModel]);
+  const loadSupervisors = useCallback(async (force = false) => {
     setSupervisorsLoading(true); setSupervisorsError(undefined);
-    try { const result = await getV2Supervisors(); setV2Supervisors(result.supervisors); }
+    try { const result = await readOperationsResources(["supervisors"], { force }); setV2Supervisors(result.supervisors); }
     catch (reason) { setSupervisorsError(reason instanceof Error ? reason.message : "Supervisor accounts could not be loaded."); }
     finally { setSupervisorsLoading(false); }
   }, []);
-  useEffect(() => { if (page === "admin") void loadSupervisors(); }, [loadSupervisors, page]);
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => { clearTimeout(timer); timer = setTimeout(() => { void load(true); }, 750); };
+    if (["site", "placement", "status"].includes(page)) { setLoading(false); return; }
+    let cancelled = false;
+    void (async () => {
+      if (!modelRef.current) await loadInitial();
+      if (cancelled || !modelRef.current) return;
+      const resources = resourcesForPage(page);
+      await Promise.all([
+        refreshCoreResources(resources),
+        resources.includes("supervisors") ? loadSupervisors() : Promise.resolve(),
+      ]).catch(() => undefined);
+    })();
+    return () => { cancelled = true; };
+  }, [loadInitial, loadSupervisors, page, refreshCoreResources]);
+  const refreshAfterMutation = useCallback(async (mutation: OperationsMutation) => {
+    const resources = resourcesAfterMutation(mutation);
+    invalidateOperationsResources(resources);
+    await Promise.all([
+      refreshCoreResources(resources, true),
+      resources.includes("supervisors") ? loadSupervisors(true) : Promise.resolve(),
+    ]);
+  }, [loadSupervisors, refreshCoreResources]);
+  useEffect(() => {
+    const scheduler = createWorkflowRefreshScheduler(() => refreshAfterMutation("camera_workflow").catch(() => undefined));
+    const refresh = () => scheduler.notify();
+    const visibilityChanged = () => scheduler.visibilityChanged();
     window.addEventListener("litterspot:camera-workflow", refresh);
-    return () => { clearTimeout(timer); window.removeEventListener("litterspot:camera-workflow", refresh); };
-  }, [load]);
+    document.addEventListener("visibilitychange", visibilityChanged);
+    return () => {
+      scheduler.dispose();
+      window.removeEventListener("litterspot:camera-workflow", refresh);
+      document.removeEventListener("visibilitychange", visibilityChanged);
+    };
+  }, [refreshAfterMutation]);
+  useEffect(() => {
+    const refreshVisiblePage = () => {
+      if (document.visibilityState !== "visible" || !modelRef.current) return;
+      const resources = resourcesForPage(page);
+      void Promise.all([
+        refreshCoreResources(resources),
+        resources.includes("supervisors") ? loadSupervisors() : Promise.resolve(),
+      ]).catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", refreshVisiblePage);
+    const timer = window.setInterval(refreshVisiblePage, 30_000);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisiblePage);
+    };
+  }, [loadSupervisors, page, refreshCoreResources]);
   const refreshPlacement = useCallback(async () => {
     const activeZones = zones.filter((zone) => zone.status === "active");
     if (activeZones.length === 0) {
@@ -274,29 +334,29 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
   const actionError = (reason: unknown) => setError(reason instanceof Error ? reason.message : "The requested action could not be completed.");
   const v2AlertFor = (alert: Alert) => v2Alerts.find((item) => item.id === alert.id);
   const v2WorkFor = (id: string) => v2WorkOrders.find((item) => item.id === id);
-  async function assignAlert(alert: Alert, cleanerId: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before assigning it."); try { await assignV2Alert(current.id, cleanerId); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function dismissAlert(alert: Alert, reason: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before dismissing it."); try { await dismissV2Alert(current, reason); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function createManualWork(input: { title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: { type: "camera"; cameraId: string } | { type: "coordinate"; point: { xMeters: number; yMeters: number } } }) { try { await createV2ManualWork(input); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function actOnWork(id: string, action: "reassign" | "takeover" | "dismiss" | "verify" | "override", options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) { const work = v2WorkFor(id); if (!work) throw new Error("Refresh the Work Order before acting on it."); try { if (action === "reassign" && options.cleanerId) await reassignV2Work(work, options.cleanerId, options.reason); if (action === "takeover") await takeOverV2Work(work, options.reason); if (action === "dismiss") await dismissV2Work(work, options.reason); if (action === "verify" && options.outcome) await verifyV2Work(work, options.outcome, options.reason); if (action === "override" && options.outcome) await overrideV2Verification(work, options.outcome, options.reason); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function createCleanerV2(input: CreateV2CleanerInput) { try { await createV2Cleaner(input); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function updateCleanerV2(cleaner: V2Cleaner, input: { fullName: string; phone: string; weeklySchedule: V2WeeklySchedule }) { try { await updateV2Cleaner(cleaner, input); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function moveCleanerStation(cleaner: V2Cleaner, point: V2Point) { try { await updateV2CleanerStation(cleaner.id, point); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function overrideCleanerAvailability(cleaner: V2Cleaner, availabilityOverride: "none" | "unavailable") { try { await updateV2Cleaner(cleaner, { availabilityOverride }); await load(); } catch (reason) { actionError(reason); throw reason; } }
-  async function createSupervisorV2(input: CreateV2RegularSupervisorInput) { await createV2RegularSupervisor(input); await loadSupervisors(); }
-  async function updateSupervisorV2(account: V2SupervisorManagementItem, input: { fullName?: string; phone?: string | null; status?: "active" | "inactive" }) { await updateV2SupervisorAccount(account, input); await loadSupervisors(); }
+  async function assignAlert(alert: Alert, cleanerId: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before assigning it."); try { await assignV2Alert(current.id, cleanerId); await refreshAfterMutation("alert_assignment"); } catch (reason) { actionError(reason); throw reason; } }
+  async function dismissAlert(alert: Alert, reason: string) { const current = v2AlertFor(alert); if (!current) throw new Error("Refresh the Alert before dismissing it."); try { await dismissV2Alert(current, reason); await refreshAfterMutation("alert_dismissal"); } catch (reason) { actionError(reason); throw reason; } }
+  async function createManualWork(input: { title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: { type: "camera"; cameraId: string } | { type: "coordinate"; point: { xMeters: number; yMeters: number } } }) { try { await createV2ManualWork(input); await refreshAfterMutation("manual_work"); } catch (reason) { actionError(reason); throw reason; } }
+  async function actOnWork(id: string, action: "reassign" | "takeover" | "dismiss" | "verify" | "override", options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) { const work = v2WorkFor(id); if (!work) throw new Error("Refresh the Work Order before acting on it."); try { if (action === "reassign" && options.cleanerId) await reassignV2Work(work, options.cleanerId, options.reason); if (action === "takeover") await takeOverV2Work(work, options.reason); if (action === "dismiss") await dismissV2Work(work, options.reason); if (action === "verify" && options.outcome) await verifyV2Work(work, options.outcome, options.reason); if (action === "override" && options.outcome) await overrideV2Verification(work, options.outcome, options.reason); await refreshAfterMutation("work_decision"); } catch (reason) { actionError(reason); throw reason; } }
+  async function createCleanerV2(input: CreateV2CleanerInput) { try { await createV2Cleaner(input); await refreshAfterMutation("cleaner_station"); } catch (reason) { actionError(reason); throw reason; } }
+  async function updateCleanerV2(cleaner: V2Cleaner, input: { fullName: string; phone: string; weeklySchedule: V2WeeklySchedule }) { try { await updateV2Cleaner(cleaner, input); await refreshAfterMutation("cleaner_update"); } catch (reason) { actionError(reason); throw reason; } }
+  async function moveCleanerStation(cleaner: V2Cleaner, point: V2Point) { try { await updateV2CleanerStation(cleaner.id, point); await refreshAfterMutation("cleaner_station"); } catch (reason) { actionError(reason); throw reason; } }
+  async function overrideCleanerAvailability(cleaner: V2Cleaner, availabilityOverride: "none" | "unavailable") { try { await updateV2Cleaner(cleaner, { availabilityOverride }); await refreshAfterMutation("cleaner_update"); } catch (reason) { actionError(reason); throw reason; } }
+  async function createSupervisorV2(input: CreateV2RegularSupervisorInput) { await createV2RegularSupervisor(input); invalidateOperationsResources(["supervisors"]); await loadSupervisors(true); }
+  async function updateSupervisorV2(account: V2SupervisorManagementItem, input: { fullName?: string; phone?: string | null; status?: "active" | "inactive" }) { await updateV2SupervisorAccount(account, input); invalidateOperationsResources(["supervisors"]); await loadSupervisors(true); }
 
   const content = useMemo(() => {
     if ((page === "dashboard" || page === "admin" || page === "history") && !v2Model) return <section className="ops-page"><header className="page-title"><div><span>V2 OPERATIONS</span><h1>Loading the Site Map.</h1><p>The shared Site Map and operational records are still loading.</p></div></header></section>;
     if (page === "dashboard" && v2Model) return <GeographicOperationsDashboard zones={zones} cameras={cameraRecords} alerts={allAlerts} cleaners={staff} recommendations={placementRecommendations} availabilityById={availabilityById} busyZones={v2Dashboard?.busyZones} siteMap={v2Model.siteMap} siteName={siteName} />;
-    if (page === "admin" && v2Model) return <TeamManagementPage viewer={{ uid: supervisor.uid, authority: supervisor.authority }} staff={staff} zones={zones} v2Cleaners={v2Model.cleaners} workOrders={v2WorkOrders} siteMap={v2Model.siteMap} supervisors={v2Supervisors} supervisorsLoading={supervisorsLoading} supervisorsError={supervisorsError} onRetrySupervisors={() => void loadSupervisors()} onCreateSupervisor={createSupervisorV2} onUpdateSupervisor={updateSupervisorV2} onCreate={createCleanerV2} onUpdate={updateCleanerV2} onMoveStation={moveCleanerStation} onAvailabilityOverride={overrideCleanerAvailability} />;
-    if (page === "cameras") return <CameraOperationsPage readOnly allowWorkActions canManageCameraPlacement={capabilities.manageCameraPlacement} sites={sites} zones={zones} cameras={cameraRecords} v2Cameras={v2Model?.cameras} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onCameraPublished={async () => { await load(); }} onDismissCameraWork={(workId, reason) => actOnWork(workId, "dismiss", { reason })} onCreateZone={async () => { throw new Error("Zone creation is handled by the V2 Camera registration wizard."); }} onCreateCamera={async () => { throw new Error("Camera creation is handled by the V2 Camera registration wizard."); }} />;
+    if (page === "admin" && v2Model) return <TeamManagementPage viewer={{ uid: supervisor.uid, authority: supervisor.authority }} staff={staff} zones={zones} v2Cleaners={v2Model.cleaners} workOrders={v2WorkOrders} siteMap={v2Model.siteMap} supervisors={v2Supervisors} supervisorsLoading={supervisorsLoading} supervisorsError={supervisorsError} onRetrySupervisors={() => { invalidateOperationsResources(["supervisors"]); void loadSupervisors(true); }} onCreateSupervisor={createSupervisorV2} onUpdateSupervisor={updateSupervisorV2} onCreate={createCleanerV2} onUpdate={updateCleanerV2} onMoveStation={moveCleanerStation} onAvailabilityOverride={overrideCleanerAvailability} />;
+    if (page === "cameras") return <CameraOperationsPage {...supervisorCameraPageAccess(capabilities)} sites={sites} zones={zones} cameras={cameraRecords} v2Cameras={v2Model?.cameras} feeds={cameras} liveVideos={liveVideos} alerts={allAlerts} cleaners={staff} error={locationError} onCameraPublished={async () => { await refreshAfterMutation("camera_publish"); }} onDismissCameraWork={(workId, reason) => actOnWork(workId, "dismiss", { reason })} onCreateZone={async () => { throw new Error("Zone creation is handled by the V2 Camera registration wizard."); }} onCreateCamera={async () => { throw new Error("Camera creation is handled by the V2 Camera registration wizard."); }} />;
     if (page === "alerts") return <AlertManagementPage alerts={allAlerts} cameras={cameraRecords} cleaners={staff} workOrders={v2WorkOrders} availableCleaners={staff.filter((cleaner) => availabilityById[cleaner.id]?.available)} onAssign={assignAlert} onDismiss={dismissAlert} onStatus={(alert, next) => changeStatus(alert, next)} />;
     if (page === "history" && v2Model) return <WorkManagementPage siteMap={v2Model.siteMap} workOrders={v2WorkOrders} cleaners={staff} zones={zones} cameras={cameraRecords} alerts={allAlerts} availableCleanerIds={staff.filter((cleaner) => availabilityById[cleaner.id]?.available).map((cleaner) => cleaner.id)} onCreateV2Work={createManualWork} onV2Action={actOnWork} />;
     if (page === "placement") return <BinPlacementAnalysisPage siteName={siteName} />;
-    if (page === "site") return <SiteAdministrationPage siteName={siteName} readOnly={!capabilities.configureSiteMap} />;
+    if (page === "site") return <SiteAdministrationPage siteName={siteName} readOnly={!capabilities.configureSiteMap} onPublished={() => refreshAfterMutation("site_map_publish")} />;
     if (page === "status") return <SystemPage />;
     return <section className="ops-page"><header className="page-title"><div><span>DASHBOARD</span><h1>Live camera overview</h1><p>Latest analyzed snapshots from each registered camera.</p></div><button className="outline-button" onClick={() => void refreshDashboard()}>Refresh</button></header><div className="dashboard-statline"><span><b>{dashboard?.summary.activeAlerts ?? 0}</b> Active alerts</span><span><b>{dashboard?.summary.resolvedAlerts ?? 0}</b> Resolved</span><span><b>{dashboard?.summary.configuredCameras ?? 0}</b> Cameras configured</span></div><div className="camera-grid-toolbar"><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([['1x6', 'Single column', 1], ['2x3', 'Two columns', 2], ['3x2', 'Three columns', 6]] as const).map(([value, label, cells]) => <button className={gridView === value ? "active" : ""} aria-label={label} title={label} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div><section className="camera-grid camera-grid-adjustable" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{dashboard.cameras.map((camera) => { const uploaded = liveVideos.find((video) => video.cameraId === camera.id); return uploaded ? <UploadedVideoCard video={uploaded} key={camera.id} /> : <CameraCard camera={camera} key={camera.id} />; })}</section><section className="dashboard-empty"><h2>Need a fresh camera frame?</h2><p>Use the pipeline playground to upload the exact camera image, plot a floor-only ROI, and create a saved evidence record.</p><button className="primary" onClick={() => { location.hash = "/pipeline"; }}>Open pipeline playground</button></section></section>;
-  }, [alerts, allAlerts, availabilityById, cameraRecords, cameras, capabilities.configureSiteMap, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, loadSupervisors, locationError, page, placementRecommendations, placementError, placementLoading, refreshPlacement, scheduleSummaryById, severity, siteName, sites, staff, staffError, stationById, status, supervisor, supervisorsError, supervisorsLoading, v2Dashboard, v2Model, v2Supervisors, v2WorkOrders, zones]);
+  }, [alerts, allAlerts, availabilityById, cameraRecords, cameras, capabilities.configureSiteMap, capabilities.manageCameraPlacement, dashboard, gridColumns, gridView, liveVideos, loadSupervisors, locationError, page, placementRecommendations, placementError, placementLoading, refreshAfterMutation, refreshPlacement, scheduleSummaryById, severity, siteName, sites, staff, staffError, stationById, status, supervisor, supervisorsError, supervisorsLoading, v2Dashboard, v2Model, v2Supervisors, v2WorkOrders, zones]);
 
   const go = (target: Page) => { onNavigate(target); setDrawerOpen(false); };
   return <div className={`ops-shell ${drawerOpen ? "drawer-open" : ""}`}>
@@ -309,6 +369,6 @@ export function OperationsConsole({ supervisor, capabilities, page, onNavigate, 
       <button type="button" className={page === "placement" ? "current" : ""} aria-current={page === "placement" ? "page" : undefined} onClick={() => go("placement")}>Bin analysis</button>
       <p>Analysis tools</p><button type="button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button type="button" onClick={() => { location.hash = "/playground"; }}>Batch analysis</button><button type="button" onClick={() => { location.hash = "/status"; }}>Service status</button>
     </nav><div className="sidebar-cameras"><p>Camera sources</p>{dashboard.cameras.map((camera) => <span key={camera.id}><i className={camera.latest ? "online" : "offline"} />{camera.name}<small>{camera.latest?.flags.length ?? 0}</small></span>)}</div><button className="field-site" type="button" onClick={() => go("cameras")}><small>Active site</small><strong>{siteName}</strong></button><div className="sidebar-user"><b>{supervisor.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</b><span>{supervisor.displayName}<small>Supervisor</small></span></div></aside>
-    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>{siteName} / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "site" ? "Site administration" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{page === "site" ? content : loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void load()}>Try again</button></div> : content}</main>
+    <main className="ops-main"><header className="ops-topbar"><button className="mobile-nav" aria-label="Open navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>☰</button><span><small>{siteName} / </small>{page === "admin" ? "Cleaner management" : page === "cameras" ? "Sites & cameras" : page === "site" ? "Site administration" : page === "placement" ? "Bin analysis" : page === "history" ? "History log" : page}</span><div className="ops-topbar-actions"><button className="outline-button" onClick={() => { location.hash = "/pipeline"; }}>Analyze frame</button><button className="outline-button logout-button" onClick={onLogout}>Sign out</button></div></header>{page === "site" ? content : loading ? <p className="ops-loading">Loading operations data…</p> : error ? <div className="ops-error"><p>{error}</p><button className="outline-button" onClick={() => void loadInitial()}>Try again</button></div> : content}</main>
   </div>;
 }
