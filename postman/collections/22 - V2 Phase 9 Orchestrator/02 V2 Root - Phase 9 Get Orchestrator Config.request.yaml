@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Phase 9 Get Orchestrator Config
+url: "{{baseUrl}}/api/orchestrator/v2/config"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('V2 Orchestrator config is available', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().config.schemaVersion).to.eql(2); });
+    language: text/javascript
+order: 2000

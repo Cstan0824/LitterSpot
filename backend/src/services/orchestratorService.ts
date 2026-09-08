@@ -247,6 +247,7 @@ export async function recoverOrchestratorRuns(limit = 100) {
   const snapshot = await firestore.collection("orchestratorRuns").where("status", "==", "running").limit(limit).get();
   let recovered = 0;
   for (const run of snapshot.docs) {
+    if (run.data().schemaVersion === 2) continue;
     const lease = run.data().leaseExpiresAt;
     if (!(lease instanceof Timestamp) || lease.toMillis() > Date.now()) continue;
     await firestore.runTransaction(async (transaction) => {

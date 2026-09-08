@@ -1,0 +1,21 @@
+$kind: http-request
+name: V2 Orchestrator Internal - Resolve Verified Work
+description: Send only when request 21 returns verificationOutcome passed.
+url: "{{baseUrl}}/internal/orchestrator/v2/runs/{{v2OrchestratorReviewRunId}}/resolve-verified-work"
+method: POST
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"siteId":"{{v2SiteId}}","workOrderId":"{{v2WorkOrderId}}"}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Passed Verification resolves Work', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().workOrder.status).to.eql('resolved'); });
+    language: text/javascript
+order: 22000

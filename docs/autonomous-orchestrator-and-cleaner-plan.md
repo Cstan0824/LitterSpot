@@ -1,5 +1,7 @@
 # Autonomous AI Supervisor and Cleaner workflow plan
 
+> **V2 scope notice:** This plan records the earlier autonomous-workflow direction but does not define the clarified V2 contract. Phase 9 now gives the LLM up to 10 waiting Alerts and all backend-validated available Cleaners so it can select one Alert and Cleaner pair. Station Point remains the default location, with a fresh resolved Work target supplied only as uncertain returning-to-station context. See [`current-clarified-requirements-continuation.md`](current-clarified-requirements-continuation.md), [`data-model-v2/`](data-model-v2/), and [`adr/0003-orchestrator-selects-assignment-pair.md`](adr/0003-orchestrator-selects-assignment-pair.md).
+
 ## 1. Decision status
 
 **Approved target architecture as of 2026-08-18. Phase 10-11 backend, the

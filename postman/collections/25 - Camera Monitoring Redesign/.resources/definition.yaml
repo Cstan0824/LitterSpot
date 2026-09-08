@@ -1,0 +1,4 @@
+$kind: collection
+name: 25 - Camera Monitoring Redesign
+description: Camera enablement, live configuration, and development-only scene switching. Login using the existing V2 Root request first.
+order: 26000

@@ -494,7 +494,7 @@ Copy-Item frontend\.env.example frontend\.env.local
 In `backend/.env` set:
 
 - `FIREBASE_PROJECT_ID=litterspot`
-- `FIREBASE_DATABASE_ID=litterspot`
+- `FIREBASE_DATABASE_ID=(default)`
 - `GOOGLE_APPLICATION_CREDENTIALS` to an absolute Firebase Admin JSON path
   outside the repository;
 - optional local media/ffmpeg paths when defaults are unsuitable.

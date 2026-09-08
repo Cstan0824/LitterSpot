@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Phase 8 List Work History
+url: "{{baseUrl}}/api/work-orders/{{v2WorkOrderId}}/history"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Work history includes assignment, start, submit, and Verification', () => { const types = pm.response.json().events.map(item => item.type); pm.response.to.have.status(200); pm.expect(types).to.include('assigned'); pm.expect(types).to.include('started'); pm.expect(types).to.include('submitted'); pm.expect(types).to.include('verification_passed'); });
+    language: text/javascript
+order: 12000

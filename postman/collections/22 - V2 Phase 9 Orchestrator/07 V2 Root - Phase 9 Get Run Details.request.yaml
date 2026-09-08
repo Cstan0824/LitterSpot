@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Phase 9 Get Run Details
+url: "{{baseUrl}}/api/orchestrator/v2/runs/{{v2OrchestratorRunId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Run includes attempts and actions', () => { const body = pm.response.json(); pm.response.to.have.status(200); pm.expect(body.run.schemaVersion).to.eql(2); pm.expect(body.attempts).to.be.an('array'); pm.expect(body.actions).to.be.an('array'); });
+    language: text/javascript
+order: 7000

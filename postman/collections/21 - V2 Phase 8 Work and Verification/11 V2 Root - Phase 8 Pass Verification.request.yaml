@@ -1,0 +1,24 @@
+$kind: http-request
+name: V2 Root - Phase 8 Pass Verification
+url: "{{baseUrl}}/api/work-orders/{{v2WorkOrderId}}/verification"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {
+      "outcome":"passed",
+      "reason":"Postman completion photo accepted.",
+      "expectedRevision":{{v2WorkRevision}},
+      "idempotencyKey":"postman-v2-verification-pass-001"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Work resolved and Cleaner released', () => { const work = pm.response.json().workOrder; pm.response.to.have.status(200); pm.expect(work.status).to.eql('resolved'); pm.environment.set('v2WorkRevision', String(work.revision)); });
+    language: text/javascript
+order: 11000

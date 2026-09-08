@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Superadmin - Current User
+url: "{{baseUrl}}/api/me"
+method: GET
+headers:
+  Authorization: "Bearer {{v2SuperadminToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Current user is Superadmin', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().role).to.eql('superadmin'); });
+    language: text/javascript
+order: 2000

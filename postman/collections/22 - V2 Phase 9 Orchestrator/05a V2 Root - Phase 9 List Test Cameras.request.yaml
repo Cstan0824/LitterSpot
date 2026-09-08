@@ -1,0 +1,22 @@
+$kind: http-request
+name: V2 Root - Phase 9 List Test Cameras
+description: Lists V2 Cameras and saves the first active Camera with a map placement as v2TestCameraId. Change that environment value to select another Camera.
+url: "{{baseUrl}}/api/camera-creation/cameras"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('V2 Cameras listed', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const cameras = pm.response.json().cameras;
+        const camera = cameras.find(item => item.status === 'active' && item.placement?.point && item.placement?.zoneId);
+        pm.test('A placed active Camera exists', () => pm.expect(camera).to.exist);
+        if (camera) pm.environment.set('v2TestCameraId', camera.id);
+        else pm.environment.unset('v2TestCameraId');
+      }
+    language: text/javascript
+order: 5500

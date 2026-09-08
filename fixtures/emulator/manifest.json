@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "firebaseProjectId": "demo-litterspot",
+  "firestoreDatabaseId": "(default)",
+  "generatedAt": "2026-09-08T13:29:51.484Z",
+  "firebaseExportFileCount": 6,
+  "mediaFileCount": 46,
+  "mediaBytes": 60841251,
+  "largestMedia": {
+    "path": "media/ur0OEpHEfDDy9CKO2zEM/camera-source.mp4",
+    "bytes": 11822482
+  },
+  "developmentAccounts": [
+    {
+      "role": "superadmin",
+      "email": "superadmin@litterspot.com",
+      "password": "password123"
+    },
+    {
+      "role": "root",
+      "email": "root@sunway-test.com",
+      "password": "password123"
+    },
+    {
+      "role": "cleaner",
+      "email": "gan@sunway-cleaner.com",
+      "password": "password123"
+    }
+  ]
+}

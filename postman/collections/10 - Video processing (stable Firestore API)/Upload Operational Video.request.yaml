@@ -25,7 +25,7 @@ body:
       value: "false"
     - type: text
       key: frameIntervalSeconds
-      value: "2"
+      value: "1"
     - type: text
       key: floorConfidence
       value: "0.25"

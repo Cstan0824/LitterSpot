@@ -21,6 +21,10 @@ Teammates upgrading from commit `b2052a9` should read the detailed
 [Phases 1–11 team handoff](./docs/team-handoff-phases-1-11.md) before restoring
 old routes or integrating frontend/model work.
 
+For stored field meanings and their workflow use, see the
+[database field dictionary](./docs/database-field-dictionary.md). It separates
+implemented fields, initialized placeholders, and API-only values.
+
 Option A will run Caddy, the React production build, Node, LangGraph,
 PostgreSQL, FastAPI, and local Ollama/media on one self-hosted machine (with
 host-native Ollama preferred on macOS), while Firebase Authentication, Cloud
@@ -125,8 +129,8 @@ python3 -m venv .venv
 
 ### Configure Firebase once
 
-The application uses Firebase project `litterspot`, the named Firestore
-database `litterspot` in `asia-southeast1`, and Email/Password Authentication.
+The application uses Firebase project `litterspot-v2-database`, Firestore
+database `(default)`, and Email/Password Authentication.
 React uses Firebase only to authenticate a Supervisor. Node.js verifies the ID
 token and is the only application service that reads or writes Firestore.
 

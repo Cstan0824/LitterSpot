@@ -1,0 +1,67 @@
+.camera-operations-page > .camera-wall-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 32px;
+  padding: 0 0 24px;
+}
+
+.camera-operations-page > .camera-wall-header > div {
+  min-width: 0;
+}
+
+.camera-operations-page > .camera-wall-header > div > span {
+  font: 400 9px/1 "Field Mono", monospace;
+  letter-spacing: .11em;
+}
+
+.camera-operations-page > .camera-wall-header h1 {
+  max-width: 1100px;
+  margin: 8px 0 7px;
+  font: 700 clamp(52px, 4.4vw, 70px)/.92 "Field Display", sans-serif;
+  letter-spacing: -.02em;
+}
+
+.camera-operations-page > .camera-wall-header p {
+  max-width: 760px;
+  font-weight: 400;
+}
+
+.camera-operations-page > .camera-wall-header .camera-add-button {
+  align-self: end;
+  margin-bottom: 2px;
+}
+
+@media (max-width: 900px) {
+  .camera-operations-page > .camera-wall-header {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding-top: 12px;
+  }
+
+  .camera-operations-page > .camera-wall-header h1 {
+    max-width: 760px;
+  }
+
+  .camera-operations-page > .camera-wall-header .camera-add-button {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .camera-operations-page > .camera-wall-header {
+    gap: 16px;
+    padding: 8px 0 20px;
+  }
+
+  .camera-operations-page > .camera-wall-header h1 {
+    margin-top: 7px;
+    font-size: clamp(42px, 13vw, 56px);
+    line-height: .94;
+  }
+
+  .camera-operations-page > .camera-wall-header .camera-add-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

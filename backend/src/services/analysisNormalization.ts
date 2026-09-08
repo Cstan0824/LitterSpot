@@ -77,20 +77,24 @@ export function normalizeAnalysis(
     evidence: tracking.evidence ?? null,
   });
   });
-  const floorDetections = result.floorHazards.map((hazard, index) => {
-    const entityId = `floor-${index + 1}`;
-    return {
-      id: deterministicDetectionId(runId, hazard.className, entityId),
-      issueType: hazard.className,
-      confidence: hazard.confidence,
-      bboxNormalized: normalizeBox(hazard.bbox, width, height),
-      polygonNormalized: normalizePolygon(hazard.polygon, width, height),
-      entityId,
-      modelKey: "floor_hazard",
-      modelVersion: result.modelVersions.floorHazard,
-      thresholdApplied: floorThreshold,
-    };
-  });
+  const floorHazards = result.floorHazards.map((hazard, index) => ({
+    entityId: `floor-${index + 1}`,
+    className: hazard.className,
+    confidence: hazard.confidence,
+    bboxNormalized: normalizeBox(hazard.bbox, width, height),
+    polygonNormalized: normalizePolygon(hazard.polygon, width, height),
+  }));
+  const floorDetections = floorHazards.map((hazard) => ({
+    id: deterministicDetectionId(runId, hazard.className, hazard.entityId),
+    issueType: hazard.className,
+    confidence: hazard.confidence,
+    bboxNormalized: hazard.bboxNormalized,
+    polygonNormalized: hazard.polygonNormalized,
+    entityId: hazard.entityId,
+    modelKey: "floor_hazard",
+    modelVersion: result.modelVersions.floorHazard,
+    thresholdApplied: floorThreshold,
+  }));
   const overflowDetections = result.bins.filter((bin) => {
     const tracking = bin as typeof bin & { stale?: boolean };
     return bin.state === "overflow"
@@ -119,6 +123,7 @@ export function normalizeAnalysis(
   return {
     people,
     bins,
+    floorHazards,
     detections,
     issueKinds: [...new Set(detections.map((item) => item.issueType))],
     issueCounts: {

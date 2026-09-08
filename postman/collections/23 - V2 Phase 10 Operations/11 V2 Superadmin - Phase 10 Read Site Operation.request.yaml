@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Superadmin - Phase 10 Read Site Operation
+url: "{{baseUrl}}/api/superadmin/sites/{{v2SiteId}}/operations/{{v2SiteOperationId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{v2SuperadminToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Request succeeds', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.operation.siteId).to.eql(pm.environment.get('v2SiteId')); });
+    language: text/javascript
+order: 11000

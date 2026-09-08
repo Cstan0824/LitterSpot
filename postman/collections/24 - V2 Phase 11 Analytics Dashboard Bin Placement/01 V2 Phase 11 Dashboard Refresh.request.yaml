@@ -1,0 +1,16 @@
+$kind: http-request
+name: V2 Root - Phase 11 Dashboard Refresh
+url: "{{baseUrl}}/api/dashboard/v2/refresh"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Dashboard refresh succeeds', () => pm.response.to.have.status(201));
+      const body = pm.response.json();
+      pm.expect(body.dashboard.siteId).to.eql(pm.environment.get('v2SiteId'));
+    language: text/javascript
+order: 1000

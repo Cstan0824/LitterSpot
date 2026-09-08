@@ -1,0 +1,15 @@
+$kind: http-request
+name: V2 Root - Phase 11 Minute Cleanup
+url: "{{baseUrl}}/api/analytics/v2/minute/cleanup"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Minute cleanup succeeds', () => pm.response.to.have.status(200));
+      pm.expect(pm.response.json().deleted).to.be.a('number');
+    language: text/javascript
+order: 10000

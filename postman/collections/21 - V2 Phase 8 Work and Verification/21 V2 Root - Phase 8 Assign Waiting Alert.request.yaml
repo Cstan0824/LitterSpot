@@ -1,0 +1,23 @@
+$kind: http-request
+name: V2 Root - Phase 8 Assign Waiting Alert
+url: "{{baseUrl}}/api/alerts/{{v2AlertId}}/manual-assignment"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"assignedCleanerId":"{{v2CleanerId}}","idempotencyKey":"postman-v2-alert-assignment-001"}
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('v2AlertId')) throw new Error('Run request 20 after Phase 7 creates a waiting Alert.');
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Alert Work assigned without acceptance step', () => { const work = pm.response.json().workOrder; pm.response.to.have.status(201); pm.expect(work.status).to.eql('assigned'); pm.expect(work.origin).to.eql('alert'); pm.expect(work.managementMode).to.eql('manual'); pm.environment.set('v2WorkOrderId', work.id); pm.environment.set('v2WorkRevision', String(work.revision)); });
+    language: text/javascript
+order: 21000

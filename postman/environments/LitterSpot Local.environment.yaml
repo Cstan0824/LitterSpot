@@ -1,15 +1,17 @@
 name: LitterSpot Local
 values:
+  - key: v2BinPlacementSnapshotAt
+    value: ''
   - key: baseUrl
     value: 'http://127.0.0.1:3000'
-  - key: firebaseWebApiKey
-    secret: true
   - key: supervisorEmail
     value: ''
   - key: supervisorPassword
     value: ''
+  - key: firebaseWebApiKey
+    secret: true
   - key: firebaseIdToken
-    value: ''
+    secret: true
   - key: firebaseRefreshToken
     value: ''
   - key: firebaseTokenExpiresAt
@@ -118,3 +120,77 @@ values:
     value: ''
   - key: flagId
     value: ''
+  - key: v2SuperadminEmail
+    value: superadmin@litterspot.com
+  - key: v2SuperadminPassword
+    secret: true
+  - key: v2SuperadminToken
+    secret: true
+  - key: v2RootEmail
+    value: root@sunway-test.com
+  - key: v2RootPassword
+    secret: true
+  - key: v2RootToken
+    secret: true
+  - key: v2SiteId
+    value: sunway-theme-park
+  - key: v2ActiveMapRevisionId
+    value: ''
+  - key: v2BootstrapMapOnly
+    value: 'false'
+  - key: v2ZoneId
+    value: main-entrance
+  - key: v2RegularSupervisorEmail
+    value: regular-supervisor@sunway-test.com
+  - key: v2RegularSupervisorPassword
+    secret: true
+  - key: v2RegularSupervisorToken
+    secret: true
+  - key: v2RegularSupervisorId
+    value: ''
+  - key: v2CleanerEmail
+    value: cleaner1@sunway-test.com
+  - key: v2CleanerPassword
+    secret: true
+  - key: v2CleanerToken
+    secret: true
+  - key: v2CleanerId
+    value: ''
+  - key: v2CleanerBootstrapOnly
+    value: 'false'
+  - key: v2CleanerCreateIdempotencyKey
+    value: postman-v2-cleaner-bootstrap-001
+  - key: v2CleanerRevision
+    value: ''
+  - key: v2AlertId
+    value: ''
+  - key: v2WorkOrderId
+    value: ''
+  - key: v2WorkRevision
+    value: ''
+  - key: v2VerificationId
+    value: ''
+  - key: v2CompletionEvidenceMediaId
+    value: ''
+  - key: v2ReplacementCleanerId
+    value: ''
+  - key: v2OrchestratorRunId
+    value: ''
+  - key: v2OrchestratorAssignmentAlertId
+    value: ''
+  - key: v2OrchestratorAssignmentCleanerId
+    value: ''
+  - key: v2OrchestratorReviewRunId
+    value: ''
+  - key: v2TestCameraId
+    value: ''
+  - key: v2TestAlertRequestId
+    value: phase9-fake-alert-001
+  - key: v2SiteOperationId
+    value: ''
+  - key: v2BinPlacementZoneId
+    value: ''
+  - key: v2BinPlacementInterventionId
+    value: ''
+  - key: allowSiteDeactivationTest
+    value: 'false'

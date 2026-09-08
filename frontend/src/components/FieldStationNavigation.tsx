@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-type Supervisor = { displayName: string; email: string };
+type Supervisor = { displayName: string; email: string; authority: "root" | "regular" };
 
 const navItems = [
   ["dashboard", "Dashboard", "/", "dashboard"],
@@ -26,25 +26,28 @@ function NavIcon({ name }: { name: string }) {
   return <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3" /><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4" /></svg>;
 }
 
-export function FieldStationNavigation({ activeRoute, supervisor, alertCount = 0, onLogout }: {
+export function FieldStationNavigation({ activeRoute, supervisor, siteName = "Active site", alertCount = 0, onLogout }: {
   activeRoute: string;
   supervisor: Supervisor;
+  siteName?: string;
   alertCount?: number;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const menuRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !accountOpen) return;
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpen(false);
+      setAccountOpen(false);
       menuRef.current?.focus();
     };
     addEventListener("keydown", close);
     return () => removeEventListener("keydown", close);
-  }, [open]);
+  }, [accountOpen, open]);
 
   const navigate = (target: string) => {
     location.hash = target;
@@ -58,12 +61,13 @@ export function FieldStationNavigation({ activeRoute, supervisor, alertCount = 0
       <button ref={menuRef} className="field-nav-menu" type="button" aria-label="Open navigation" aria-controls="field-primary-nav" aria-expanded={open} onClick={() => setOpen(true)}><span /><span /><span /></button>
       <button className="field-nav-logo" type="button" onClick={() => navigate("/")}>LitterSpot</button>
       <nav className="field-primary-nav" id="field-primary-nav" aria-label="Primary navigation">
-        <button className="field-nav-mobile-site" type="button" onClick={() => navigate("/cameras")}><small>Active site</small><strong>Batu Caves</strong></button>
+        <button className="field-nav-mobile-site" type="button" onClick={() => navigate("/site")}><small>Active site</small><strong>{siteName}</strong></button>
         {navItems.map(([id, label, target, icon]) => <button type="button" className={normalizedRoute === id ? "active" : ""} aria-current={normalizedRoute === id ? "page" : undefined} key={id} onClick={() => navigate(target)}><span className="field-nav-icon"><NavIcon name={icon} /></span><span>{label}</span>{id === "alerts" && alertCount > 0 ? <b>{alertCount}</b> : null}</button>)}
       </nav>
-      <button className="field-nav-site" type="button" onClick={() => navigate("/cameras")}><small>Active site</small><strong>Batu Caves</strong></button>
-      <button className="field-nav-user" type="button" title={`Sign out ${supervisor.displayName}`} aria-label={`Sign out ${supervisor.displayName}`} onClick={onLogout}>{initials(supervisor.displayName)}</button>
+      <button className={`field-nav-site ${activeRoute === "site" ? "active" : ""}`} type="button" onClick={() => navigate("/site")}><small>Active site</small><strong>{siteName}</strong></button>
+      <button className="field-nav-user" type="button" title={`Open account controls for ${supervisor.displayName}`} aria-label={`Open account controls for ${supervisor.displayName}`} aria-expanded={accountOpen} onClick={() => setAccountOpen(true)}>{initials(supervisor.displayName)}</button>
     </header>
     <button className={`field-nav-scrim ${open ? "visible" : ""}`} type="button" aria-label="Close navigation" onClick={() => { setOpen(false); menuRef.current?.focus(); }} />
+    {accountOpen && <div className="field-account-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) setAccountOpen(false); }}><section className="field-account-dialog" role="dialog" aria-modal="true" aria-labelledby="field-account-title"><header><div><span>ACCOUNT</span><h2 id="field-account-title">Supervisor account</h2></div><button type="button" onClick={() => setAccountOpen(false)} aria-label="Close account controls"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></header><div className="field-account-person"><i>{initials(supervisor.displayName)}</i><div><strong>{supervisor.displayName}</strong><span>{supervisor.authority === "root" ? "Root Supervisor" : "Regular Supervisor"}</span></div></div><dl><div><dt>Supervisor name</dt><dd>{supervisor.displayName}</dd></div><div><dt>Email</dt><dd>{supervisor.email}</dd></div><div><dt>Authority</dt><dd>{supervisor.authority === "root" ? "Root Supervisor" : "Regular Supervisor"}</dd></div></dl><footer><button type="button" onClick={onLogout}>Sign out</button></footer></section></div>}
   </>;
 }

@@ -1,11 +1,14 @@
 # LitterSpot Firestore data model and Firebase services plan
 
+> This document describes the implemented V1 model. The clarified V2 target is in [`data-model-v2/README.md`](data-model-v2/README.md).
+
 ## 1. Purpose and status
 
 This document defines the proposed Firebase services, Firestore collections, document shapes, query indexes, consistency rules, and local-media relationship for the LitterSpot prototype.
 
 Related documents:
 
+- [database-field-dictionary.md](./database-field-dictionary.md), a source-based field-by-field reference for the implemented backend
 - [requirements-baseline.md](./requirements-baseline.md)
 - [architecture.md](./architecture.md)
 - [backend-build-and-migration-plan.md](./backend-build-and-migration-plan.md)
@@ -1770,7 +1773,7 @@ Firestore; the LLM still makes the final assignment choice.
 - Whether camera assignment is mandatory for every analytics-eligible upload. The current recommendation is yes.
 - Final calibration of the provisional alert magnitude, confidence, temporal,
   and severity rules.
-- Video sampling defaults are 2 seconds, at most 300 frames, 600 seconds, and
+- Video sampling defaults are 1 second, at most 300 frames, 600 seconds, and
   250 MiB; later field testing may tune these configurable limits.
 - Whether detailed person boxes must be retained long-term or only counts/evidence.
 - Retention period for original video, sampled frames, and evidence.

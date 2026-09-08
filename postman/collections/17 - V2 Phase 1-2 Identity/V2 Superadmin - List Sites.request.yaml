@@ -1,0 +1,20 @@
+$kind: http-request
+name: V2 Superadmin - List Sites
+url: "{{baseUrl}}/api/superadmin/sites"
+method: GET
+headers:
+  Authorization: "Bearer {{v2SuperadminToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Sunway Site is available', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+        const site = pm.response.json().sites.find(item => item.id === 'sunway-theme-park');
+        pm.expect(site).to.exist;
+        pm.environment.set('v2SiteId', site.id);
+        if (site.activeMapRevisionId) pm.environment.set('v2ActiveMapRevisionId', site.activeMapRevisionId);
+      }
+    language: text/javascript
+order: 3000

@@ -5,6 +5,7 @@ import { processImageJob, retryImageJob } from "../services/jobProcessingService
 import { enqueueVideoJob, retryVideoJob } from "../services/videoJobProcessingService.js";
 import { env } from "../config/env.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { getProcessingJobResults } from "../services/processingJobResultService.js";
 
 export const processingJobRoutes = Router();
 const processingMutationRateLimit = rateLimit({
@@ -48,6 +49,10 @@ processingJobRoutes.post("/:jobId/retry", processingMutationRateLimit, async (re
     return res.status(202).json({ processingJob: retried.job, enqueued: retried.enqueued });
   }
   return res.json(await retryImageJob(jobId));
+});
+
+processingJobRoutes.get("/:jobId/results", async (req, res) => {
+  return res.json(await getProcessingJobResults(String(req.params.jobId)));
 });
 
 processingJobRoutes.get("/:jobId", async (req, res) => {

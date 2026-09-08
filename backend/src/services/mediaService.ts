@@ -8,6 +8,7 @@ import { detectSupportedImage, validateDeclaredImageType } from "./imageUploadVa
 import { imageUploadRequestFingerprint } from "./imageUploadRequest.js";
 import { inspectMedia, writeMedia } from "./localMediaStorage.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
+import { pinCameraRegistration, rejectOperationalFocusRegion } from "./processingRegistration.js";
 
 type ImageUploadInput = z.infer<typeof imageUploadSchema>;
 type JobStatus = "uploading" | "queued" | "processing" | "completed" | "failed" | "cancelled";
@@ -64,6 +65,7 @@ function serializeJob(snapshot: DocumentSnapshot) {
     siteId: String(data.siteId),
     zoneId: String(data.zoneId),
     cameraId: String(data.cameraId),
+    cameraRegistrationRevision: data.cameraRegistrationRevision == null ? null : Number(data.cameraRegistrationRevision),
     requestedByUid: String(data.requestedByUid),
     requestedAt: serializeTimestamp(data.requestedAt),
     captureStartedAt: serializeTimestamp(data.captureStartedAt),
@@ -162,6 +164,7 @@ export async function getMediaContent(mediaId: string) {
 export async function createImageUpload(file: Express.Multer.File, input: ImageUploadInput, actorUid: string) {
   const detected = detectSupportedImage(file.buffer);
   validateDeclaredImageType(file.mimetype, detected.mimeType);
+  rejectOperationalFocusRegion(input.focusRegion);
 
   const jobId = deterministicJobId(actorUid, input.clientRequestId);
   const jobReference = firestore.collection("processingJobs").doc(jobId);
@@ -221,11 +224,16 @@ export async function createImageUpload(file: Express.Multer.File, input: ImageU
     }
 
     const cameraReference = firestore.collection("cameras").doc(input.cameraId);
-    const cameraSnapshot = await transaction.get(cameraReference);
+    const registrationReference = firestore.collection("cameraRegistrations").doc(input.cameraId);
+    const [cameraSnapshot, registrationSnapshot] = await Promise.all([
+      transaction.get(cameraReference),
+      transaction.get(registrationReference),
+    ]);
     const camera = cameraSnapshot.data();
     if (!cameraSnapshot.exists || camera?.status !== "active") {
       throw new HttpError(400, "Camera does not exist or is inactive.");
     }
+    const cameraRegistration = pinCameraRegistration(input.cameraId, registrationSnapshot.data());
 
     const commonLocation = {
       siteId: String(camera.siteId),
@@ -266,6 +274,8 @@ export async function createImageUpload(file: Express.Multer.File, input: ImageU
       siteId: commonLocation.siteId,
       zoneId: commonLocation.zoneId,
       cameraId: commonLocation.cameraId,
+      cameraRegistrationRevision: cameraRegistration.revision,
+      cameraRegistration,
       requestedByUid: actorUid,
       requestedAt: FieldValue.serverTimestamp(),
       captureStartedAt: capturedAt,
@@ -281,7 +291,7 @@ export async function createImageUpload(file: Express.Multer.File, input: ImageU
         frameIntervalSeconds: null,
         floorConfidence: input.floorConfidence ?? null,
         binLocalizerConfidence: input.binLocalizerConfidence ?? null,
-        focusRegionNormalized: input.focusRegion,
+        focusRegionNormalized: [],
       },
       progress: { plannedFrames: 1, processedFrames: 0, successfulFrames: 0, failedFrames: 0, lastFrameIndex: null },
       summary: { analysisRunCount: 0, detectionCount: 0, flagCount: 0, alertIds: [] },

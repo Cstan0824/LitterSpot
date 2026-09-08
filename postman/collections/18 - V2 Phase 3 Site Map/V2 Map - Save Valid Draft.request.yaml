@@ -1,0 +1,62 @@
+$kind: http-request
+name: V2 Map - Bootstrap Valid Draft
+url: "{{baseUrl}}/api/site-map/draft"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {
+      "baseRevisionId": "{{v2ActiveMapRevisionId}}",
+      "widthMeters": 100,
+      "heightMeters": 100,
+      "gridSizeMeters": 5,
+      "backgroundMediaId": null,
+      "backgroundTransform": null,
+      "zones": [
+        {
+          "zoneId": "main-entrance",
+          "zoneNameSnapshot": "Main Entrance",
+          "polygon": [
+            {"xMeters":5,"yMeters":5},
+            {"xMeters":45,"yMeters":5},
+            {"xMeters":45,"yMeters":45},
+            {"xMeters":5,"yMeters":45}
+          ]
+        },
+        {
+          "zoneId": "food-court",
+          "zoneNameSnapshot": "Food Court",
+          "polygon": [
+            {"xMeters":55,"yMeters":5},
+            {"xMeters":95,"yMeters":5},
+            {"xMeters":95,"yMeters":45},
+            {"xMeters":55,"yMeters":45}
+          ]
+        }
+      ],
+      "cameraPlacements": [],
+      "cleanerStations": []
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (pm.environment.get('v2BootstrapMapOnly') !== 'true') {
+        pm.execution.skipRequest();
+        console.warn('This bootstrap-only request is disabled. It replaces all map geometry, camera placements, and Cleaner stations when published.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Valid two-Zone draft saved', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().draft.validationStatus).to.eql('valid');
+        pm.expect(pm.response.json().zones).to.have.length(2);
+      });
+      if (pm.response.code === 200) pm.environment.set('v2ZoneId', 'main-entrance');
+    language: text/javascript
+order: 2000

@@ -1,0 +1,16 @@
+$kind: http-request
+name: V2 Orchestrator Internal - Get Review Context
+description: Verification must already have a deterministic passed or failed outcome.
+url: "{{baseUrl}}/internal/orchestrator/v2/runs/{{v2OrchestratorReviewRunId}}/review-context?siteId={{v2SiteId}}&workOrderId={{v2WorkOrderId}}"
+method: GET
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Ready deterministic review context returned', () => { pm.response.to.have.status(200); pm.expect(['passed','failed']).to.include(pm.response.json().context.verificationOutcome); });
+    language: text/javascript
+order: 21000

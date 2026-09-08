@@ -25,8 +25,19 @@ const integrationTests = [
   ["src/auth.integration.test.ts", {}],
   ["src/services/firestoreCursorPagination.integration.test.ts", {}],
   ["src/services/imageUpload.integration.test.ts", {}],
-  ["src/cleanerOperations.integration.test.ts", {}],
   ["src/services/mediaRetention.integration.test.ts", {}],
+  ["src/v2Foundation.integration.test.ts", {}],
+  ["src/v2Identity.integration.test.ts", {}],
+  ["src/v2SiteMap.integration.test.ts", {}],
+  ["src/v2Cleaner.integration.test.ts", {}],
+  ["src/v2Camera.integration.test.ts", {}],
+  ["src/v2Monitoring.integration.test.ts", {}],
+  ["src/services/v2MonitoringQuota.integration.test.ts", {}],
+  ["src/v2WorkOrder.integration.test.ts", {}],
+  ["src/v2Orchestrator.integration.test.ts", {}],
+  ["src/v2TestSupport.integration.test.ts", {}],
+  ["src/v2Operations.integration.test.ts", {}],
+  ["src/phase11.integration.test.ts", {}],
 ];
 
 for (const [testFile, environment] of integrationTests) {

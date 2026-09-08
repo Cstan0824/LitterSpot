@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from app.agent import select_cleaner
+from app.agent import select_assignment_pair
 from app.providers import GeminiProvider, OllamaProvider, ProviderChain
 from tools import assign_task, get_alert, list_cleaner_candidates
 
@@ -53,7 +53,26 @@ def main() -> int:
 
         candidate_result["policyVersion"] = "assignment-v1"
         candidate_result["calculatedAt"] = candidate_result.get("simulationTime")
-        selection = select_cleaner(provider_chain(), alert_result, candidate_result)
+        context = {
+            "policyVersion": "assignment-v2",
+            "calculatedAt": candidate_result.get("simulationTime"),
+            "alerts": [{
+                "alertId": arguments.alert_id,
+                "zoneId": alert_result["alert"]["zoneId"],
+                "issueType": alert_result["alert"]["issueType"],
+                "severity": alert_result["alert"].get("severity"),
+            }],
+            "cleaners": [{
+                "cleanerId": candidate["cleanerId"],
+                "availability": candidate["availability"].lower(),
+            } for candidate in candidate_result["candidates"]],
+            "eligiblePairs": [{
+                "alertId": arguments.alert_id,
+                "cleanerId": candidate["cleanerId"],
+                "stationDistanceMeters": candidate["zoneDistanceRank"],
+            } for candidate in candidate_result["candidates"]],
+        }
+        selection = select_assignment_pair(provider_chain(), context)
         assignment = assign_task(arguments.alert_id, selection.cleaner_id)
         if not assignment.get("ok"):
             raise RuntimeError(f"Assignment tool failed: {assignment.get('error')}")

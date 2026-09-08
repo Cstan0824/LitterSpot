@@ -1,0 +1,26 @@
+$kind: http-request
+name: V2 Map - Publish Draft
+url: "{{baseUrl}}/api/site-map/draft/publish"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: '{}'
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (pm.environment.get('v2BootstrapMapOnly') !== 'true') {
+        pm.execution.skipRequest();
+        console.warn('This bootstrap-only request is disabled. Publishing this draft replaces the Active Site Map.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Draft published', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.environment.set('v2ActiveMapRevisionId', pm.response.json().map.activeRevisionId);
+    language: text/javascript
+order: 4000

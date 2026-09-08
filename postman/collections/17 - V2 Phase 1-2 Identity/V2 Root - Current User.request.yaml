@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Root - Current User
+url: "{{baseUrl}}/api/me"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Current user is Root', () => { const body = pm.response.json(); pm.response.to.have.status(200); pm.expect(body.supervisor.authority).to.eql('root'); });
+    language: text/javascript
+order: 5000

@@ -5,12 +5,12 @@ import helmet from "helmet";
 import multer from "multer";
 import { ZodError } from "zod";
 import { authenticateUser } from "./middleware/authenticateUser.js";
-import { requireSupervisor } from "./middleware/requireRole.js";
+import { requireSupervisor, requireSuperadmin } from "./middleware/requireRole.js";
 import { requireCleaner } from "./middleware/requireRole.js";
-import { alertRoutes } from "./routes/alertRoutes.js";
+import { v2AlertRoutes } from "./routes/v2AlertRoutes.js";
 import { cameraRoutes } from "./routes/cameraRoutes.js";
 import { cameraRegistrationRoutes } from "./routes/cameraRegistrationRoutes.js";
-import { cleanerRoutes } from "./routes/cleanerRoutes.js";
+import { v2CleanerRoutes } from "./routes/v2CleanerRoutes.js";
 import { detectionRoutes } from "./routes/detectionRoutes.js";
 import { mediaRoutes } from "./routes/mediaRoutes.js";
 import { processingJobRoutes } from "./routes/processingJobRoutes.js";
@@ -24,14 +24,27 @@ import { dashboardRoutes } from "./routes/dashboardRoutes.js";
 import { analyticsRoutes } from "./routes/analyticsRoutes.js";
 import { systemEventRoutes } from "./routes/systemEventRoutes.js";
 import { cleanerSelfRoutes } from "./routes/cleanerSelfRoutes.js";
-import { workOrderRoutes } from "./routes/workOrderRoutes.js";
 import { checkAiHealth } from "./services/aiServiceClient.js";
 import { HttpError } from "./shared/httpError.js";
 import { env } from "./config/env.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { rateLimit } from "./middleware/rateLimit.js";
+import { isFirestoreQuotaError } from "./shared/firestoreErrors.js";
 import { orchestratorInternalRoutes, orchestratorSupervisorRoutes } from "./routes/orchestratorRoutes.js";
 import { binReplacementRoutes } from "./routes/binReplacementRoutes.js";
+import { superadminRoutes } from "./routes/superadminRoutes.js";
+import { siteMapRoutes } from "./routes/siteMapRoutes.js";
+import { v2CameraRoutes } from "./routes/v2CameraRoutes.js";
+import { v2MonitoringRoutes } from "./routes/v2MonitoringRoutes.js";
+import { v2SupervisorAccountRoutes } from "./routes/v2SupervisorAccountRoutes.js";
+import { v2WorkOrderRoutes } from "./routes/v2WorkOrderRoutes.js";
+import { v2OrchestratorInternalRoutes, v2OrchestratorSupervisorRoutes } from "./routes/v2OrchestratorRoutes.js";
+import { v2TestSupportRoutes } from "./routes/v2TestSupportRoutes.js";
+import { v2OperationsRoutes } from "./routes/v2OperationsRoutes.js";
+import { auditV2Mutation } from "./middleware/auditV2Mutation.js";
+import { phase11AnalyticsRoutes, phase11BinPlacementRoutes, phase11DashboardRoutes } from "./routes/phase11Routes.js";
+import { cameraSceneRoutes } from "./routes/cameraSceneRoutes.js";
+import { cameraLiveRoutes } from "./routes/cameraLiveRoutes.js";
 
 export const app = express();
 
@@ -67,18 +80,32 @@ app.get("/api/health", readiness);
 app.get("/api/health/ready", readiness);
 
 app.use("/api", authenticateUser);
-app.use("/api", rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMinute }));
+const generalLimit = rateLimit({ namespace: "api", maximum: env.generalRateLimitPerMinute });
+const cameraLimit = rateLimit({ namespace: "camera-samples", maximum: 3600 });
+app.use("/api", (req, res, next) => /\/monitoring\/sessions\/[^/]+\/cameras\/[^/]+\/samples$/.test(req.path) ? cameraLimit(req, res, next) : generalLimit(req, res, next));
 
 app.use("/api/me", supervisorRoutes);
+app.use("/api/superadmin", requireSuperadmin, superadminRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
+app.use("/api/operations/v2", v2OperationsRoutes);
+app.use(["/api/dashboard/v2", "/api/analytics/v2", "/api/bin-placement/v2"], auditV2Mutation);
+app.use("/api/dashboard/v2", phase11DashboardRoutes);
+app.use("/api/analytics/v2", phase11AnalyticsRoutes);
+app.use("/api/bin-placement/v2", phase11BinPlacementRoutes);
+app.use(["/api/site-map", "/api/camera-creation", "/api/monitoring", "/api/alerts", "/api/supervisors"], auditV2Mutation);
+app.use("/api/site-map", siteMapRoutes);
+app.use("/api/camera-creation", v2CameraRoutes);
+app.use("/api/monitoring", v2MonitoringRoutes);
+app.use("/api/monitoring/live", cameraLiveRoutes);
+app.use("/api/supervisors", v2SupervisorAccountRoutes);
 app.use("/api/bin-replacement", binReplacementRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
-app.use("/api/alerts", alertRoutes);
+app.use("/api/alerts", v2AlertRoutes);
 app.use("/api/cameras", cameraRegistrationRoutes);
 app.use("/api/cameras", cameraRoutes);
-app.use("/api/cleaners", cleanerRoutes);
+app.use("/api/cleaners", v2CleanerRoutes);
 app.use("/api/detections", detectionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/flags", flagRoutes);
@@ -87,14 +114,24 @@ app.use("/api/media", mediaRoutes);
 app.use("/api/processing-jobs", processingJobRoutes);
 app.use("/api/sites", siteRoutes);
 app.use("/api/system-events", systemEventRoutes);
-app.use("/api/work-orders", workOrderRoutes);
+app.use("/api/work-orders", (req, _res, next) => {
+  if (req.authUser.siteId && req.authUser.role === "supervisor") return v2WorkOrderRoutes(req, _res, next);
+  return next();
+});
+app.use("/api/test-support/v2", v2TestSupportRoutes);
+app.use("/api/development/cameras", cameraSceneRoutes);
 app.use("/api/zones", zoneRoutes);
+app.use("/api/orchestrator/v2", v2OrchestratorSupervisorRoutes);
 app.use("/api/orchestrator", orchestratorSupervisorRoutes);
+app.use("/internal/orchestrator/v2", v2OrchestratorInternalRoutes);
 app.use("/internal/orchestrator", orchestratorInternalRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found.", requestId: req.requestId }));
 
 app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
+  if (isFirestoreQuotaError(error)) {
+    return res.status(503).json({ error: "Cloud database quota is temporarily unavailable. Try again after the daily quota resets.", code: "firestore_quota_exceeded", requestId: req.requestId });
+  }
   if (error instanceof ZodError) {
     return res.status(400).json({ error: "Invalid request.", details: error.flatten(), requestId: req.requestId });
   }

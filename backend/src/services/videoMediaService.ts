@@ -16,6 +16,7 @@ import { getMedia, getProcessingJob } from "./mediaService.js";
 import { plannedVideoFrames, validateVideoUploadFile } from "./videoUploadValidation.js";
 import { VIDEO_BIN_TRACKING_VERSION } from "./videoBinTracking.js";
 import { videoUploadRequestFingerprint } from "./videoUploadRequest.js";
+import { assertRegistrationFrameDimensions, pinCameraRegistration, rejectOperationalFocusRegion } from "./processingRegistration.js";
 
 type VideoUploadInput = z.infer<typeof videoUploadSchema>;
 
@@ -57,6 +58,7 @@ async function createVideoUploadOwned(
   actorUid: string,
   acceptForRecovery: () => void,
 ) {
+  rejectOperationalFocusRegion(input.focusRegion);
   const probe = await validateVideoUploadFile(file);
   const [sha256] = await Promise.all([sha256File(file.path)]);
   const jobId = deterministicJobId(actorUid, input.clientRequestId);
@@ -113,11 +115,17 @@ async function createVideoUploadOwned(
     }
 
     const cameraReference = firestore.collection("cameras").doc(input.cameraId);
-    const cameraSnapshot = await transaction.get(cameraReference);
+    const registrationReference = firestore.collection("cameraRegistrations").doc(input.cameraId);
+    const [cameraSnapshot, registrationSnapshot] = await Promise.all([
+      transaction.get(cameraReference),
+      transaction.get(registrationReference),
+    ]);
     const camera = cameraSnapshot.data();
     if (!cameraSnapshot.exists || camera?.status !== "active") {
       throw new HttpError(400, "Camera does not exist or is inactive.");
     }
+    const cameraRegistration = pinCameraRegistration(input.cameraId, registrationSnapshot.data());
+    assertRegistrationFrameDimensions(cameraRegistration, { width: probe.width, height: probe.height });
     const commonLocation = {
       siteId: String(camera.siteId),
       siteNameSnapshot: String(camera.siteNameSnapshot),
@@ -159,6 +167,8 @@ async function createVideoUploadOwned(
       siteId: commonLocation.siteId,
       zoneId: commonLocation.zoneId,
       cameraId: commonLocation.cameraId,
+      cameraRegistrationRevision: cameraRegistration.revision,
+      cameraRegistration,
       requestedByUid: actorUid,
       requestedAt: FieldValue.serverTimestamp(),
       captureStartedAt: capturedAt,
@@ -180,7 +190,7 @@ async function createVideoUploadOwned(
         frameIntervalSeconds,
         floorConfidence: input.floorConfidence ?? null,
         binLocalizerConfidence: input.binLocalizerConfidence ?? null,
-        focusRegionNormalized: input.focusRegion,
+        focusRegionNormalized: [],
       },
       progress: { plannedFrames, processedFrames: 0, successfulFrames: 0, failedFrames: 0, lastFrameIndex: null },
       summary: { analysisRunCount: 0, detectionCount: 0, flagCount: 0, alertIds: [] },

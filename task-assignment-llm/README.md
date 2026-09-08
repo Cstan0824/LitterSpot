@@ -1,21 +1,36 @@
 # Task Assignment LLM
 
-This is an isolated cleaner-assignment prototype. It does not import, start,
-or call the LitterSpot backend. It does not use SQLite, Firebase, Firestore,
-Supabase, or any cloud database.
+This directory contains the isolated assignment prototype plus the structured
+provider adapter used by the V2 Node backend. Python never connects to
+Firebase, Firestore, SQLite, Supabase, or another application database.
 
 The only external connection is the selected model provider:
 
 - Ollama on `127.0.0.1:11434` by default.
 - Gemini only when `GEMINI_API_KEY` is explicitly configured.
 
-## Current data flow
+## Current V2 integration flow
+
+```text
+Node reads and validates V2 Firestore state
+    -> Node calculates Alert priority, Cleaner availability and map distances
+    -> Node sends bounded JSON to scripts/decide_assignment.py
+    -> Ollama or Gemini selects one Alert and Cleaner pair
+    -> Node validates both IDs again
+    -> Node atomically creates the Work Order
+```
+
+`scripts/decide_assignment.py` reads JSON from stdin and writes one structured
+JSON decision to stdout. It receives no Firebase credential and owns no
+business-state mutation.
+
+## Isolated simulation flow
 
 ```text
 database/assignment_simulation.json
     -> get_alert
     -> list_cleaner_candidates
-    -> Ollama or Gemini selects one eligible Cleaner
+    -> Ollama or Gemini selects the simulated Alert and one eligible Cleaner
     -> assign_task validates the Cleaner
     -> temporary simulation result
 ```
@@ -59,7 +74,9 @@ assignment tool validates that ID again before saving the temporary result.
 
 No LangChain, LangGraph, RAG, or conversation memory is used.
 
-## Future database migration proposal (not implemented)
+## Historical database proposal
+
+> The V2 backend integration supersedes this early proposal. Keep it only as a record of the teammate prototype's original assumptions.
 
 The current prototype remains JSON-only. The structures below describe the
 minimum database changes proposed for a later integration stage. They are not
@@ -226,6 +243,7 @@ Assignment model smoke test passed.
 Provider: ollama
 Model: qwen3.5:4b
 Selected cleaner: CLN-SAME-ZONE
+Selected alert: SMOKE-ALERT-001
 ```
 
 ## Test procedure 3: isolated end-to-end demo

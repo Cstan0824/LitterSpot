@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-08T11:45:00+08:00",
+  "title": "Design System: LitterSpot",
+  "extensions": {
+    "colorMeta": {
+      "canopy-navy": { "role": "primary", "displayName": "Canopy Navy", "canonical": "#091c31", "tonalRamp": ["#03101d", "#091c31", "#17344e", "#35556e", "#637d91", "#96a9b8", "#c9d4dc", "#f2f5f7"] },
+      "coral-action": { "role": "secondary", "displayName": "Coral Action", "canonical": "#f05e4f", "tonalRamp": ["#3c0e09", "#702018", "#a83a30", "#d94f42", "#f47a6f", "#faa69f", "#fdd0cc", "#fff1ef"] },
+      "jade-signal": { "role": "tertiary", "displayName": "Jade Signal", "canonical": "#31b7a1", "tonalRamp": ["#062b25", "#0d5146", "#167665", "#249b86", "#48c5af", "#7de3d2", "#bcefe6", "#eaf8f5"] },
+      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#ffffff", "tonalRamp": ["#12243d", "#32465d", "#5b6e80", "#8796a3", "#b9c5ce", "#d8e0e6", "#f2f5f7", "#ffffff"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Field Display", "purpose": "Page titles, register headings, and major values." },
+      "body": { "displayName": "Field Text", "purpose": "Controls, explanations, and form content." },
+      "label": { "displayName": "Field Mono", "purpose": "Status, IDs, timestamps, revisions, and measurements." }
+    },
+    "shadows": [
+      { "name": "dialog", "value": "0 24px 70px rgba(5, 18, 31, 0.3)", "purpose": "Modal dialogs above the protected-action scrim only." }
+    ],
+    "motion": [
+      { "name": "field-ease", "value": "cubic-bezier(.22, 1, .36, 1)", "purpose": "Existing LitterSpot navigation and state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "compact-workbench", "value": "900px" },
+      { "name": "mobile-navigation", "value": "650px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one creation or attention action on a working page.",
+      "html": "<button class=\"ds-primary\">CREATE SITE</button>",
+      "css": ".ds-primary { min-height:46px; padding:0 19px; border:1px solid #f05e4f; border-radius:0; background:#f05e4f; color:#12243d; font:800 13px 'Field Text',sans-serif; cursor:pointer; } .ds-primary:hover { background:#f47a6f; } .ds-primary:focus-visible { outline:3px solid #7de3d2; outline-offset:3px; }"
+    },
+    {
+      "name": "Secondary Action",
+      "kind": "button",
+      "description": "Inspection and protected actions at rest.",
+      "html": "<button class=\"ds-secondary\">OPEN SITE</button>",
+      "css": ".ds-secondary { min-height:46px; padding:0 19px; border:1px solid #173b5f; border-radius:0; background:#fff; color:#173b5f; font:800 13px 'Field Text',sans-serif; cursor:pointer; } .ds-secondary:hover { background:#f2f5f7; } .ds-secondary:focus-visible { outline:3px solid #7de3d2; outline-offset:3px; }"
+    },
+    {
+      "name": "Operational Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A square labeled field for identity, dimensions, or reasons.",
+      "html": "<label class=\"ds-field\">SITE NAME<input placeholder=\"Sunway Theme Park\"></label>",
+      "css": ".ds-field { display:grid; gap:7px; color:#455e73; font:700 10px 'Field Mono',monospace; letter-spacing:.05em; } .ds-field input { height:45px; padding:0 12px; border:1px solid #aebfcb; border-radius:0; background:#fff; color:#12243d; font:400 13px 'Field Text',sans-serif; } .ds-field input:focus-visible { outline:3px solid #7de3d2; outline-offset:2px; }"
+    },
+    {
+      "name": "Active Status",
+      "kind": "chip",
+      "description": "Literal active or enabled state.",
+      "html": "<span class=\"ds-active\">ACTIVE</span>",
+      "css": ".ds-active { display:inline-block; padding:5px 8px; border:1px solid #79b929; border-radius:1px; background:#f3fae9; color:#4b7f0d; font:700 10px 'Field Mono',monospace; letter-spacing:.08em; }"
+    },
+    {
+      "name": "Register Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "A flat ruled section inside an operational workbench.",
+      "html": "<section class=\"ds-register\"><h2>SITE REGISTER</h2><p>Status and ownership values align in rows.</p></section>",
+      "css": ".ds-register { padding:22px; border:1px solid #b9c9d5; border-radius:0; background:#fff; color:#12243d; } .ds-register h2 { margin:0 0 14px; padding-bottom:14px; border-bottom:1px solid #d4dee5; font:900 25px 'Field Display',sans-serif; } .ds-register p { margin:0; color:#52697c; font:400 13px/1.5 'Field Text',sans-serif; }"
+    },
+    {
+      "name": "Global Navigation",
+      "kind": "nav",
+      "description": "Dark Site or platform navigation with a ruled active route.",
+      "html": "<nav class=\"ds-nav\"><strong>LitterSpot</strong><button class=\"active\">SITES</button><button>AUDIT HISTORY</button></nav>",
+      "css": ".ds-nav { display:flex; min-height:72px; align-items:center; gap:30px; padding:0 24px; background:#091c31; color:#fff; } .ds-nav strong { margin-right:auto; font:900 24px 'Field Display',sans-serif; } .ds-nav button { align-self:stretch; border:0; border-bottom:3px solid transparent; background:transparent; color:#aebdca; font:800 13px 'Field Text',sans-serif; } .ds-nav button.active { border-bottom-color:#2f72e8; color:#fff; } .ds-nav button:focus-visible { outline:3px solid #7de3d2; outline-offset:-4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field Operations Register",
+    "overview": "LitterSpot looks like an operational register laid over a live site map. Dense records, exact boundaries, and explicit states matter more than decorative depth. Melissa's Supervisor and Cleaner interfaces remain the visual authority.",
+    "keyCharacteristics": ["Flat, bordered working surfaces.", "Condensed display headings paired with plain body copy.", "Monospaced labels only for status, measurements, IDs, and compact metadata.", "Color communicates action or state, never decoration."],
+    "rules": [
+      { "name": "The One Coral Action Rule", "body": "Coral belongs to the single action that needs immediate attention. Healthy recovery controls remain secondary.", "section": "colors" },
+      { "name": "The State Is Literal Rule", "body": "Do not assign alert, health, or authority meaning to decorative color.", "section": "colors" },
+      { "name": "The Measurement Font Rule", "body": "Use mono for IDs, status, timestamps, coordinates, and measurements. Use Field Text for sentences and action labels.", "section": "typography" },
+      { "name": "The Ruled Surface Rule", "body": "Prefer a border or a tonal shift for resting hierarchy. Do not add shadows to ordinary cards, ledgers, or form sections.", "section": "elevation" }
+    ],
+    "dos": ["Do make Site, Camera, Alert, Work, and account state visible before offering an action.", "Do use full-row targets for dense operational lists.", "Do reserve the strongest color for the action that actually needs attention.", "Do keep dialogs keyboard-contained and restore focus to their trigger."],
+    "donts": ["Don't build pages from disconnected same-size metric cards.", "Don't use rounded soft-shadow containers in the operational product.", "Don't color Zones or records in ways that imply untrue alert state.", "Don't shrink operational labels below 9px or use low-contrast gray on paper."]
+  }
+}

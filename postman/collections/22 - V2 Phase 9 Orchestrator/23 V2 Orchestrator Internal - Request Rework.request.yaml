@@ -1,0 +1,21 @@
+$kind: http-request
+name: V2 Orchestrator Internal - Request Rework
+description: Alternative to request 22. Send only when request 21 returns verificationOutcome failed.
+url: "{{baseUrl}}/internal/orchestrator/v2/runs/{{v2OrchestratorReviewRunId}}/request-rework"
+method: POST
+headers:
+  X-Orchestrator-Token: "{{orchestratorInternalToken}}"
+  X-Orchestrator-Worker-ID: "{{orchestratorWorkerId}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"siteId":"{{v2SiteId}}","workOrderId":"{{v2WorkOrderId}}"}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Failed Verification returns Work for rework', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().workOrder.status).to.eql('in_progress'); });
+    language: text/javascript
+order: 23000

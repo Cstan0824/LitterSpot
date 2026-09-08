@@ -1,0 +1,38 @@
+[
+  {
+    "name": "crossing polygons",
+    "expected": "edges_cross",
+    "left": [{ "xMeters": 0, "yMeters": 4 }, { "xMeters": 10, "yMeters": 4 }, { "xMeters": 10, "yMeters": 6 }, { "xMeters": 0, "yMeters": 6 }],
+    "right": [{ "xMeters": 4, "yMeters": 0 }, { "xMeters": 6, "yMeters": 0 }, { "xMeters": 6, "yMeters": 10 }, { "xMeters": 4, "yMeters": 10 }]
+  },
+  {
+    "name": "shared edge",
+    "expected": "shared_edge",
+    "left": [{ "xMeters": 0, "yMeters": 0 }, { "xMeters": 10, "yMeters": 0 }, { "xMeters": 10, "yMeters": 10 }, { "xMeters": 0, "yMeters": 10 }],
+    "right": [{ "xMeters": 10, "yMeters": 2 }, { "xMeters": 18, "yMeters": 2 }, { "xMeters": 18, "yMeters": 8 }, { "xMeters": 10, "yMeters": 8 }]
+  },
+  {
+    "name": "shared vertex",
+    "expected": "boundary_touch",
+    "left": [{ "xMeters": 0, "yMeters": 0 }, { "xMeters": 10, "yMeters": 0 }, { "xMeters": 10, "yMeters": 10 }, { "xMeters": 0, "yMeters": 10 }],
+    "right": [{ "xMeters": 10, "yMeters": 10 }, { "xMeters": 18, "yMeters": 12 }, { "xMeters": 12, "yMeters": 18 }]
+  },
+  {
+    "name": "single point on edge",
+    "expected": "boundary_touch",
+    "left": [{ "xMeters": 0, "yMeters": 0 }, { "xMeters": 10, "yMeters": 0 }, { "xMeters": 10, "yMeters": 10 }, { "xMeters": 0, "yMeters": 10 }],
+    "right": [{ "xMeters": 10, "yMeters": 5 }, { "xMeters": 16, "yMeters": 2 }, { "xMeters": 16, "yMeters": 8 }]
+  },
+  {
+    "name": "containment",
+    "expected": "containment",
+    "left": [{ "xMeters": 0, "yMeters": 0 }, { "xMeters": 20, "yMeters": 0 }, { "xMeters": 20, "yMeters": 20 }, { "xMeters": 0, "yMeters": 20 }],
+    "right": [{ "xMeters": 5, "yMeters": 5 }, { "xMeters": 10, "yMeters": 5 }, { "xMeters": 10, "yMeters": 10 }, { "xMeters": 5, "yMeters": 10 }]
+  },
+  {
+    "name": "small positive gap",
+    "expected": null,
+    "left": [{ "xMeters": 0, "yMeters": 0 }, { "xMeters": 10, "yMeters": 0 }, { "xMeters": 10, "yMeters": 10 }, { "xMeters": 0, "yMeters": 10 }],
+    "right": [{ "xMeters": 10.001, "yMeters": 0 }, { "xMeters": 20, "yMeters": 0 }, { "xMeters": 20, "yMeters": 10 }, { "xMeters": 10.001, "yMeters": 10 }]
+  }
+]
