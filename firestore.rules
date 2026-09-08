@@ -2,6 +2,29 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function activeAccount() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/userAccounts/$(request.auth.uid))
+        && get(/databases/$(database)/documents/userAccounts/$(request.auth.uid)).data.status == "active";
+    }
+
+    function activeSite(siteId) {
+      return exists(/databases/$(database)/documents/sites/$(siteId))
+        && get(/databases/$(database)/documents/sites/$(siteId)).data.status == "active";
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if activeAccount()
+        && resource.data.recipientUid == request.auth.uid
+        && activeSite(resource.data.siteId)
+        && get(/databases/$(database)/documents/userAccounts/$(request.auth.uid)).data.siteId == resource.data.siteId;
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

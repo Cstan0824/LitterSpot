@@ -163,6 +163,9 @@ venv.bak/
 # Firebase Admin service-account keys
 *firebase-adminsdk*.json
 
+# Development-only Orchestrator provider output
+data/orchestrator-debug/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -306,6 +309,7 @@ backend/node_modules/
 backend/dist/
 node_modules/
 .local/
+config/firebase-web.dev.json
 data/*.sqlite3
 data/media-store/
 data/heldout-evaluation/

@@ -1,0 +1,4 @@
+fixtures/emulator/**/*.mp4 binary
+fixtures/emulator/**/*.png binary
+fixtures/emulator/**/*.jpg binary
+fixtures/emulator/firebase-emulator-data/firestore_export/** binary

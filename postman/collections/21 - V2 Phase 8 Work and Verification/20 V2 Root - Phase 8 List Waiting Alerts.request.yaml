@@ -1,0 +1,16 @@
+$kind: http-request
+name: V2 Root - Phase 8 List Waiting Alerts
+description: Optional Alert-driven workflow. Run after Phase 7 monitoring creates a waiting Alert.
+url: "{{baseUrl}}/api/alerts"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Alert list returned', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) { const alert = pm.response.json().alerts.find(item => item.status === 'waiting_for_cleaner'); if (alert) pm.environment.set('v2AlertId', alert.id); }
+    language: text/javascript
+order: 20000

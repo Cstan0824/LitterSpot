@@ -1,0 +1,28 @@
+$kind: http-request
+name: V2 Root - Phase 8 Create Coordinate Work
+description: Creates already-assigned manual Work at a coordinate inside zone-main. Change the idempotency key if you intentionally create another Work.
+url: "{{baseUrl}}/api/work-orders/manual"
+method: POST
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {
+      "title": "Postman coordinate cleaning test",
+      "instructions": "Clean the marked area and upload one completion photo.",
+      "severity": "warning",
+      "assignedCleanerId": "{{v2CleanerId}}",
+      "target": {"type":"coordinate","point":{"xMeters":10,"yMeters":10}},
+      "idempotencyKey": "postman-v2-coordinate-work-001"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Coordinate Work created', () => pm.expect([200, 201]).to.include(pm.response.code));
+      if ([200, 201].includes(pm.response.code)) { const work = pm.response.json().workOrder; pm.expect(work.status).to.eql('assigned'); pm.environment.set('v2WorkOrderId', work.id); pm.environment.set('v2WorkRevision', String(work.revision)); }
+    language: text/javascript
+order: 3000

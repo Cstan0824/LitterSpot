@@ -19,5 +19,10 @@ const backendTarget = process.env.VITE_BACKEND_PROXY_TARGET ?? `http://127.0.0.1
 
 export default defineConfig({
   plugins: [react()],
-  server: { proxy: { "/api": backendTarget } },
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: false,
+    proxy: { "/api": backendTarget },
+  },
 });

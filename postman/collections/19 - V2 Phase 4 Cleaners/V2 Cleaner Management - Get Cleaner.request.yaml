@@ -1,0 +1,14 @@
+$kind: http-request
+name: V2 Cleaner Management - Get Cleaner
+url: "{{baseUrl}}/api/cleaners/{{v2CleanerId}}"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('V2 Cleaner returned without legacy assignment fields', () => { const cleaner = pm.response.json().cleaner; pm.response.to.have.status(200); pm.expect(cleaner).not.to.have.property('assignedZoneId'); pm.expect(cleaner).not.to.have.property('capabilities'); pm.environment.set('v2CleanerRevision', String(cleaner.revision)); });
+    language: text/javascript
+order: 2000

@@ -1,0 +1,18 @@
+$kind: http-request
+name: V2 Root - Phase 11 Dashboard Read
+url: "{{baseUrl}}/api/dashboard/v2"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Dashboard read succeeds', () => pm.response.to.have.status(200));
+      const dashboard = pm.response.json().dashboard;
+      pm.expect(dashboard.counts).to.be.an('object');
+      pm.expect(dashboard.topAlerts).to.be.an('array');
+      pm.expect(dashboard.busyZones).to.be.an('array');
+    language: text/javascript
+order: 2000

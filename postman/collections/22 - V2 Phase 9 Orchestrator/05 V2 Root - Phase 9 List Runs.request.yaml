@@ -1,0 +1,16 @@
+$kind: http-request
+name: V2 Root - Phase 9 List Runs
+url: "{{baseUrl}}/api/orchestrator/v2/runs?limit=50"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('V2 Runs can be listed', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().runs).to.be.an('array'); });
+      const first = pm.response.code === 200 ? pm.response.json().runs[0] : null;
+      if (first) pm.environment.set('v2OrchestratorRunId', first.id);
+    language: text/javascript
+order: 5000

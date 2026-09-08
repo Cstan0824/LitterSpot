@@ -1,6 +1,6 @@
 # LitterSpot Node API reference
 
-Last updated: 2026-08-25
+Last updated: 2026-08-30
 
 This document is the integration contract for the public Node/Express API. The
 React application and external API clients must call Node at `/api`; they must
@@ -529,7 +529,7 @@ Multipart fields:
 | `clientRequestId` | Yes | 8–128 safe characters; idempotency key scoped to the Supervisor |
 | `isTest` | No | Defaults to `true`; `false` makes every successful frame analytics-eligible |
 | `capturedAt` | No | ISO 8601 timestamp with offset for the start of capture; defaults to upload time |
-| `frameIntervalSeconds` | No | Sampling interval from `1`–`10`; defaults to `2` |
+| `frameIntervalSeconds` | No | Sampling interval from `1`–`10`; defaults to `1` |
 | `floorConfidence` | No | `0.01`–`0.99`; defaults to the frame-inference value |
 | `binLocalizerConfidence` | No | `0.01`–`0.99`; defaults to the frame-inference value |
 | `focusRegion` | No | JSON-encoded normalized floor polygon with at least three points |
@@ -542,7 +542,7 @@ a valid video stream, duration, and dimensions. `ffmpeg` and `ffprobe` must be o
 PATH, or `FFMPEG_PATH` and `FFPROBE_PATH` must point to the executables.
 
 The default limits are configurable with `VIDEO_MAX_BYTES` (250 MiB),
-`VIDEO_MAX_DURATION_SECONDS` (600), `VIDEO_FRAME_INTERVAL_SECONDS` (2), and
+`VIDEO_MAX_DURATION_SECONDS` (600), `VIDEO_FRAME_INTERVAL_SECONDS` (1), and
 `VIDEO_MAX_FRAMES` (300). The number of planned frames is
 `min(maximumFrames, ceil(duration / interval))`, with at least one frame.
 
@@ -561,6 +561,7 @@ different video file or Camera returns `409`.
 | `GET` | `/api/media/{mediaId}/content` | Authenticated media bytes; marks missing files in Firestore and returns `410` |
 | `GET` | `/api/processing-jobs?status=all&limit=25` | List jobs; status may be `uploading`, `queued`, `processing`, `completed`, `failed`, or `cancelled` |
 | `GET` | `/api/processing-jobs/{jobId}` | Get one job and progress/summary/error state |
+| `GET` | `/api/processing-jobs/{jobId}/results` | Get the job, source media, pinned camera registration, and ordered image/video frame results in one frontend read model |
 | `POST` | `/api/processing-jobs/{jobId}/process` | Process an image synchronously, or enqueue a video and return `202` |
 | `POST` | `/api/processing-jobs/{jobId}/retry` | Retry a failed image synchronously, or enqueue a failed video and return `202`; every other state returns `409` |
 | `GET` | `/api/analysis-runs?jobId={jobId}&cameraId={cameraId}&limit=25&cursor={cursor}` | List analysis runs newest first, with at most one supplied filter and opaque cursor continuation |
@@ -652,9 +653,10 @@ not a second job. Poll `GET /api/processing-jobs/{videoJobId}` until the status
 is `completed` or `failed`. A completed job may still report some failed frames
 when at least one frame succeeded. The `summary` accumulates analysis-run,
 detection, and grouped-flag counts plus distinct alert IDs across successful frames.
-Use `GET /api/analysis-runs?jobId={videoJobId}` to retrieve each successful
-frame run and its `frameMediaId`/`videoOffsetSeconds`; use the existing detection
-and issue-observation APIs for details.
+Use `GET /api/processing-jobs/{videoJobId}/results` to retrieve the source media,
+pinned registration revision, and every successful frame ordered by
+`videoOffsetSeconds`. The lower-level analysis-run, detection, and
+issue-observation APIs remain available for audit and workflow details.
 
 Node processes video frames sequentially in an in-process concurrency-one
 worker. Each frame is extracted as a bounded JPEG with ffmpeg, inferred by the
@@ -686,6 +688,41 @@ confirmation buffers, create flags or alerts, or make them analytics-eligible.
 Operational video requires explicit `isTest=false` at upload time.
 
 ### Persisted analysis results
+
+New operational image and video jobs require an active camera with a published
+`ready` registration. Job creation copies that registration and revision onto
+the job. Processing therefore cannot switch geometry if a Supervisor publishes
+a newer camera registration while media is queued. Client-supplied operational
+`focusRegion` values are rejected; the published walkable-floor polygon is the
+only floor contract used by registered processing.
+
+Every new analysis run records `cameraRegistrationRevision`,
+`inferenceContractVersion`, `walkableFloorPolygonNormalized`, and normalized
+`floorHazards` alongside its people and bin observations. Registered video can
+create an overflow detection only after the per-bin temporal confirmation gate.
+A registered still image keeps its raw overflow state in the analysis run but
+does not create a `bin_overflow` detection from that single frame.
+
+`GET /api/processing-jobs/{jobId}/results` is the preferred frontend contract:
+
+```json
+{
+  "processingJob": { "id": "job-id", "status": "completed", "cameraRegistrationRevision": 2 },
+  "sourceMedia": { "id": "media-id", "contentUrl": "/api/media/media-id/content" },
+  "registration": { "cameraId": "camera-id", "revision": 2, "walkableFloorPolygon": [], "bins": [] },
+  "frames": [
+    {
+      "analysisRunId": "run-id",
+      "frameIndex": 0,
+      "videoOffsetSeconds": 0,
+      "people": [],
+      "bins": [],
+      "floorHazards": [],
+      "detections": []
+    }
+  ]
+}
+```
 
 For images, the analysis-run ID equals the job ID. Detection IDs are deterministic,
 so retries cannot create duplicate logical results. People count and person
@@ -1458,7 +1495,9 @@ folder and must be sent child-first only after the hierarchy has been tested.
 For the two model-test adapter requests, select a local image in Postman's file
 picker; collection files intentionally contain no machine-specific image paths.
 
-## 15.1 Orchestrator foundation
+## 15.1 Historical V1 Orchestrator foundation
+
+> These routes remain for V1 compatibility. New V2 work must use section 15.2.
 
 Phase 12 adds a Node-owned orchestration boundary. Alert creation writes one
 deterministic `orchestratorRuns/{runId}` record and one matching
@@ -1509,7 +1548,214 @@ and `postman/collections/16 - Review and rework foundation`. Set
 `orchestratorInternalToken` in the local environment before running private
 requests.
 
+## 15.2 V2 Orchestrator assignment and review
+
+The V2 LLM selects one Alert and Cleaner pair from a bounded Node-validated context. Node calculates priority, eligibility, Station Point distance and fresh Recent Work distance. Python never reads Firestore.
+
+Supervisor routes:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/orchestrator/v2/config` | Read configuration and health timestamps |
+| `POST` | `/api/orchestrator/v2/status` | Pause or resume with `{ "status": "running" | "paused", "reason": null }` |
+| `GET` | `/api/orchestrator/v2/runs?limit=50` | List Site-scoped V2 Runs. Each Run includes display-safe `references` for its Alert, Cleaner, and Work when known. |
+| `GET` | `/api/orchestrator/v2/runs/{runId}` | Read Run, display-safe references, provider attempts, and Node tool actions. |
+| `POST` | `/api/orchestrator/v2/assignment-cycle` | Run one real provider-backed cycle |
+
+Private routes require `X-Orchestrator-Token` and `X-Orchestrator-Worker-ID`:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/internal/orchestrator/v2/assignment-runs` | Create a leased assignment Run |
+| `GET` | `/internal/orchestrator/v2/runs/{runId}/assignment-context?siteId={siteId}` | Return up to 10 waiting Alerts, available Cleaners and eligible pairs |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/assign-cleaner` | Validate and commit the selected pair |
+| `POST` | `/internal/orchestrator/v2/review-runs` | Create a leased deterministic review Run |
+| `GET` | `/internal/orchestrator/v2/runs/{runId}/review-context?siteId={siteId}&workOrderId={workOrderId}` | Read ready Verification outcome |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/resolve-verified-work` | Apply only a passed outcome |
+| `POST` | `/internal/orchestrator/v2/runs/{runId}/request-rework` | Apply only a failed outcome |
+
+Assignment decision body:
+
+```json
+{
+  "siteId": "sunway-theme-park",
+  "alertId": "alert-id-from-context",
+  "cleanerId": "cleaner-id-from-context",
+  "rationaleSummary": "Short Supervisor-visible explanation."
+}
+```
+
+The pair must appear in the current context and still pass the Work Order transaction. A stale selection returns `409`; it never bypasses Cleaner availability or Alert state.
+
+The first assignment-context response is fixed to that Run and hashed. Re-reading it returns the same snapshot. Assignment and review commands are exactly replayable after completion when the body is unchanged; changed replay returns `409`. Only one assignment or review Run can be active for a Site.
+
+Camera Verification is automatic but deterministic. Fresh ordered samples move the Verification to `ready` and enqueue `review_work`. The worker resolves passed Work, returns failed Work to the same Cleaner, and leaves inconclusive Work for Supervisor review. Pausing the Orchestrator blocks review mutation as well as assignment.
+
 ## 16. Future frontend integration rule
+
+### V2 Phase 11 APIs
+
+All routes require an active Site Supervisor and use the authenticated Site.
+
+| Method | Route | Response |
+| --- | --- | --- |
+| GET | `/api/dashboard/v2` | `{ dashboard }`, one-minute cache |
+| POST | `/api/dashboard/v2/refresh` | `201 { dashboard }` |
+| GET | `/api/analytics/v2/daily?from=YYYY-MM-DD&to=YYYY-MM-DD` | `{ summaries }` |
+| POST | `/api/analytics/v2/daily/rebuild` | `{ summaries }`; supply `localDate` or array `dates`, never both |
+| POST | `/api/analytics/v2/minute/cleanup` | `{ deleted }`; expired minutes after daily preservation |
+| GET | `/api/bin-placement/v2/recommendations?days=30` | `{ snapshot }`; cheap cached read, refreshing when missing, expired, or the requested window changes |
+| POST | `/api/bin-placement/v2/recommendations/refresh` | `201 { snapshot }`; body `{ "days": 30 }` |
+| POST | `/api/bin-placement/v2/zones/:zoneId/implement` | `201 { intervention }` |
+| GET | `/api/bin-placement/v2/interventions` | `{ interventions }`, newest first |
+| GET | `/api/bin-placement/v2/interventions/:id/comparison?days=7` | `{ comparison }`, selected Zone only |
+
+Ranges accept integer days from 2 to 3660, without fixed presets. Recommendations use completed local days. Fewer than two observed days produces `insufficient_data` and null score/rank. Enough observed days but fewer than requested produces `partial_data`.
+
+Implementation body:
+
+```json
+{"snapshotCalculatedAt":"2026-08-31T02:00:00.000Z","note":"Optional installation note"}
+```
+
+Use the reviewed snapshot's timestamp. Stale snapshots, insufficient data and active exclusion return `409`. Identical implementation replay returns the existing Intervention. Exclusion spans two complete local calendar days, not 48 hours from a midday action.
+
+Comparison sides include `requestedStart`, `requestedEnd`, `availableDays`, `partialDays`, `partial`, `missingDates` and `series`. Series rows contain local date, exact bounded period, `cleaningFrequency`, `binOverflowFrequency` and coverage details. Boundary-day events are split at the Intervention timestamp; missing days are not zero-filled. `availableDays` can be fractional for partial days.
+
+See [the Phase 11 brief](phase-11-completed-brief.md) for Postman and index deployment instructions.
+
+The automatic worker finalizes only the previous Site-local day. Use the explicit daily rebuild endpoint for older repair dates. An array rebuild shares one Alert/Work history read across the batch. Firestore quota exhaustion returns `503` with `code: "firestore_quota_exceeded"`.
+
+### V2 Phase 10 platform APIs
+
+| Method | Route | Access and response |
+| --- | --- | --- |
+| GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, backlog counts, recent control history, 20 recent Runs, and safe events |
+| GET | `/api/operations/v2/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/notifications?limit=50` | V2 Cleaner's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/map` | V2 Cleaner's active-map projection; `{ map }` containing dimensions, Zone polygons, and only that Cleaner's Station Point |
+| GET | `/api/operations/v2/audit-events` | Root's own Site only; `{ events }` |
+| GET | `/api/superadmin/sites/:siteId/operations/:operationId` | Superadmin; `{ operation }` |
+| POST | `/api/superadmin/sites/:siteId/operations/:operationId/reconcile` | Superadmin; processes one cleanup page and returns `{ operation }` |
+
+Site-status mutation returns `site.operationId`. Deactivation immediately blocks Site access and schedules cleanup. Reactivation returns `409` until cleanup completes. It never reopens dismissed work. See [the Phase 10 brief](phase-10-completed-brief.md) for safe Postman tests and development Firestore deployment commands.
+
+Notifications are immutable; no read receipts or direct frontend writes are supported. Client Firestore queries must filter both `recipientUid` and `siteId` and sort by `createdAt desc`.
+
+The System response separates process state from Site configuration:
+
+- `configuration.status` is the Site's saved `running` or `paused` state;
+- `runtime.backgroundWorkerEnabled` reports whether this Node process starts the Orchestrator worker;
+- `runtime.providerConnectivity` stays `not_probed`; the endpoint does not call Ollama merely to paint the page;
+- `runtime.backlog.waitingAlertCount` counts V2 Alerts still waiting for a Cleaner;
+- `runtime.backlog.awaitingReviewWorkOrderCount` counts V2 Work awaiting review;
+- `controlHistory` contains up to 20 recent pause/resume actions, newest first;
+- `recentRuns` contains at most 20 Runs with display-safe references and retry/tool counts;
+- `events` contains persisted safe fault summaries plus a response-only `orchestrator_worker_disabled` warning when configuration and process settings disagree.
+
+`recentRuns[].references` is built from the Run's frozen input/result snapshot. Polling the System page does not fetch each referenced Alert, Cleaner, and Work document. Older failed review Runs created before this snapshot field was added can still have a null display name; their UUID remains available for diagnosis.
+
+`GET /api/cleaner/map` deliberately excludes map drafts, Camera placements, and every other Cleaner's Station Point. A returned Station Point may have `zoneId: null` when it is in an unzoned but in-boundary part of the Site Map. Coordinate Work already carries its own target point; Camera-targeted Work is represented by its Camera reference until the live-monitoring integration is available.
+
+### V2 Site Map administration API
+
+All routes require an active Site Supervisor. Mutations are Root-only except the narrow Cleaner Station Point route.
+
+| Method | Route | Behaviour |
+| --- | --- | --- |
+| GET | `/api/site-map` | Active Site Map, user-defined boundary, coordinate convention, background metadata, Zones, Camera Placements, and Cleaner Station Points. |
+| GET | `/api/site-map/draft` | Root only. Recover the Site's one editable draft, geometry, and authenticated background metadata. |
+| GET | `/api/site-map/retired-zones` | Root only. List retired stable Zones that retain their last published name and geometry for restoration. |
+| POST | `/api/site-map/draft/start` | Root only. Copies the active revision into a new draft and rejects a second concurrent draft. |
+| POST | `/api/site-map/draft` | Root only. Saves one complete valid draft snapshot using `expectedRevision` concurrency. |
+| POST | `/api/site-map/draft/validate` | Root only. Revalidates geometry, background ownership, and active Camera coverage, then records a success or failure audit. |
+| POST | `/api/site-map/draft/publish` | Root only. Revalidates and atomically publishes the immutable replacement revision. |
+| DELETE | `/api/site-map/draft` | Root only. Discards the draft without changing the active revision. |
+| POST | `/api/site-map/background` | Root-only multipart `image`. Stores one Site-owned configuration image and returns its media ID, content URL, MIME type, width, and height. |
+| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Publishes a confirmed `map_position_correction`, or starts a `physical_camera_move` draft that must continue through fresh Camera Registration. |
+| PUT | `/api/site-map/station-points/{cleanerId}` | Root or Regular. Publishes one in-boundary Station Point; `zoneId` may be null. |
+
+Site Map draft body:
+
+```json
+{
+  "baseRevisionId": "active-revision-id",
+  "expectedRevision": 1,
+  "widthMeters": 2000,
+  "heightMeters": 1200,
+  "gridSizeMeters": 20,
+  "backgroundMediaId": "site-background-media-id",
+  "backgroundTransform": {
+    "xMeters": 0,
+    "yMeters": 0,
+    "widthMeters": 1800,
+    "heightMeters": 1200,
+    "opacity": 1
+  },
+  "zones": [],
+  "cameraPlacements": [],
+  "cameraPlacementChanges": [],
+  "cleanerStations": []
+}
+```
+
+Background alignment must preserve the uploaded image aspect ratio. The coordinate convention is top-left origin, X right, and Y down. Resizing the Site boundary preserves every existing absolute metre coordinate and reports anything now outside the boundary.
+
+Invalid Zone geometry returns `422` with `details.code=site_map_geometry_invalid`, flat `errors`, structured `issues`, and `zoneConflicts`. Active Zones cannot contain, overlap, cross, share edges or vertices, or touch at one point. Near but separate geometry is valid.
+
+A changed Camera point inside a general Site Map draft requires `cameraPlacementChanges[]` with `mode=map_position_correction`, `confirmation=true`, and a reason. Physical movement cannot use this path.
+
+Camera placement change body:
+
+```json
+{
+  "point": { "xMeters": 640.25, "yMeters": 315.5 },
+  "mode": "map_position_correction",
+  "reason": "The original Site Map pin was measured incorrectly.",
+  "expectedCameraRevision": 4,
+  "expectedMapRevisionId": "active-revision-id",
+  "confirmation": true
+}
+```
+
+`map_position_correction` publishes a map-only replacement revision and retains Camera Registration. `physical_camera_move` requires monitoring to be disabled and returns `status=registration_required` with a protected Root-only Camera Draft. That draft cannot publish until a new reference and floor/bin Registration validate. Publication changes placement, source, and Registration atomically.
+
+### V2 Camera detail API
+
+| Method | Route | Response |
+| --- | --- | --- |
+| GET | `/api/camera-creation/cameras/{cameraId}/detail` | `{ camera, currentAssignments, recentHistory, orchestratorTrace, auditEvents }` |
+
+The caller must be an active Supervisor for the Camera's Site. `camera` includes the active placement, runtime state, source, Registration, and active map revision. `currentAssignments` contains active Camera-targeted Work Orders. `recentHistory` combines Camera Alerts and Work Orders with status, Cleaner snapshot, time, and evidence media reference when one exists.
+
+`orchestratorTrace` is a safe audit view of related assignment/review Runs. It includes the structured decision summary, decision factors, selected Cleaner, provider/model identifiers, result, error code, and timestamps. It deliberately excludes raw provider output, internal tool input, and assignment context snapshots. `auditEvents` supplies related Supervisor/system audit entries.
+
+### V2 Camera registration lifecycle
+
+`POST /api/camera-creation/drafts/start` may include a `provisionalZone` alongside the Camera placement. The backend validates that Zone against the active Site Map, stores it only in the Camera Draft, and accepts the Camera point only when it falls inside exactly that active or provisional Zone.
+
+`POST /api/camera-creation/drafts/{draftId}/publish` publishes a provisional Zone, Camera placement, source and Registration in one transaction. The active Site Map does not change before this call.
+
+`DELETE /api/camera-creation/drafts/{draftId}` cancels unfinished registration. It deletes the Camera Draft and its draft-owned reference/source media. A provisional Zone inside that draft is never published.
+
+### Development-only simulated Alerts
+
+`POST /api/test-support/v2/alerts` requires a Root Supervisor bearer token and is rejected in production-cloud mode. Site identity comes from the authenticated account.
+
+```json
+{
+  "cameraId": "existing-active-v2-camera-id",
+  "issueType": "floor_litter",
+  "condition": "litter",
+  "severity": "warning",
+  "confidence": 0.99,
+  "clientRequestId": "phase9-fake-alert-001"
+}
+```
+
+Returns `201 { alert, flag, idempotent }`. Same input replays the same Alert. Changed input with the same request identity or another active Alert for that Camera/issue returns `409`. The response has no evidence image. This creates real development workflow data and queues automatic assignment; it does not run inference or fabricate verification evidence. See [the testing guide](phase-9-simulated-alert-testing.md).
+
+### Integration boundary
 
 Until the React structure is stable, new modules are backend-first:
 
@@ -1527,3 +1773,25 @@ React ranking/heatmap cutover remains deferred. Future integration should
 consume both stable DTOs in one coordinated pass. Upload, processing,
 detection, alert, dashboard, and analytics backend work must not depend on the
 current dummy React data.
+# Camera monitoring redesign endpoints, 2026-09-05
+
+These V2 additions require a Supervisor Bearer token. Cleaner accounts cannot own monitoring.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/api/monitoring/live/config` | Camera source settings, playback generation, and current runtime; no lease secrets. |
+| GET | `/api/monitoring/live/events` | Authenticated SSE with `control`, `workflow`, and `observation` events. Observation and exact frame data URL are paired. Reconnect after the 50-second connection lifetime. |
+| PATCH | `/api/camera-creation/cameras/:cameraId/monitoring` | `{monitoringEnabled, expectedRevision}`; returns the new revision. Laptop conflicts return 409 with the conflicting Camera ID/name. |
+| POST | `/api/camera-creation/cameras/:cameraId/deactivate` | Root only; `{expectedRevision}`; disables and structurally deactivates the Camera. |
+| POST | `/api/monitoring/sessions/:sessionId/cameras/:cameraId/stop` | Owner token in `x-monitoring-token`; body `{episodeId, reason}`. Stops only this episode. |
+| GET | `/api/media/:mediaId/overlay` | Same-Site retained `observation`, or null for older/non-evidence media. |
+| GET | `/api/cleaner/work-orders/:workOrderId/camera-evidence` | Assigned Cleaner only; linked Alert Evidence. Add `?content=true` for the image bytes. |
+| GET | `/api/development/cameras/:cameraId/scenes` | Development scene list. |
+| POST | `/api/development/cameras/:cameraId/scenes/:key` | Multipart `video`; creates an immutable scene with exact Registration dimensions. |
+| POST | `/api/development/cameras/:cameraId/scenes/:key/select` | Select scene without resetting monitoring or workflow state. |
+
+Development scene routes also require `CAMERA_DEMO_SCENES_ENABLED=true` and a development application environment. Source scene selection controls do not appear in the product UI.
+
+Sample requests retain their existing multipart contract and accept optional `sourceTimeSeconds` and integer `playbackGeneration`. Successful responses include `nextSequence` and queue diagnostics. Overload returns 429 before consuming a sequence. A client recovering an ambiguous response may repeat episode start to obtain the authoritative next sequence without resetting the active episode.
+
+The single Node prototype owns live leases, heartbeat expiry, episode sequence, current runtime freshness, rolling qualification, candidate evidence, and partial Camera Verification samples in memory. Session claim/release and Episode start/end remain durable transition records. After the first accepted frame changes a Camera to online, an ordinary frame performs no Firestore read or write. A continuing confirmed issue also remains transient until its condition materially changes. Live configuration and Camera list routes reuse a Site snapshot until Camera, scene, or map configuration changes.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from app.agent import select_cleaner
+from app.agent import select_assignment_pair
 from app.providers import GeminiProvider, OllamaProvider, ProviderChain
 
 
@@ -27,36 +27,33 @@ def main() -> int:
             )
         )
 
-    alert = {
-        "alert": {
-            "id": "SMOKE-ALERT-001",
+    context = {
+        "alerts": [{
+            "alertId": "SMOKE-ALERT-001",
             "siteId": "SITE-001",
             "zoneId": "ZONE-A",
             "issueType": "floor_litter",
             "severity": "warning",
-        }
-    }
-    candidates = {
-        "policyVersion": "assignment-v1",
-        "candidates": [
+            "priorityScore": 50,
+        }],
+        "policyVersion": "assignment-v2",
+        "cleaners": [
             {
                 "cleanerId": "CLN-SAME-ZONE",
-                "availability": "AVAILABLE",
-                "registeredZoneId": "ZONE-A",
-                "zoneDistanceRank": 0,
-                "notStartedWorkload": 0,
+                "availability": "available",
             },
             {
-                "cleanerId": "CLN-NEARBY-BUSY",
-                "availability": "BUSY",
-                "registeredZoneId": "ZONE-B",
-                "zoneDistanceRank": 1,
-                "notStartedWorkload": 2,
+                "cleanerId": "CLN-FARTHER",
+                "availability": "available",
             },
+        ],
+        "eligiblePairs": [
+            {"alertId": "SMOKE-ALERT-001", "cleanerId": "CLN-SAME-ZONE", "stationDistanceMeters": 10},
+            {"alertId": "SMOKE-ALERT-001", "cleanerId": "CLN-FARTHER", "stationDistanceMeters": 100},
         ],
     }
 
-    selection = select_cleaner(ProviderChain(providers), alert, candidates)
+    selection = select_assignment_pair(ProviderChain(providers), context)
     if selection.cleaner_id != "CLN-SAME-ZONE":
         raise RuntimeError(
             "Model smoke test failed: expected CLN-SAME-ZONE, "
@@ -66,6 +63,7 @@ def main() -> int:
     print("Assignment model smoke test passed.")
     print(f"Provider: {selection.provider}")
     print(f"Model: {selection.model}")
+    print(f"Selected alert: {selection.alert_id}")
     print(f"Selected cleaner: {selection.cleaner_id}")
     print(f"Reason: {selection.rationale_summary}")
     return 0

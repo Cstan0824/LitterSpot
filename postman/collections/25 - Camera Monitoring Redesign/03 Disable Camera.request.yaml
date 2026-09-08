@@ -1,0 +1,19 @@
+$kind: http-request
+name: Disable Camera
+url: "{{baseUrl}}/api/camera-creation/cameras/{{v2CameraId}}/monitoring"
+method: PATCH
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: '{"monitoringEnabled":false,"expectedRevision":{{v2CameraRevision}}}'
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Camera disabled', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) pm.environment.set('v2CameraRevision', String(pm.response.json().revision));
+    language: text/javascript
+order: 3000

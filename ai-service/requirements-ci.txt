@@ -1,0 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Keep GitHub Actions on the CPU-only wheels. Leaving these unpinned lets the
+# Linux resolver pull several gigabytes of CUDA packages that the tests do not use.
+torch==2.7.1+cpu
+torchvision==0.22.1+cpu
+
+-r requirements.txt

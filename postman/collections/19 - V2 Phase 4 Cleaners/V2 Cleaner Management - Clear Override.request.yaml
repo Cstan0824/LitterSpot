@@ -1,0 +1,19 @@
+$kind: http-request
+name: V2 Cleaner Management - Clear Override
+url: "{{baseUrl}}/api/cleaners/{{v2CleanerId}}/availability-override"
+method: PUT
+headers:
+  Authorization: "Bearer {{v2RootToken}}"
+  Content-Type: application/json
+auth:
+  type: noauth
+body:
+  type: json
+  content: |-
+    {"expectedRevision":{{v2CleanerRevision}},"availabilityOverride":"none"}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Override cleared', () => { const cleaner = pm.response.json().cleaner; pm.response.to.have.status(200); pm.expect(cleaner.availability.reasons).not.to.include('availability_override'); pm.environment.set('v2CleanerRevision', String(cleaner.revision)); });
+    language: text/javascript
+order: 4000

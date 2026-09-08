@@ -4,11 +4,17 @@
   "version": "0.1.0",
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "api-sandbox"
   ],
   "scripts": {
+    "demo:camera-scene": "node scripts/demo-camera-scene.mjs",
+    "test:camera:fixture": "tsx scripts/camera-runtime-fixture.mts",
+    "test:camera:browser": "node scripts/test-camera-runtime-browser.mjs",
     "dev:frontend": "npm --workspace=frontend run dev",
     "dev:backend": "npm --workspace=backend run dev",
+    "dev:sandbox": "npm --workspace=api-sandbox run dev",
+    "build:sandbox": "npm --workspace=api-sandbox run build",
     "test:backend": "npm --workspace=backend run test",
     "test:assignment": "node scripts/test-task-assignment.mjs",
     "test:assignment:model": "node scripts/test-task-assignment-model.mjs",
@@ -17,9 +23,17 @@
     "validate:postman": "node scripts/validate-postman.mjs",
     "verify:phase9": "node scripts/verify-phase9.mjs",
     "verify:phase11": "node scripts/verify-phase11.mjs",
-    "start": "node scripts/start-local.mjs",
+    "start": "node scripts/start-api.mjs",
+    "start:api": "node scripts/start-api.mjs",
     "stop": "node scripts/stop-local.mjs",
-    "start:local": "node scripts/start-local.mjs",
+    "start:local": "node scripts/start-api.mjs",
+    "start:emulator": "node scripts/start-emulator-dev.mjs",
+    "fixture:emulator:update": "node scripts/prepare-team-emulator-fixture.mjs",
+    "fixture:emulator:reset": "node scripts/reset-team-emulator-fixture.mjs",
+    "fixture:emulator:verify": "node scripts/verify-team-emulator-fixture.mjs",
+    "media:compress:emulator": "node scripts/compress-emulator-videos.mjs",
+    "media:compress:emulator:apply": "node scripts/compress-emulator-videos.mjs --apply",
+    "media:sync:emulator": "node scripts/sync-emulator-media-metadata.mjs",
     "stop:local": "node scripts/stop-local.mjs"
   },
   "devDependencies": {

@@ -1,0 +1,151 @@
+.v2-camera-creation{max-width:1480px;margin:0 auto;padding:28px;color:#172b43}.v2-camera-creation>header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:20px;border-bottom:1px solid #bdcbd4}.v2-camera-creation>header span,.v2-camera-stage span,.v2-camera-steps{color:#60798a;font:700 10px/1 "Field Mono",monospace;letter-spacing:.09em}.v2-camera-creation h1{margin:8px 0;font:700 66px/.87 "Field Display",sans-serif;letter-spacing:-.035em}.v2-camera-creation h2{margin:7px 0;font:700 33px/.92 "Field Display",sans-serif}.v2-camera-creation p{max-width:720px;margin:0;color:#5a7181;font:14px/1.45 "Field Text",sans-serif}.v2-camera-creation>header button,.v2-camera-stage button{min-height:42px;padding:0 13px;border:1px solid #9fb4c1;background:#fff;color:#183b55;font:700 12px "Field Text",sans-serif;cursor:pointer}.v2-camera-creation button:disabled{opacity:.48;cursor:not-allowed}.v2-camera-steps{display:grid;grid-template-columns:repeat(4,1fr);margin:20px 0;border:1px solid #bdcbd4;background:#fff}.v2-camera-steps button{display:flex;align-items:center;gap:9px;min-height:57px;padding:10px 12px;border:0;border-right:1px solid #d2dce2;background:#fff;color:#647d8c;font:700 12px "Field Text",sans-serif;text-align:left;cursor:pointer}.v2-camera-steps button:last-child{border-right:0}.v2-camera-steps b{display:grid;width:25px;height:25px;place-items:center;border:1px solid #b9c7cf;border-radius:50%;font:700 9px "Field Mono",monospace}.v2-camera-steps button.active{background:#eefbfe;color:#163d59;box-shadow:inset 0 -3px #1aa3ca}.v2-camera-steps button.active b{background:#163757;color:#fff}.v2-camera-steps button.ready b{border-color:#9acb68;background:#eef8e6;color:#4b731b}.v2-camera-error,.v2-camera-note{margin:12px 0;padding:11px 13px;border:1px solid #e3aaa3;background:#fff1ef;color:#8d342d;font:13px "Field Text",sans-serif}.v2-camera-note{border-color:#a8d4df;background:#effbfd;color:#315e73}.v2-camera-stage{border:1px solid #b9c8d1;background:#fff}.v2-camera-stage.location{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(310px,.65fr)}.v2-camera-map-panel{padding:20px;border-right:1px solid #c7d2d9}.v2-camera-map-panel header{display:flex;align-items:end;justify-content:space-between;gap:15px;margin-bottom:12px}.v2-camera-map-panel strong{font:700 21px "Field Display",sans-serif}.v2-camera-site-map{position:relative;min-height:470px;overflow:hidden;border:1px solid #92a9b7;background:#edf4f0;cursor:crosshair}.v2-camera-site-map:before{position:absolute;inset:0;background:linear-gradient(90deg,rgba(27,83,104,.07) 1px,transparent 1px),linear-gradient(rgba(27,83,104,.07) 1px,transparent 1px);background-size:10% 10%;content:""}.v2-camera-site-map svg{position:absolute;inset:0;width:100%;height:100%}.v2-camera-site-map polygon{fill:rgba(29,158,195,.16);stroke:#1684a8;stroke-width:.35;vector-effect:non-scaling-stroke}.v2-camera-site-map span{position:absolute;z-index:2;transform:translate(-50%,-50%);padding:5px 7px;background:#163757;color:#fff;font:700 9px "Field Text",sans-serif;white-space:nowrap}.v2-camera-site-map i{position:absolute;z-index:3;width:22px;height:22px;margin:-11px;border:3px solid #fff;border-radius:50% 50% 50% 0;background:#eb584d;box-shadow:0 0 0 2px #b93831;transform:rotate(-45deg)}.v2-camera-site-map b{position:absolute;z-index:4;right:12px;bottom:12px;padding:8px 10px;background:#fff;color:#23475e;font:700 11px "Field Text",sans-serif}.v2-camera-stage.location form{display:grid;align-content:start;gap:14px;padding:22px}.v2-camera-stage label{display:grid;gap:6px;color:#526c7e;font:700 10px "Field Mono",monospace;letter-spacing:.05em}.v2-camera-stage input,.v2-camera-stage textarea,.v2-camera-stage select{width:100%;min-height:42px;border:1px solid #bdcbd4;background:#fff;color:#193c56;padding:9px 10px;font:14px "Field Text",sans-serif}.v2-camera-stage textarea{min-height:84px;resize:vertical}.v2-camera-stage fieldset{display:grid;gap:9px;margin:0;padding:13px;border:1px solid #c5d1d7}.v2-camera-stage legend{padding:0 4px;color:#536f80;font:700 10px "Field Mono",monospace}.v2-camera-stage fieldset label{display:flex;align-items:center;gap:8px;font:600 13px "Field Text",sans-serif;letter-spacing:0}.v2-camera-stage fieldset input{width:auto;min-height:0}.v2-camera-stage fieldset small{color:#627988;font:12px/1.35 "Field Text",sans-serif}.v2-camera-stage dl{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0}.v2-camera-stage dl div{padding:10px;border:1px solid #d3dde2;background:#f6f9fa}.v2-camera-stage dt{color:#62798a;font:700 9px "Field Mono",monospace}.v2-camera-stage dd{margin:6px 0 0;color:#1f4058;font:700 13px "Field Text",sans-serif}.v2-camera-stage.source{display:grid;grid-template-columns:1fr 340px;gap:0}.v2-camera-stage.source>div{display:grid;align-content:start;gap:14px;padding:24px}.v2-camera-stage.source aside{display:grid;align-content:start;gap:8px;padding:24px;border-left:1px solid #c7d2d9;background:#f5f8f9}.v2-camera-stage.source aside img{width:100%;border:1px solid #a5b8c2}.v2-camera-stage.source aside b{font:700 22px "Field Display",sans-serif}.v2-camera-video{width:100%;max-height:430px;background:#0d2739}.v2-camera-actions{display:flex;gap:8px}.v2-camera-upload{display:grid;min-height:132px;place-items:center;border:1px dashed #1b95b9!important;background:#f1fbfd;color:#087e9f!important;cursor:pointer}.v2-camera-upload input{display:none}.v2-camera-stage.plot{padding:22px}.v2-camera-stage.plot>header{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:14px}.v2-camera-plot-controls{display:flex;flex-wrap:wrap;gap:7px}.v2-camera-plot-controls button.active,.v2-camera-stage.location form>button,.v2-camera-stage.review button{border-color:#173956;background:#173956;color:#fff}.v2-camera-bin-name{width:min(360px,100%);margin-bottom:12px}.v2-camera-plot{position:relative;overflow:hidden;border:1px solid #91a9b6;background:#0d2739;cursor:crosshair}.v2-camera-plot>img{display:block;width:100%;height:100%;object-fit:contain}.v2-camera-plot svg{position:absolute;inset:0;width:100%;height:100%}.v2-camera-plot polygon.floor{fill:rgba(33,188,214,.18);stroke:#0b9fc7;stroke-width:.45;vector-effect:non-scaling-stroke}.v2-camera-plot polygon.bin{fill:rgba(232,174,45,.18);stroke:#d59c17;stroke-width:.45;vector-effect:non-scaling-stroke}.v2-camera-plot .pending{fill:none;stroke-width:.4;vector-effect:non-scaling-stroke}.v2-camera-plot .pending.floor{stroke:#0b9fc7;fill:#0b9fc7}.v2-camera-plot .pending.bin{stroke:#d59c17;fill:rgba(213, 156, 23, 0.6)}.v2-camera-plot>span{position:absolute;right:10px;bottom:10px;padding:7px 9px;background:rgba(255,255,255,.94);color:#34566a;font:11px "Field Text",sans-serif}.v2-camera-stage.plot footer{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-top:13px;color:#607889;font:12px "Field Text",sans-serif}.v2-camera-stage.plot footer div{display:flex;gap:8px}.v2-camera-stage.review{display:grid;grid-template-columns:minmax(320px,.7fr) minmax(0,1.3fr);gap:22px;padding:24px}.v2-camera-stage.review>div{display:grid;align-content:start;gap:14px}.v2-camera-stage.review .v2-camera-plot{align-self:start}.v2-camera-stage.review button{justify-self:start}@media(max-width:800px){.v2-camera-creation{padding:18px 14px 42px}.v2-camera-creation h1{font-size:51px}.v2-camera-creation>header{align-items:start;flex-direction:column}.v2-camera-steps{overflow-x:auto}.v2-camera-steps button{min-width:140px}.v2-camera-stage.location,.v2-camera-stage.source,.v2-camera-stage.review{grid-template-columns:1fr}.v2-camera-map-panel,.v2-camera-stage.source aside{border-right:0;border-left:0;border-bottom:1px solid #c7d2d9}.v2-camera-site-map{min-height:310px}.v2-camera-stage.plot>header,.v2-camera-stage.plot footer{align-items:start;flex-direction:column}.v2-camera-stage.plot footer div{width:100%}.v2-camera-stage.plot footer button{flex:1}.v2-camera-stage.source>div,.v2-camera-stage.source aside,.v2-camera-stage.plot,.v2-camera-stage.review{padding:18px}}
+
+/* The V2 registration flow extends Melissa's Add Camera modal across four pages. */
+.camera-registration-scrim { align-items: start; }
+.camera-registration-wizard { display: flex; width: min(1160px, 100%); height: min(900px, calc(100vh - 44px)); max-height: calc(100vh - 44px); overflow: hidden; flex-direction: column; color: #15223a; font-family: "Field Text", sans-serif; }
+.camera-registration-wizard > header,
+.camera-registration-progress,
+.camera-registration-footer,
+.camera-registration-note,
+.camera-registration-wizard > .camera-modal-error { flex: 0 0 auto; }
+.camera-registration-wizard > header p { max-width: 620px; margin: 9px 0 0; color: #607586; font-size: 12px; line-height: 1.45; }
+.camera-registration-progress { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid #c8d1da; background: #f4f7f8; }
+.camera-registration-progress.three-steps { grid-template-columns: repeat(3, 1fr); }
+.camera-registration-progress button { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 9px; min-height: 58px; padding: 9px 16px; border: 0; border-right: 1px solid #c8d1da; background: transparent; color: #627788; font: 700 11px/1.2 "Field Text", sans-serif; text-align: left; cursor: pointer; }
+.camera-registration-progress button:last-child { border-right: 0; }
+.camera-registration-progress button:disabled { cursor: default; opacity: .46; }
+.camera-registration-progress b { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid #aebdca; border-radius: 50%; font: 700 9px/1 "Field Mono", monospace; }
+.camera-registration-progress button.active { background: #fff; color: #183b55; box-shadow: inset 0 -3px var(--work-cyan); }
+.camera-registration-progress button.active b { border-color: #173956; background: #173956; color: #fff; }
+.camera-registration-progress button.complete b { border-color: #8ecb22; background: #f0f8e5; color: #557d17; }
+.registration-location-page .v2-camera-site-map,
+.registration-location-page .v2-camera-zone-planner { min-height: 505px; }
+.registration-location-page .v2-camera-site-map::before,
+.registration-location-page .v2-camera-zone-planner::before { z-index: 1; }
+.registration-location-page .v2-camera-site-map svg,
+.registration-location-page .v2-camera-zone-planner svg { z-index: 2; }
+.registration-location-page .v2-camera-site-map polygon { fill: rgba(32,166,207,.16); stroke: #1684a8; stroke-width: .65; vector-effect: non-scaling-stroke; }
+.registration-location-page .v2-camera-site-map polygon.selected { fill: rgba(240,93,80,.22); stroke: #e25045; }
+.registration-location-page .v2-camera-site-map span,
+.registration-location-page .v2-camera-zone-planner .existing-label { z-index: 4; }
+.registration-location-page .v2-camera-site-map .camera-location-pin { z-index: 8; width: 19px; height: 19px; margin: 0; border-radius: 50%; transform: translate(-50%,-50%); }
+.registration-location-page .v2-camera-zone-planner .v2-camera-zone-tools { top: auto; right: auto; bottom: 14px; left: 14px; }
+.registration-location-page .v2-camera-zone-planner p { top: 14px; right: 14px; bottom: auto; }
+.camera-registration-page { display: grid; min-height: 0; flex: 1 1 auto; grid-template-columns: minmax(0, 1.5fr) minmax(320px, .78fr); overflow-y: auto; }
+.registration-location-page { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
+.registration-media-workspace { min-width: 0; padding: 22px 24px; border-right: 1px solid #c8d1da; }
+.registration-media-workspace > header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+.registration-media-workspace > header span,
+.registration-side-panel > span { color: #637889; font: 700 10px/1 "Field Mono", monospace; letter-spacing: .09em; }
+.registration-media-workspace h3 { margin: 7px 0 6px; color: #173650; font: 700 31px/.92 "Field Display", sans-serif; }
+.registration-media-workspace p,
+.registration-side-panel p { max-width: 620px; margin: 0; color: #607586; font-size: 12px; line-height: 1.45; }
+.registration-media-workspace > header > b { padding: 7px 9px; border: 1px solid #bdc8d2; color: #687c8b; font: 700 10px/1 "Field Mono", monospace; white-space: nowrap; }
+.registration-media-workspace > header > b.ready { border-color: #8ecb22; background: #f0f8e5; color: #557d17; }
+.registration-source-choice { display: flex; width: max-content; margin-top: 14px; border: 1px solid #b7c6cf; }
+.registration-source-choice button { min-height: 34px; padding: 0 12px; border: 0; border-right: 1px solid #b7c6cf; background: #fff; color: #496274; font: 700 11px/1 "Field Text", sans-serif; cursor: pointer; }
+.registration-source-choice button:last-child { border-right: 0; }
+.registration-source-choice button.active { background: #173956; color: #fff; }
+.registration-video { display: block; width: 100%; max-height: 430px; aspect-ratio: 16/9; border: 1px solid #8ea1b0; background: #0d2739; object-fit: contain; }
+.registration-inline-actions { display: flex; gap: 8px; margin-top: 12px; }
+.registration-inline-actions button,
+.registration-capture,
+.registration-tool-actions button,
+.registration-remove-floor,
+.registration-remove-bin { min-height: 40px; padding: 0 13px; border: 1px solid #aebdca; border-radius: 2px; background: #fff; color: #183b55; font: 700 11px "Field Text", sans-serif; cursor: pointer; }
+.registration-video-input { display: none; }
+.registration-upload { display: grid; width: 100%; min-height: 408px; place-content: center; gap: 6px; margin-bottom: 12px; border: 1px dashed #1684a8; background: #eff9fb; color: #173650; text-align: center; cursor: pointer; }
+.registration-upload strong { font: 700 18px "Field Display", sans-serif; }
+.registration-upload small { color: #607586; font-size: 10px; }
+.registration-capture { width: 100%; margin-top: 10px; }
+.registration-side-panel { display: grid; align-content: start; gap: 12px; padding: 22px; background: #f4f7f8; }
+.registration-preview-header { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 12px; }
+.registration-preview-header > span { color: #637889; font: 700 10px/1 "Field Mono", monospace; letter-spacing: .09em; }
+.registration-preview-header > button { min-height: 32px; padding: 0 10px; border: 1px solid #9fb0bc; background: #fff; color: #173650; font: 700 10px "Field Text", sans-serif; cursor: pointer; }
+.registration-side-panel > img { display: block; width: 100%; max-height: 290px; border: 1px solid #9fb0bc; object-fit: contain; background: #0d2739; }
+.registration-side-panel > strong { color: #173650; font: 700 22px/1 "Field Display", sans-serif; }
+.registration-side-panel > small { color: #637889; font: 500 10px "Field Mono", monospace; }
+.registration-empty { display: grid; min-height: 240px; place-content: center; gap: 7px; padding: 24px; border: 1px dashed #b9c5ce; background: #fff; text-align: center; }
+.registration-empty strong { color: #173650; font: 700 24px "Field Display", sans-serif; }
+.plot-page .v2-camera-plot,
+.review-page .v2-camera-plot { max-height: 440px; }
+.region-tools .camera-zone-mode { grid-template-columns: 1fr; }
+.region-tools label { display: grid; gap: 6px; color: #526b7c; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.region-tools input { min-height: 42px; padding: 0 11px; border: 1px solid #bdc8d2; background: #fff; font: 500 13px "Field Text", sans-serif; }
+.region-tools dl,
+.registration-summary dl { display: grid; gap: 0; margin: 0; border: 1px solid #c8d1da; background: #fff; }
+.region-tools dl div,
+.registration-summary dl div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 11px; border-bottom: 1px solid #d8e0e5; }
+.region-tools dl div:last-child,
+.registration-summary dl div:last-child { border-bottom: 0; }
+.region-tools dt,
+.registration-summary dt { color: #637889; font: 700 9px "Field Mono", monospace; }
+.region-tools dd,
+.registration-summary dd { margin: 0; color: #173650; font-size: 11px; font-weight: 800; text-align: right; }
+.registration-tool-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.registration-tool-actions .primary { grid-column: 1 / -1; }
+.registration-remove-floor,
+.registration-remove-bin { color: #a13f37; }
+.reference-page .registration-side-panel { display: flex; flex-direction: column; }
+.registration-preview-capture { width: 100%; margin: auto 0 0; }
+.v2-camera-plot polygon.floor { fill: rgba(33,188,214,.11); }
+.v2-camera-plot polygon.floor,
+.v2-camera-plot polygon.bin { stroke-width: 1; }
+.v2-camera-plot polyline.pending.floor { fill: rgba(11,159,199,.4); stroke: #0b9fc7; stroke-width: .6; }
+.v2-camera-plot circle.pending.floor { fill: #fff; stroke: #0b9fc7; stroke-width: .75; vector-effect: non-scaling-stroke; }
+.camera-registration-note { margin: 0; padding: 10px 24px; border-top: 1px solid #b7dce5; background: #effbfd; color: #315e73; font-size: 11px; }
+.camera-registration-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 24px; border-top: 1px solid #c8d1da; background: #fff; }
+.camera-registration-footer p { max-width: 570px; margin: 0; color: #6d7d83; font-size: 11px; line-height: 1.45; }
+.camera-registration-footer > div { display: flex; gap: 8px; }
+.camera-registration-footer button { min-height: 42px; padding: 0 16px; border-radius: 2px; }
+.camera-registration-footer .primary,
+.registration-inline-actions .primary,
+.registration-capture,
+.registration-tool-actions .primary { border-color: #173956; background: #173956; color: #fff; }
+.camera-registration-wizard button:disabled { cursor: not-allowed; opacity: .48; }
+.registration-location-page .camera-provisional-zone-action { grid-column: 2; grid-row: 4; min-height: 42px; padding: 0 16px; border: 1px solid #173956; border-radius: 2px; background: #173956; color: #fff; font: 700 11px "Field Text", sans-serif; cursor: pointer; }
+
+@media (max-width: 760px) {
+  .camera-registration-scrim { padding: 0; }
+  .camera-registration-wizard { height: 100vh; max-height: 100vh; border: 0; }
+  .camera-registration-progress.four-steps { grid-template-columns: repeat(4, minmax(116px, 1fr)); overflow-x: auto; }
+  .camera-registration-progress.three-steps { grid-template-columns: repeat(3, minmax(116px, 1fr)); overflow-x: auto; }
+  .camera-registration-page { grid-template-columns: 1fr; }
+  .registration-media-workspace { border-right: 0; border-bottom: 1px solid #c8d1da; }
+  .registration-media-workspace > header { align-items: start; flex-direction: column; }
+  .camera-registration-footer { align-items: stretch; flex-direction: column; }
+  .camera-registration-footer > div { display: grid; grid-template-columns: 1fr 1fr; }
+  .registration-location-page .v2-camera-site-map,
+  .registration-location-page .v2-camera-zone-planner { min-height: 330px; }
+  .registration-location-page .camera-provisional-zone-action { grid-column: auto; grid-row: auto; }
+}
+.camera-modal-fields select{width:100%;min-height:42px;padding:10px 12px;border:1px solid #bdcbd5;background:#fff;color:#173650;font:inherit}.camera-modal-fields select:disabled{background:#eef2f4;color:#677e8d}
+
+/* Shared metre-based map adoption. */
+.registration-location-page .camera-zone-map.shared { min-height: 0; overflow: visible; border: 0; background: transparent; cursor: default; }
+.registration-location-page .camera-zone-map.shared::before { display: none; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer { min-height: 505px; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-window { height: 430px; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer svg { position: static; z-index: auto; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer span { position: static; z-index: auto; max-width: none; transform: none; padding: 0; background: transparent; color: inherit; font: inherit; letter-spacing: normal; white-space: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer i { position: static; z-index: auto; width: auto; height: auto; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; transform: none; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer polygon { fill: rgba(32,166,207,.16); stroke: #1684a8; stroke-width: 1.4; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer polygon.selected { fill: rgba(240,93,80,.22); stroke: #e25045; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker circle:first-child { fill: #fff; stroke: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker circle:nth-child(2) { fill: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer .site-map-point-marker path { stroke: currentColor; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-toolbar span { display: inline; margin: 0; color: #91bdca; font: 700 10px/1 "Field Mono", monospace; letter-spacing: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status span { display: flex; align-items: flex-end; gap: 8px; color: #fff; font: 700 10px/1 "Field Mono", monospace; letter-spacing: normal; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status span:last-child { display: block; color: #a9bdca; }
+.registration-location-page .camera-zone-map.shared .site-map-viewer-status i { display: block; max-width: 150px; margin: 0; border-top: 2px solid #fff; }
+.registration-location-page .camera-zone-map.shared .site-map-empty-background { position: absolute; inset-inline-start: 16px; inset-block-end: 15px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.32); background: rgba(6,23,37,.88); }
+.registration-location-page .camera-zone-map.shared .site-map-empty-background span { display: block; margin-top: 4px; color: #afc3ce; font: 9px/1.2 "Field Text", sans-serif; }
+.registration-location-page .camera-zone-map.shared > .camera-zone-map-instruction { position: static; max-width: none; margin: 0; padding: 9px 11px; border: 1px solid #bfcbd3; border-top: 0; background: #f4f8fa; color: #4f6979; font-size: 11px; }
+.registration-location-page .v2-camera-zone-planner.shared .v2-camera-zone-tools { top: 61px; right: 10px; bottom: auto; left: auto; }
+.registration-location-page .v2-camera-zone-planner.shared > p { position: static; max-width: none; margin: 0; padding: 9px 11px; border: 1px solid #bfcbd3; border-top: 0; background: #f4f8fa; color: #4f6979; font-size: 11px; line-height: 1.35; }
+.camera-map-loading { display: grid; min-height: 330px; place-items: center; border: 1px solid #bdcbd4; background: #f4f7f8; color: #607586; font-size: 12px; }
+
+@media (max-width: 760px) {
+  .registration-location-page .camera-zone-map.shared .site-map-viewer { min-height: 0; }
+  .registration-location-page .camera-zone-map.shared .site-map-viewer-window { height: 330px; }
+}

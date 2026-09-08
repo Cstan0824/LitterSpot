@@ -32,6 +32,10 @@ describe("analysis normalization", () => {
   it("creates issue detections without creating people detections", () => {
     const normalized = normalizeAnalysis(result, "run-1", 0.25);
     expect(normalized.people).toHaveLength(1);
+    expect(normalized.floorHazards[0]).toMatchObject({
+      className: "floor_litter",
+      bboxNormalized: { x1: 0.05, y1: 0.2, x2: 0.15, y2: 0.4 },
+    });
     expect(normalized.detections.map((item) => item.issueType).sort()).toEqual(["bin_overflow", "floor_litter"]);
     expect(normalized.issueCounts).toEqual({ floorLitter: 1, binOverflow: 1, floorSpill: 0 });
   });

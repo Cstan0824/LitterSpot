@@ -1,24 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { detectSupportedImage, validateDeclaredImageType } from "./imageUploadValidation.js";
+import { detectSupportedImage, readImageDimensions } from "./imageUploadValidation.js";
 
-describe("image upload content validation", () => {
-  it("detects JPEG, PNG, and WebP by their byte signatures", () => {
-    expect(detectSupportedImage(Buffer.from([0xff, 0xd8, 0xff])).mimeType).toBe("image/jpeg");
-    expect(detectSupportedImage(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])).mimeType).toBe("image/png");
-    expect(detectSupportedImage(Buffer.from("RIFF0000WEBP", "ascii")).mimeType).toBe("image/webp");
+function png(width: number, height: number) {
+  const value = Buffer.alloc(24);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(value, 0);
+  value.write("IHDR", 12, "ascii");
+  value.writeUInt32BE(width, 16);
+  value.writeUInt32BE(height, 20);
+  return value;
+}
+
+describe("image dimensions", () => {
+  it("reads the uploaded Site background dimensions from PNG content", () => {
+    const image = png(1536, 1024);
+    const type = detectSupportedImage(image);
+    expect(readImageDimensions(image, type)).toEqual({ width: 1536, height: 1024 });
   });
 
-  it("accepts Postman's generic binary declaration after signature validation", () => {
-    expect(() => validateDeclaredImageType("application/octet-stream", "image/jpeg")).not.toThrow();
-    expect(() => validateDeclaredImageType("binary/octet-stream", "image/png")).not.toThrow();
-  });
-
-  it("normalizes image/jpg and rejects a real declared-type mismatch", () => {
-    expect(() => validateDeclaredImageType("image/jpg", "image/jpeg")).not.toThrow();
-    expect(() => validateDeclaredImageType("image/png", "image/jpeg")).toThrow("does not match");
-  });
-
-  it("rejects unsupported image contents", () => {
-    expect(() => detectSupportedImage(Buffer.from("not an image"))).toThrow("not a valid JPEG, PNG, or WebP");
+  it("rejects truncated image metadata", () => {
+    expect(() => readImageDimensions(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toThrow("missing its dimensions");
   });
 });

@@ -1,0 +1,30 @@
+.team-cleaner-wizard {
+  display: flex;
+  max-height: calc(100dvh - 44px);
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.team-cleaner-wizard > header,
+.team-cleaner-wizard > .team-wizard-steps,
+.team-cleaner-wizard > .team-cleaner-error,
+.team-cleaner-wizard > footer {
+  flex: 0 0 auto;
+}
+
+.team-cleaner-wizard > .team-wizard-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 780px) {
+  .team-cleaner-wizard {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+}

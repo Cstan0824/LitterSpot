@@ -1,0 +1,170 @@
+.camera-reference-heading {
+  justify-content: flex-start;
+}
+
+.camera-reference-visual {
+  align-self: start;
+}
+
+.camera-reference-identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(240px, .85fr);
+  align-items: end;
+  gap: 32px;
+  padding: 22px 24px 24px;
+  border-top: 1px solid #c9d4db;
+}
+
+.camera-reference-identity > div:last-child {
+  padding-left: 28px;
+  border-left: 1px solid #c9d4db;
+}
+
+.camera-reference-identity span {
+  display: block;
+  margin-bottom: 8px;
+  color: #637889;
+  font: 700 9px/1 "Field Mono", monospace;
+  letter-spacing: .09em;
+}
+
+.camera-reference-identity h1,
+.camera-reference-identity h2 {
+  margin: 0 0 7px;
+  color: #102b55;
+  font: 700 clamp(38px, 3.5vw, 56px)/.9 "Field Display", sans-serif;
+  letter-spacing: -.02em;
+}
+
+.camera-reference-identity h2 {
+  font-size: clamp(30px, 2.7vw, 44px);
+}
+
+.camera-reference-identity p {
+  margin: 0;
+  color: #526b7c;
+  font: 600 11px/1.35 "Field Text", sans-serif;
+}
+
+.camera-live-controls {
+  min-height: 74px;
+  padding: 14px 18px;
+  border-top: 1px solid #c9d4db;
+}
+
+.camera-monitoring-state {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.camera-monitoring-state > i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-top: 5px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #8b9aa4;
+  box-shadow: 0 0 0 1px #8b9aa4;
+}
+
+.camera-monitoring-state.online > i {
+  background: #82bd29;
+  box-shadow: 0 0 0 1px #6da11f;
+}
+
+.camera-monitoring-state.offline > i {
+  background: #ef584a;
+  box-shadow: 0 0 0 1px #cc463b;
+}
+
+.camera-monitoring-state.pending > i {
+  background: #d4a432;
+  box-shadow: 0 0 0 1px #af841d;
+}
+
+.camera-monitoring-state > div {
+  min-width: 0;
+}
+
+.camera-monitoring-state strong {
+  display: block;
+  color: #173650;
+  font: 700 18px/1 "Field Display", sans-serif;
+}
+
+.camera-monitoring-state p {
+  margin: 6px 0 0;
+  color: #607789;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.camera-live-controls > div:last-child {
+  flex: 0 0 auto;
+}
+
+.camera-live-controls > div:last-child button:last-child {
+  min-width: 100px;
+  border-color: #102b55;
+  background: #102b55;
+  color: #fff;
+}
+
+.camera-live-controls > div:last-child button:last-child:hover {
+  background: #1b4175;
+}
+
+.camera-live-empty {
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.camera-live-empty strong {
+  font: 700 23px/1 "Field Display", sans-serif;
+}
+
+.camera-live-empty span {
+  max-width: 360px;
+  color: #aebfc9;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (min-width: 981px) {
+  .camera-reference-layout {
+    align-items: start;
+  }
+}
+
+@media (max-width: 700px) {
+  .camera-live-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .camera-live-controls > div:last-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .camera-live-controls > div:last-child button:only-child {
+    grid-column: 1 / -1;
+  }
+
+  .camera-reference-identity {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .camera-reference-identity > div:last-child {
+    padding: 20px 0 0;
+    border-top: 1px solid #c9d4db;
+    border-left: 0;
+  }
+}

@@ -44,6 +44,19 @@ emulatorDescribe("image upload idempotency", () => {
       code: "CAM-IDEMPOTENCY",
       name: "Idempotency Camera",
     });
+    await firestore.collection("cameraRegistrations").doc(cameraId).set({
+      cameraId,
+      status: "ready",
+      revision: 1,
+      schemaVersion: 2,
+      referenceMediaId: `${prefix}-reference`,
+      referenceSource: { type: "image" },
+      sourceWidth: 1280,
+      sourceHeight: 720,
+      walkableFloorPolygon: [{ x: 0.1, y: 0.5 }, { x: 0.9, y: 0.5 }, { x: 0.8, y: 0.95 }],
+      bins: [],
+      quality: { minAlignmentScore: 0.82, minRimVisibility: 0.75, maxFrameAgeSeconds: 300 },
+    });
   });
 
   afterAll(async () => {
@@ -54,6 +67,7 @@ emulatorDescribe("image upload idempotency", () => {
       await media.ref.delete().catch(() => undefined);
     }
     if (jobId) await firestore.collection("processingJobs").doc(jobId).delete().catch(() => undefined);
+    await firestore.collection("cameraRegistrations").doc(cameraId).delete().catch(() => undefined);
     await firestore.collection("cameras").doc(cameraId).delete().catch(() => undefined);
   });
 

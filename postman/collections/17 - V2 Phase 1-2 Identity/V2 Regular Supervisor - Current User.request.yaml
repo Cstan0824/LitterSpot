@@ -1,0 +1,20 @@
+$kind: http-request
+name: V2 Regular Supervisor - Current User
+url: "{{baseUrl}}/api/me"
+method: GET
+headers:
+  Authorization: "Bearer {{v2RegularSupervisorToken}}"
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Current user is a Regular Supervisor', () => {
+        const body = pm.response.json();
+        pm.response.to.have.status(200);
+        pm.expect(body.role).to.eql('supervisor');
+        pm.expect(body.supervisor.uid).to.eql(pm.environment.get('v2RegularSupervisorId'));
+        pm.expect(body.supervisor.authority).to.eql('regular');
+      });
+    language: text/javascript
+order: 8000

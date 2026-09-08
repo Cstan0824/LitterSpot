@@ -3,8 +3,27 @@ import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Site, Zone } from "../../services/locationAPI";
 import type { LiveVideo } from "../pipeline/liveVideoStore";
 import type { Alert, Camera } from "./types";
+import { getV2CameraDetail, type V2Camera, type V2CameraDetail } from "../../services/v2/operations";
+import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
+import { V2CameraMonitor } from "./V2CameraMonitor";
+import { CameraLiveView } from "./CameraLiveView";
+import { useOptionalSiteMonitoring } from "./SiteMonitoringProvider";
+import { RetainedCameraEvidence } from "../../components/RetainedCameraEvidence";
+import { SiteMapViewer } from "../../components/SiteMapViewer";
+import { V2CameraCreationPage } from "../../pages/V2CameraCreationPage";
+import { changeSiteMapCameraPlacement, getActiveSiteMap, type ActiveSiteMap } from "../../services/v2/siteMap";
+import { containingZoneId } from "../../services/v2/mapGeometry";
+import type { V2CameraDraft } from "../../services/v2/operations";
+import "./camera-list-header.css";
+import "./camera-detail-monitoring.css";
 
 type Props = {
+  readOnly?: boolean;
+  showPermissionNotice?: boolean;
+  onNavigate?: (path: string, params?: Record<string, string>) => void;
+  getCameraDetail?: (cameraId: string, signal?: AbortSignal) => Promise<V2CameraDetail>;
+  allowWorkActions?: boolean;
+  canManageCameraPlacement: boolean;
   sites: Site[];
   zones: Zone[];
   cameras: CameraRecord[];
@@ -15,9 +34,13 @@ type Props = {
   error?: string;
   onCreateZone: (siteId: string, name: string) => Promise<Zone>;
   onCreateCamera: (zoneId: string, code: string, name: string, sourceMode: "upload" | "stream") => Promise<CameraRecord>;
+  onCameraPublished?: (cameraId: string) => void | Promise<void>;
+  v2Cameras?: V2Camera[];
+  onDismissCameraWork?: (workId: string, reason: string) => Promise<void>;
 };
 
 type MapPoint = { x: number; y: number };
+type CameraStateFilter = "all" | "enabled" | "disabled";
 
 function existingZoneMapRect(index: number) {
   return { x: 12 + (index % 3) * 28, y: 18 + (Math.floor(index / 3) % 2) * 39, width: 25, height: 18 };
@@ -44,33 +67,110 @@ class ZonePlannerBoundary extends Component<{ children: ReactNode }, { failed: b
   }
 }
 
+function CameraMoveModal({ camera, cameraName, monitoringEnabled, onClose, onPublished, onPhysicalMove }: { camera: V2CameraDetail["camera"]; cameraName: string; monitoringEnabled: boolean; onClose: () => void; onPublished: () => Promise<void>; onPhysicalMove: (draft: V2CameraDraft) => void }) {
+  const [siteMap, setSiteMap] = useState<ActiveSiteMap>();
+  const [point, setPoint] = useState(camera.placement?.point ?? null);
+  const [mode, setMode] = useState<"map_position_correction" | "physical_camera_move">("map_position_correction");
+  const [reason, setReason] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => { const controller = new AbortController(); void getActiveSiteMap(controller.signal).then(setSiteMap).catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "The active Site Map could not be loaded."); }); return () => controller.abort(); }, []);
+  const zoneId = point && siteMap ? containingZoneId(point, siteMap.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))) : null;
+  const zone = siteMap?.zones.find((item) => item.zoneId === zoneId);
+  const unchanged = Boolean(point && camera.placement && point.xMeters === camera.placement.point.xMeters && point.yMeters === camera.placement.point.yMeters);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!point || !zoneId || unchanged || reason.trim().length < 3 || !confirmed) return;
+    setBusy(true); setError("");
+    try {
+      const result = await changeSiteMapCameraPlacement({ cameraId: camera.id, point, mode, reason: reason.trim(), expectedCameraRevision: camera.revision, expectedMapRevisionId: camera.activeMapRevisionId });
+      if (result.status === "registration_required" && result.draft) { onPhysicalMove(result.draft); return; }
+      await onPublished(); onClose();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The Camera position could not be changed."); }
+    finally { setBusy(false); }
+  };
+  return <div className="camera-modal-scrim camera-move-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><form className="camera-move-modal" onSubmit={(event) => void submit(event)}><header><div><span>ROOT STRUCTURAL CONTROL</span><h2>Move {cameraName}.</h2><p>Choose whether this is a map correction or a real physical move.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close Camera move">×</button></header><main><section className="camera-move-map"><header><div><span>NEW CAMERA POINT</span><strong>{zone?.zoneNameSnapshot ?? "Place the Camera inside one Zone"}</strong></div>{point && <b>X {point.xMeters.toFixed(2)} · Y {point.yMeters.toFixed(2)} m</b>}</header>{siteMap ? <SiteMapViewer boundary={{ widthMeters: siteMap.revision.widthMeters, heightMeters: siteMap.revision.heightMeters }} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background} backgroundTransform={siteMap.revision.backgroundTransform} zones={siteMap.zones.map((item) => ({ id: item.zoneId, name: item.zoneNameSnapshot, polygon: item.polygon }))} cameras={siteMap.cameraPlacements.filter((item) => item.cameraId !== camera.id)} pointMarker={point ? { point, label: cameraName, tone: "camera" } : null} onPlacePoint={setPoint} /> : <div className="camera-map-loading">Loading the active Site Map…</div>}</section><aside><fieldset><legend>Move type</legend><label><input type="radio" name="move-mode" checked={mode === "map_position_correction"} onChange={() => setMode("map_position_correction")} /><span><b>Map position correction</b><small>The physical Camera did not move. Its source and Registration remain valid.</small></span></label><label><input type="radio" name="move-mode" checked={mode === "physical_camera_move"} onChange={() => setMode("physical_camera_move")} /><span><b>Physical Camera move</b><small>The Camera moved in real life. Fresh reference, floor, and bin plotting are required.</small></span></label></fieldset>{mode === "physical_camera_move" && monitoringEnabled && <p className="camera-move-warning">Disable monitoring before starting a Physical Camera Move.</p>}<label className="camera-move-reason">Reason<textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Explain why the Camera point is changing" /></label><label className="camera-move-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I confirm this point matches the Camera's real position.</span></label>{error && <p className="camera-modal-error" role="alert">{error}</p>}<dl><div><dt>Current</dt><dd>{camera.placement ? `X ${camera.placement.point.xMeters.toFixed(2)} · Y ${camera.placement.point.yMeters.toFixed(2)} m` : "Not recorded"}</dd></div><div><dt>New Zone</dt><dd>{zone?.zoneNameSnapshot ?? "Invalid placement"}</dd></div></dl></aside></main><footer><p>{mode === "map_position_correction" ? "Publishing creates a new Site Map revision immediately." : "Continue into fresh Camera Registration before the moved point becomes active."}</p><div><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary" disabled={busy || !zoneId || unchanged || reason.trim().length < 3 || !confirmed || mode === "physical_camera_move" && monitoringEnabled}>{busy ? "Saving…" : mode === "map_position_correction" ? "Publish correction" : "Continue to Registration"}</button></div></footer></form></div>;
+}
+
 const alertLabel = (kind: string) => ({ bin_overflow: "Bin overflow", floor_litter: "Floor litter", floor_spill: "Floor spill" }[kind] ?? kind.replaceAll("_", " "));
-const when = (value?: string | null) => value ? new Date(value).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "No recent signal";
+const when = (value?: string | null) => { if (!value) return "No recent signal"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "No recent signal" : date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); };
 
 function cameraAlerts(camera: CameraRecord, alerts: Alert[]) {
   return alerts.filter((alert) => alert.cameraId === camera.id || alert.cameraId === camera.code || alert.cameraName === camera.name || alert.zone === camera.zoneName).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 }
 
-function zoneSignal(zone: Zone, cameras: CameraRecord[], alerts: Alert[]) {
+const unresolvedAlert = (alert: Alert) => !["resolved", "dismissed"].includes(alert.status);
+
+function zoneSignal(zone: Zone, cameras: CameraRecord[], alerts: Alert[], cameraIsOnline: (camera: CameraRecord) => boolean) {
   const zoneCameras = cameras.filter((camera) => camera.zoneId === zone.id);
-  const openAlerts = alerts.filter((alert) => alert.status === "active" && (
+  const openAlerts = alerts.filter((alert) => unresolvedAlert(alert) && (
     alert.zone === zone.name || zoneCameras.some((camera) => alert.cameraId === camera.id || alert.cameraId === camera.code || alert.cameraName === camera.name)
   ));
   if (openAlerts.some((alert) => alert.severity === "critical")) return { tone: "action", label: "Critical alert" };
   if (openAlerts.length) return { tone: "watch", label: "Warning alert" };
-  if (zoneCameras.length && zoneCameras.every((camera) => camera.availability === "unavailable")) return { tone: "stale", label: "Cameras offline" };
+  if (!zoneCameras.some(cameraIsOnline)) return { tone: "stale", label: "No enabled Camera is online" };
   return { tone: "steady", label: "Cameras healthy" };
 }
 
-function CameraPreview({ record, feed, video, latestAlert }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert }) {
+function cameraStateFilterFrom(query: URLSearchParams): CameraStateFilter {
+  const value = query.get("cameraState");
+  return value === "enabled" || value === "disabled" ? value : "all";
+}
+
+export function cameraDetailBackTarget(query: URLSearchParams) {
+  if (query.get("from") === "dashboard") return { hash: "/", label: "Back to Dashboard" };
+  if (query.get("from") === "work") return { hash: "/history", label: "Back to Work" };
+  if (query.get("from") === "team") return { hash: "/admin", label: "Back to Team" };
+  if (query.get("from") === "cameras") {
+    const result = new URLSearchParams();
+    const zoneId = query.get("zoneId"); const cameraState = cameraStateFilterFrom(query);
+    if (zoneId && zoneId !== "all") result.set("zoneId", zoneId);
+    if (cameraState !== "all") result.set("cameraState", cameraState);
+    return { hash: `/cameras${result.size ? `?${result.toString()}` : ""}`, label: "Back to cameras" };
+  }
+  return { hash: "/cameras", label: "Back to all cameras" };
+}
+
+function V2CameraWallPreview({ camera, readOnly = false }: { camera: V2Camera; readOnly?: boolean }) {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => { if (!camera.monitoringEnabled || camera.sourceType !== "looped_video" || !camera.source?.contentUrl) { setUrl(undefined); return; } const key = `camera-wall:${camera.id}`; const controller = new AbortController(); void loadAuthenticatedMedia(key, camera.source.contentUrl, controller.signal).then(setUrl).catch(() => setUrl(undefined)); return () => { controller.abort(); releaseAuthenticatedMedia(key); }; }, [camera]);
+  if (!camera.monitoringEnabled) return <div className="camera-wall-no-signal"><span>MONITORING DISABLED</span><small>{readOnly ? "No current Camera frames are being produced." : "Enable this Camera in its detail view to run a demo."}</small></div>;
+  if (camera.sourceType === "laptop_camera") return <div className="camera-wall-no-signal"><span>LAPTOP CAMERA READY</span><small>{readOnly ? "No retained live frame is available." : "Open detail to start the owner monitoring session."}</small></div>;
+  return url ? <video src={url} autoPlay muted loop playsInline /> : <div className="camera-wall-no-signal"><span>LOADING CAMERA SOURCE</span><small>Waiting for the authenticated video source.</small></div>;
+}
+
+function CameraPreview({ record, feed, video, latestAlert, monitoringCamera, mode = "wall", readOnly = false }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert; monitoringCamera?: V2Camera; mode?: "wall" | "detail"; readOnly?: boolean }) {
   const analyzed = video?.analysis ?? feed?.latest;
   const capturedAt = video?.uploadedAt ?? feed?.latest?.createdAt;
+  if (monitoringCamera) return readOnly ? <V2CameraWallPreview camera={monitoringCamera} readOnly /> : <CameraLiveView cameraId={monitoringCamera.id} compact={mode === "wall"} />;
   return <div className="camera-wall-preview">
     {video ? <video src={video.url} autoPlay muted loop playsInline /> : feed?.latest?.evidenceAvailable || latestAlert?.evidenceAvailable ? <img src="/mock/spill.jpg" alt={`Latest view from ${record.name}`} /> : <div className="camera-wall-no-signal"><span>NO CURRENT FRAME</span><small>Waiting for the next camera signal</small></div>}
     <span className={`camera-wall-live ${video ? "live" : record.availability === "unavailable" ? "offline" : "latest"}`}><i />{video ? "Live" : record.availability === "unavailable" ? "Offline" : "Latest view"}</span>
     {latestAlert && <span className={`camera-wall-alert ${latestAlert.severity}`}>{alertLabel(latestAlert.kind)}</span>}
     {analyzed && <span className="camera-wall-timecode">{analyzed.peopleCount} people · {when(capturedAt)}</span>}
   </div>;
+}
+
+function ProtectedSnapshot({ snapshot, alt }: { snapshot: { mediaId: string; contentUrl: string } | null; alt: string }) {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (!snapshot) { setUrl(undefined); return; }
+    const key = `camera-history:${snapshot.mediaId}`;
+    const controller = new AbortController();
+    void loadAuthenticatedMedia(key, snapshot.contentUrl, controller.signal).then(setUrl).catch(() => setUrl(undefined));
+    return () => { controller.abort(); releaseAuthenticatedMedia(key); };
+  }, [snapshot]);
+  return url && snapshot ? <RetainedCameraEvidence mediaId={snapshot.mediaId} url={url} alt={alt} /> : <span>Snapshot unavailable</span>;
+}
+
+function CameraWorkCancel({ workId, disabled, onDismiss }: { workId: string; disabled: boolean; onDismiss?: (workId: string, reason: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
+  if (!onDismiss) return null;
+  return <div className="camera-work-cancel">{open ? <><label>Cancellation reason<textarea value={reason} onChange={(event) => { setReason(event.target.value); setMessage(""); }} placeholder="Explain why this Work and its linked Alert should be dismissed" /></label><div><button type="button" onClick={() => setOpen(false)}>Keep Work</button><button type="button" disabled={!reason.trim() || pending} onClick={() => { setPending(true); setMessage(""); void onDismiss(workId, reason.trim()).catch((error) => setMessage(error instanceof Error ? error.message : "Cancellation failed.")).finally(() => setPending(false)); }}>{pending ? "Cancelling…" : "Cancel Work"}</button></div>{message && <p>{message}</p>}</> : <button type="button" className="camera-cancel-trigger" disabled={disabled} onClick={() => setOpen(true)}>Cancel Work</button>}</div>;
 }
 
 function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreateZone, onCreateCamera }: Pick<Props, "sites" | "zones" | "onCreateZone" | "onCreateCamera"> & { nextNumber: number; onClose: () => void; onCreated: (camera: CameraRecord) => void }) {
@@ -184,117 +284,114 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
   </div>;
 }
 
-export function CameraOperationsPage({ sites, zones, cameras, feeds, liveVideos, alerts, cleaners, error, onCreateZone, onCreateCamera }: Props) {
+export function CameraOperationsPage({ readOnly = false, showPermissionNotice = true, onNavigate, getCameraDetail = getV2CameraDetail, allowWorkActions = false, canManageCameraPlacement, sites, zones, cameras, feeds, liveVideos, alerts, cleaners, error, onCreateZone, onCreateCamera, onCameraPublished, onDismissCameraWork, v2Cameras = [] }: Props) {
   const activeCameras = cameras.filter((camera) => camera.status === "active");
   const initialQuery = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const [zoneId, setZoneId] = useState(initialQuery.get("zoneId") ?? "all");
+  const [cameraStateFilter, setCameraStateFilter] = useState<CameraStateFilter>(cameraStateFilterFrom(initialQuery));
   const [selectedId, setSelectedId] = useState<string | undefined>(initialQuery.get("cameraId") ?? undefined);
-  const [createdId, setCreatedId] = useState<string | undefined>(initialQuery.get("created") === "1" ? initialQuery.get("cameraId") ?? undefined : undefined);
   const [gridView, setGridView] = useState<"3x2" | "2x3" | "1x6">("3x2");
   const [showAdd, setShowAdd] = useState(false);
-  const [supervisionStatus, setSupervisionStatus] = useState(initialQuery.get("workStatus") ?? "Assigned");
-  const [showCancellation, setShowCancellation] = useState(false);
-  const [cancellationReason, setCancellationReason] = useState("");
+  const monitoring = useOptionalSiteMonitoring();
+  const monitor = monitoring?.monitor;
+  const monitoringCameras = monitoring?.state.cameras ?? {};
+  const [showReconfigure, setShowReconfigure] = useState(false);
+  const [showMove, setShowMove] = useState(false);
+  const [physicalMoveDraft, setPhysicalMoveDraft] = useState<V2CameraDraft>();
+  const [detail, setDetail] = useState<V2CameraDetail>();
+  const [detailError, setDetailError] = useState("");
   const filterRail = useRef<HTMLElement>(null);
-  const supervision = initialQuery.get("workId") ? { id: initialQuery.get("workId")!, issue: initialQuery.get("workIssue") ?? "Cleaning task", status: supervisionStatus, priority: initialQuery.get("workPriority") ?? "Medium", cleaner: initialQuery.get("workCleaner") ?? "", updated: initialQuery.get("workUpdated") ?? "", origin: initialQuery.get("workOrigin") === "manual" ? "manual" as const : "automated" as const, alertId: initialQuery.get("workAlertId") ?? "" } : undefined;
   const nextNumber = Math.max(0, ...cameras.map((camera) => Number(camera.code.match(/\d+$/)?.[0] ?? 0))) + 1;
-  const filtered = activeCameras.filter((camera) => zoneId === "all" || camera.zoneId === zoneId);
-  const requestedCameraId = selectedId ?? initialQuery.get("cameraId");
-  const requestedZone = zones.find((zone) => zone.id === initialQuery.get("zoneId"));
-  const registeredSelection = cameras.find((camera) => camera.id === requestedCameraId || camera.code === requestedCameraId || camera.name === requestedCameraId || camera.name === initialQuery.get("cameraName"));
-  // Work Order review must remain navigable in this frontend prototype even when
-  // the camera registry has not been connected yet. The deep link supplies the
-  // same camera identity used in the Work queue, then real records take over once available.
-  const selected = registeredSelection ?? (initialQuery.get("workId") && requestedCameraId ? {
-    id: requestedCameraId,
-    siteId: requestedZone?.siteId ?? "frontend-demo-site",
-    siteName: requestedZone?.siteName ?? "Batu Caves",
-    zoneId: requestedZone?.id ?? initialQuery.get("zoneId") ?? "frontend-demo-zone",
-    zoneName: requestedZone?.name ?? "Assigned work location",
-    code: requestedCameraId.toUpperCase(),
-    name: initialQuery.get("cameraName") || requestedCameraId.toUpperCase(),
-    sourceMode: "stream" as const,
-    status: "active" as const,
-    availability: "available" as const,
-    registrationStatus: "ready" as const,
-    registrationRevision: 1,
-    registrationUpdatedAt: null,
-    createdAt: null,
-    updatedAt: null,
-  } satisfies CameraRecord : undefined);
+  const monitoringEnabledFor = (camera: CameraRecord) => monitoringCameras[camera.id]?.camera.monitoringEnabled ?? v2Cameras.find((item) => item.id === camera.id)?.monitoringEnabled ?? false;
+  const onlineFor = (camera: CameraRecord) => { const live = monitoringCameras[camera.id]; return Boolean(monitoringEnabledFor(camera) && (live?.lastReceivedAt ? Date.now() - live.lastReceivedAt < 10_000 : v2Cameras.find((item) => item.id === camera.id)?.runtime?.connectionStatus === "online")); };
+  const filtered = activeCameras.filter((camera) => (zoneId === "all" || camera.zoneId === zoneId) && (cameraStateFilter === "all" || monitoringEnabledFor(camera) === (cameraStateFilter === "enabled")));
+  const selected = cameras.find((camera) => camera.id === selectedId || camera.code === selectedId || camera.name === selectedId || camera.name === initialQuery.get("cameraName"));
+  const selectedV2Camera = v2Cameras.find((camera) => camera.id === selected?.id);
+  const selectedLive = selected ? monitoringCameras[selected.id] : undefined;
+  const go = (path: string, params?: Record<string, string>) => onNavigate ? onNavigate(path, params) : location.hash = `${path}${params ? `?${new URLSearchParams(params)}` : ""}`;
   const selectedAlerts = selected ? cameraAlerts(selected, alerts) : [];
-  const selectedCleaner = cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.zoneId && cleaner.status === "active") ?? cleaners.find((cleaner) => cleaner.assignedZoneId === selected?.zoneId);
   const selectedFeed = selected ? feeds.find((feed) => feed.id === selected.id || feed.id === selected.code || feed.name === selected.name) : undefined;
   const selectedVideo = selected ? liveVideos.find((video) => video.cameraId === selected.id || video.cameraId === selected.code) : undefined;
   const zoneOptions = useMemo(() => zones.filter((zone) => activeCameras.some((camera) => camera.zoneId === zone.id)), [activeCameras, zones]);
   const gridColumns = gridView === "3x2" ? 3 : gridView === "2x3" ? 2 : 1;
-  const currentWorkOrder = selectedAlerts[0] ? `WO-${String(selectedAlerts[0].id).replace(/\D/g, "").padStart(4, "0")}` : undefined;
+  const currentAssignment = detail?.currentAssignments[0];
 
   useEffect(() => {
     const syncQuery = () => {
       const query = new URLSearchParams(location.hash.split("?")[1] ?? "");
       setSelectedId(query.get("cameraId") ?? undefined);
       setZoneId(query.get("zoneId") ?? "all");
-      setCreatedId(query.get("created") === "1" ? query.get("cameraId") ?? undefined : undefined);
-      setSupervisionStatus(query.get("workStatus") ?? "Assigned");
-      setShowCancellation(false);
-      setCancellationReason("");
+      setCameraStateFilter(cameraStateFilterFrom(query));
     };
     addEventListener("hashchange", syncQuery);
     return () => removeEventListener("hashchange", syncQuery);
   }, []);
 
-  const openCamera = (camera: CameraRecord, created = false) => {
+  useEffect(() => {
+    if (!selectedId) { setDetail(undefined); return; }
+    const controller = new AbortController();
+    setDetailError("");
+    let pending = false;
+    const refresh = () => { if (pending || controller.signal.aborted) return; pending = true; void getCameraDetail(selectedId, controller.signal).then(setDetail).catch((reason) => {
+      if (controller.signal.aborted) return;
+      setDetailError(reason instanceof Error ? reason.message : "Camera detail could not load.");
+    }).finally(() => { pending = false; }); };
+    refresh();
+    window.addEventListener("litterspot:camera-workflow", refresh);
+    return () => { controller.abort(); window.removeEventListener("litterspot:camera-workflow", refresh); };
+  }, [getCameraDetail, selectedId]);
+
+  const openCamera = (camera: CameraRecord) => {
     setSelectedId(camera.id);
-    setZoneId(camera.zoneId);
-    if (created) setCreatedId(camera.id);
-    location.hash = `/cameras?cameraId=${encodeURIComponent(camera.id)}&zoneId=${encodeURIComponent(camera.zoneId)}${created ? "&created=1" : ""}`;
+    const query = new URLSearchParams({ cameraId: camera.id, from: "cameras", zoneId, cameraState: cameraStateFilter });
+    go("/cameras", Object.fromEntries(query));
   };
 
-  if (selected) return <section className={`camera-detail-page camera-reference-detail ${createdId === selected.id ? "camera-created" : ""}`}>
-    <header className="camera-reference-heading"><button type="button" onClick={() => { setSelectedId(undefined); setCreatedId(undefined); location.hash = `/cameras?zoneId=${encodeURIComponent(zoneId)}`; }}>← Back to all cameras</button><span>{selected.code} · selected view</span></header>
-    {createdId === selected.id && <div className="camera-created-banner"><b>Camera added</b><span>This new view is ready for registration and calibration.</span><button type="button" onClick={() => setCreatedId(undefined)}>Dismiss</button></div>}
-    <div className="camera-reference-layout"><section className="camera-reference-visual"><CameraPreview record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} /><footer><div><h1>{selected.name}</h1><p>{selected.zoneName} · {selected.sourceMode === "stream" ? "Live camera feed" : "Uploaded camera frame"}</p></div><p>All imagery is synthetic demonstration evidence. No identity recognition is performed.</p></footer></section>
-      <aside className="camera-reference-sidebar"><section className="camera-reference-info"><header><span>CAMERA INFORMATION</span><b className={selected.availability === "unavailable" ? "offline" : "online"}><i />{selected.availability === "unavailable" ? "Offline" : "Online"}</b></header><dl><div><dt>Camera name</dt><dd>{selected.code}</dd></div><div><dt>Zone</dt><dd>{selected.zoneName}</dd></div><div><dt>Source</dt><dd>{selected.sourceMode === "stream" ? "Live stream" : "Uploaded frame"}</dd></div><div><dt>Frame freshness</dt><dd>{selectedVideo ? when(selectedVideo.uploadedAt) : "Not reported"}</dd></div></dl></section>
-        <section className="camera-reference-assignment">
-          <header><span>CURRENT ASSIGNMENT</span><h2>{supervision ? `${supervision.id} · ${supervision.issue}` : currentWorkOrder ? `${currentWorkOrder} · ${alertLabel(selectedAlerts[0].kind)}` : "No active Work Order"}</h2></header>
-          {supervision ? <>
-            <div className="camera-supervision-meta"><span className={`work-priority ${supervision.priority.toLowerCase()}`}><small>Priority</small>{supervision.priority}</span><span className={`work-record-status ${supervision.status.toLowerCase().replaceAll(" ", "-")}`}><small>Current status</small>{supervision.status}</span></div>
-            <p><i aria-hidden="true" /><strong>{supervision.cleaner || selectedCleaner?.fullName || "No Cleaner available"}</strong><span>{supervision.status === "Resolved" ? "Cleaner marked the Work Order resolved" : "Current response is being supervised"}</span></p>
-            {supervision.origin === "automated" && <small className="camera-supervision-note">The Orchestrator will verify the fresh camera evidence and record its decision below.</small>}
-            {supervision.origin === "manual" && <div className="camera-assignment-actions" aria-label="Supervisor outcome actions"><span>REVIEW ACTION</span><button type="button" className="resolve" onClick={() => setSupervisionStatus("Resolved")}>Resolve</button><button type="button" className="rework" onClick={() => setSupervisionStatus("Rework Required")}>Request rework</button><button type="button" className="cancel" onClick={() => setShowCancellation(true)}>Cancel work</button></div>}
-            {showCancellation && <div className="camera-cancellation-form"><label>Cancellation reason<textarea value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder="Explain why this Work Order is cancelled" /></label><div><button type="button" onClick={() => setShowCancellation(false)}>Keep work</button><button type="button" disabled={!cancellationReason.trim()} onClick={() => { setSupervisionStatus("Dismissed"); setShowCancellation(false); }}>Confirm cancellation</button></div></div>}
-            {!showCancellation && supervision.origin === "automated" && <button className="camera-cancel-trigger" type="button" onClick={() => setShowCancellation(true)}>Cancel Work Order</button>}
-            <button type="button" onClick={() => { location.hash = "/history"; }}>Back to Work Orders <b>→</b></button>
-          </> : selectedCleaner ? <><p><i aria-hidden="true" /><strong>{selectedCleaner.fullName}</strong><span>{selectedCleaner.status === "active" ? "Travelling · 4 min away" : "Unavailable · assignment on hold"}</span></p><button type="button" onClick={() => { location.hash = `/history?camera=${encodeURIComponent(selected.code)}`; }}>View Assignment <b>→</b></button></> : <p className="camera-reference-empty">No active cleaning assignment.</p>}
-        </section>
-        <section className="camera-reference-history"><header><span>RECENT ALERT & WORK HISTORY</span></header><div className="camera-history-thumbnails" aria-label="Recent alert snapshots">{Array.from({ length: 3 }, (_, index) => <button type="button" key={index} onClick={() => selectedAlerts[index] && (location.hash = `/alerts?alert=${selectedAlerts[index].id}`)}><img src="/mock/spill.jpg" alt={selectedAlerts[index] ? `${alertLabel(selectedAlerts[index].kind)} alert snapshot` : "Recent alert snapshot"} /><i className={selectedAlerts[index]?.severity ?? "system"} /></button>)}</div><ol>{selectedAlerts.slice(0, 3).map((alert, index) => { const state = index === 0 && supervision ? supervision.status : alert.status === "resolved" ? "Resolved" : alert.status === "active" ? "Awaiting Review" : "Recorded"; return <li key={alert.id}><strong>{index === 0 && supervision ? supervision.id : `WO-${String(alert.id).padStart(4, "0")}`}</strong><span>{alertLabel(alert.kind)}</span><time>{new Date(alert.createdAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time><em className={`camera-history-status ${state.toLowerCase().replaceAll(" ", "-")}`}>{state}</em></li>; })}{!selectedAlerts.length && <li className="empty"><p><strong>No recent alerts or Work Orders</strong><span>New camera events will appear here.</span></p></li>}</ol></section>{supervision?.origin === "automated" && <section className="camera-orchestrator-log"><header><span>ORCHESTRATOR DECISION LOG</span><b>Audit trace</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>Decision</th><th>Reason</th></tr></thead><tbody><tr><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner selected</td><td>Closest eligible Cleaner with no active Work Order</td></tr><tr><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh evidence is required after cleaning</td></tr><tr><td>Pending</td><td>Outcome review</td><td>Orchestrator will resolve or request rework</td></tr></tbody></table></div></section>}</aside>
+  const showCameraList = (nextZoneId: string, nextState: CameraStateFilter = cameraStateFilter) => {
+    setZoneId(nextZoneId); setCameraStateFilter(nextState);
+    const query = new URLSearchParams();
+    if (nextZoneId !== "all") query.set("zoneId", nextZoneId);
+    if (nextState !== "all") query.set("cameraState", nextState);
+    go("/cameras", Object.fromEntries(query));
+  };
+
+  if (selected) { const back = cameraDetailBackTarget(new URLSearchParams(location.hash.split("?")[1] ?? "")); const sourceLabel = selectedV2Camera?.sourceType === "laptop_camera" ? "Laptop Camera" : "Looped video"; const binCount = selectedV2Camera?.registration?.binCount ?? 0; const registrationLabel = selectedV2Camera?.registration ? `Floor registered · ${binCount} ${binCount === 1 ? "bin" : "bins"} registered` : "Registration incomplete"; const cameraOnline = selectedLive?.lastReceivedAt ? Date.now() - selectedLive.lastReceivedAt < 10000 : selectedV2Camera?.runtime?.connectionStatus === "online"; return <section className="camera-detail-page camera-reference-detail">
+    <header className="camera-reference-heading"><button type="button" onClick={() => { setSelectedId(undefined); if (onNavigate) { const [path, query] = back.hash.split("?"); onNavigate(path, Object.fromEntries(new URLSearchParams(query ?? ""))); } else location.hash = back.hash; }}>← {back.label}</button></header>
+    {showReconfigure && <V2CameraCreationPage cameraId={selected.id} canCreateCamera={canManageCameraPlacement} onClose={() => setShowReconfigure(false)} onPublished={async cameraId => { setShowReconfigure(false); await monitor?.refresh(); await onCameraPublished?.(cameraId); }} />}
+    {showMove && detail?.camera && <CameraMoveModal camera={detail.camera} cameraName={selected.name} monitoringEnabled={Boolean(selectedV2Camera?.monitoringEnabled)} onClose={() => setShowMove(false)} onPublished={async () => { await monitor?.refresh(); await onCameraPublished?.(selected.id); }} onPhysicalMove={(draft) => { setShowMove(false); setPhysicalMoveDraft(draft); }} />}
+    {physicalMoveDraft && <V2CameraCreationPage initialDraft={physicalMoveDraft} cameraId={selected.id} canCreateCamera onClose={() => setPhysicalMoveDraft(undefined)} onPublished={async cameraId => { setPhysicalMoveDraft(undefined); await monitor?.refresh(); await onCameraPublished?.(cameraId); }} />}
+    <div className="camera-reference-layout"><section className="camera-reference-visual"><CameraPreview readOnly={readOnly} record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} monitoringCamera={selectedV2Camera} mode="detail" /><footer className="camera-reference-identity"><div><span>CAMERA</span><h1>{selected.name}</h1><p>{sourceLabel}</p></div><div><span>ZONE</span><h2>{selected.zoneName}</h2><p>{registrationLabel}</p></div></footer></section>
+      <aside className="camera-reference-sidebar"><div className="camera-reference-configuration"><section className="camera-reference-info"><header><span>CAMERA INFORMATION</span><b className={selectedV2Camera?.monitoringEnabled && cameraOnline ? "online" : "offline"}><i />{!selectedV2Camera?.monitoringEnabled ? "Disabled" : cameraOnline ? "Online" : "Offline"}</b></header><dl><div><dt>Camera name</dt><dd>{selected.name}</dd></div><div><dt>Zone</dt><dd>{selected.zoneName}</dd></div><div><dt>Source</dt><dd>{selectedV2Camera?.sourceType === "laptop_camera" ? "Laptop Camera" : "Video source"}</dd></div><div><dt>Frame freshness</dt><dd>{selectedLive?.observation ? when(new Date(selectedLive.observation.capturedAtMs).toISOString()) : selectedV2Camera?.runtime?.lastSampleAcceptedAt ? when(selectedV2Camera.runtime.lastSampleAcceptedAt) : "Waiting for frames"}</dd></div></dl></section>{!readOnly && selectedV2Camera && <button className="camera-reference-reconfigure" type="button" onClick={() => setShowReconfigure(true)}>Reconfigure Camera</button>}{canManageCameraPlacement && detail?.camera && <button className="camera-reference-move" type="button" onClick={() => setShowMove(true)}>Move Camera</button>}</div>
+        <section className="camera-reference-assignment"><header><span>CURRENT ASSIGNMENT</span><h2>{currentAssignment ? currentAssignment.title : "No active Work Order"}</h2></header>{currentAssignment ? <><div className="camera-supervision-meta"><span className={`work-priority ${currentAssignment.severity}`}>{currentAssignment.severity}</span><span className={`work-record-status ${currentAssignment.status}`}>{currentAssignment.status.replaceAll("_", " ")}</span></div><p><i aria-hidden="true" /><strong>{currentAssignment.cleanerNameSnapshot}</strong><span>{currentAssignment.managementMode === "orchestrated" ? "System assignment in progress" : "Supervisor-created Work in progress"}</span></p><small className="camera-supervision-note">{currentAssignment.managementMode === "orchestrated" ? "The system selected this response." : "The Cleaner updates progress. Review follows Cleaner submission."}</small>{allowWorkActions && <CameraWorkCancel workId={currentAssignment.id} disabled={false} onDismiss={onDismissCameraWork} />}<button type="button" onClick={() => go("/history", { workId: currentAssignment.id })}>Open Work detail <b>→</b></button></> : <p className="camera-reference-empty">No active cleaning assignment.</p>}</section>
+        <section className="camera-reference-history"><header><span>RECENT HISTORY</span><button type="button" onClick={() => go("/history", { camera: selected.code })}>View all →</button></header><div className="camera-history-thumbnails" aria-label="Recent evidence thumbnails">{detail?.recentHistory.filter((entry) => entry.snapshot).slice(0, 5).map((entry) => <button type="button" key={entry.id} onClick={() => { if (entry.type === "alert") go("/alerts", { alert: entry.id }); }}><ProtectedSnapshot snapshot={entry.snapshot} alt={`${entry.issueType} snapshot`} /><i className={entry.severity} /></button>)}</div><ol>{detail?.recentHistory.slice(0, 5).map((entry) => <li key={`${entry.type}-${entry.id}`}><time>{entry.occurredAt ? new Date(entry.occurredAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Not recorded"}</time><p><strong>{alertLabel(entry.issueType)}</strong><span>{entry.type === "work" && entry.assignedCleanerName ? `${entry.status} · ${entry.assignedCleanerName}` : entry.status}</span></p></li>)}{!detail?.recentHistory.length && <li className="empty"><p><strong>No recent history</strong><span>Camera events will appear here.</span></p></li>}</ol></section><section className="camera-reference-history camera-orchestrator-trace"><header><span>SYSTEM LOG</span><button type="button" onClick={() => go("/status")}>Open System →</button></header>{detail?.orchestratorTrace.length ? <ol>{detail.orchestratorTrace.map((run) => <li key={run.id}><time>{run.completedAt ? new Date(run.completedAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Running"}</time><p><strong>{run.type === "assignment" ? "Assignment decision" : "Review decision"}</strong><span>{run.decisionSummary ?? run.resultCode ?? run.status}</span></p></li>)}</ol> : <p className="camera-reference-empty">No system decision is linked to this Camera history.</p>}{detailError && <p className="camera-reference-empty">{detailError}</p>}</section></aside>
     </div>
-    {supervision?.origin === "automated" && <section className="camera-orchestrator-log camera-orchestrator-log-full"><header><div><strong>SYSTEM LOG</strong><span>AUTOMATED CAMERA WORK · AUDIT TRAIL</span></div><b>Read only</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>System action</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr className="assigned"><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner auto-assigned</td><td>Closest eligible Cleaner with no active Work Order</td><td><span className="system-log-status assigned">Assigned</span></td></tr><tr className="in-progress"><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh Camera evidence is required after cleaning</td><td><span className="system-log-status in-progress">In progress</span></td></tr><tr className="awaiting-review"><td>Pending</td><td>Automated outcome review</td><td>System will resolve or request rework after reviewing fresh evidence</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr></tbody></table></div></section>}
-    {supervision?.origin === "manual" && <section className="camera-orchestrator-log camera-orchestrator-log-full"><header><div><strong>SYSTEM LOG</strong><span>MANUAL CAMERA WORK · AUDIT TRAIL</span></div><b>Read only</b></header><div className="camera-log-table"><table><thead><tr><th>Time</th><th>System action</th><th>Detail</th><th>Status</th></tr></thead><tbody><tr className="assigned"><td>{supervision.updated ? when(supervision.updated) : "Now"}</td><td>Cleaner assigned by supervisor</td><td>{supervision.cleaner ? `${supervision.cleaner} was selected for this Camera Work` : "Supervisor selected a Cleaner for this Camera Work"}</td><td><span className="system-log-status assigned">Assigned</span></td></tr><tr className="awaiting-review"><td>+ 01 min</td><td>Camera verification queued</td><td>Fresh Camera evidence is available for supervisor review</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr><tr className="awaiting-review"><td>Pending</td><td>Supervisor outcome review</td><td>Resolve, request rework, or cancel after checking the live Camera view</td><td><span className="system-log-status awaiting-review">Awaiting review</span></td></tr></tbody></table></div></section>}
-  </section>;
+  </section>; }
 
   return <section className="ops-page camera-operations-page">
-    <header className="camera-wall-header"><div><span>CAMERAS · LIVE OPERATIONS</span><h1>See every zone.<br />Open the evidence.</h1><p>Monitor registered camera views, then select one to inspect its alerts, assigned Cleaner, and recent history.</p></div><button className="camera-add-button" type="button" onClick={() => setShowAdd(true)}><span>+</span>Add camera</button></header>
+    <header className="camera-wall-header"><div><span>CAMERAS · LIVE OPERATIONS</span><h1>See every zone. Open the evidence.</h1><p>{readOnly ? "Inspect registered Camera views, Alerts, assigned Cleaners, and recent history." : "Monitor registered camera views, then select one to inspect its alerts, assigned Cleaner, and recent history."}</p></div>{canManageCameraPlacement && <button className="camera-add-button" type="button" onClick={() => setShowAdd(true)}><span>+</span>Add camera</button>}</header>{readOnly && showPermissionNotice && <p className="profile-feedback">Camera controls are unavailable for this account.</p>}
     {error && <p className="profile-feedback" role="alert">{error}</p>}
     <div className="camera-zone-slider">
-      <button type="button" aria-label="Previous zones" onClick={() => filterRail.current?.scrollBy({ left: -320, behavior: "smooth" })}>←</button>
-      <nav className="camera-zone-filter" aria-label="Filter cameras by zone" ref={filterRail}>
-        <button className={zoneId === "all" ? "active" : ""} aria-pressed={zoneId === "all"} onClick={() => { setZoneId("all"); location.hash = "/cameras"; }}>
+      <div className="camera-zone-rail">
+        <button type="button" aria-label="Previous zones" onClick={() => filterRail.current?.scrollBy({ left: -320, behavior: "smooth" })}>←</button>
+        <nav className="camera-zone-filter" aria-label="Filter cameras by zone" ref={filterRail}>
+        <button className={zoneId === "all" ? "active" : ""} aria-pressed={zoneId === "all"} onClick={() => showCameraList("all")}>
           <span>All zones</span><b>{activeCameras.length}</b>{zoneId === "all" && <i className="camera-zone-check" aria-hidden="true">✓</i>}
         </button>
         {zoneOptions.map((zone) => {
-          const signal = zoneSignal(zone, activeCameras, alerts);
-          return <button className={zoneId === zone.id ? "active" : ""} aria-pressed={zoneId === zone.id} key={zone.id} title={signal.label} onClick={() => { setZoneId(zone.id); location.hash = `/cameras?zoneId=${encodeURIComponent(zone.id)}`; }}>
+          const signal = zoneSignal(zone, activeCameras, alerts, onlineFor);
+          return <button className={zoneId === zone.id ? "active" : ""} aria-pressed={zoneId === zone.id} key={zone.id} title={signal.label} onClick={() => showCameraList(zone.id)}>
             <span>{zone.name}</span><b>{activeCameras.filter((camera) => camera.zoneId === zone.id).length}</b><i className={`camera-zone-signal ${signal.tone}`} aria-hidden="true" />{zoneId === zone.id && <i className="camera-zone-check" aria-hidden="true">✓</i>}
           </button>;
         })}
-      </nav>
-      <button type="button" aria-label="Next zones" onClick={() => filterRail.current?.scrollBy({ left: 320, behavior: "smooth" })}>→</button>
+        </nav>
+        <button type="button" aria-label="Next zones" onClick={() => filterRail.current?.scrollBy({ left: 320, behavior: "smooth" })}>→</button>
+      </div>
+      <div className="camera-state-filter" role="group" aria-label="Filter Cameras by monitoring state">
+        {(["all", "enabled", "disabled"] as const).map((value) => <button type="button" className={cameraStateFilter === value ? "active" : ""} aria-pressed={cameraStateFilter === value} key={value} onClick={() => showCameraList(zoneId, value)}>{value === "all" ? "Both" : value === "enabled" ? "Enabled" : "Disabled"}<b>{value === "all" ? activeCameras.length : activeCameras.filter((camera) => monitoringEnabledFor(camera) === (value === "enabled")).length}</b></button>)}
+      </div>
     </div>
-    <div className="camera-wall-summary"><p><i />{activeCameras.filter((camera) => camera.availability !== "unavailable").length} available</p><p>{alerts.filter((alert) => alert.status === "active").length} unresolved alerts</p><p>{zoneId === "all" ? "Showing all registered zones" : `Filtered to ${zones.find((zone) => zone.id === zoneId)?.name ?? "selected zone"}`}</p></div>
     <div className="camera-grid-toolbar atlas-camera-grid-toolbar"><span>Camera grid</span><div className="grid-view-switcher" role="group" aria-label="Choose camera grid layout">{([["1x6", "Single column", 1], ["2x3", "Two columns", 2], ["3x2", "Three columns", 6]] as const).map(([value, gridLabel, cells]) => <button className={gridView === value ? "active" : ""} aria-label={gridLabel} title={gridLabel} aria-pressed={gridView === value} key={value} onClick={() => setGridView(value)}><span className={`grid-view-icon cells-${cells}`} aria-hidden="true">{Array.from({ length: cells }, (_, index) => <i key={index} />)}</span></button>)}</div></div>
-    <section className="camera-wall-grid" aria-label="Camera views" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{filtered.map((record) => { const cameraFeed = feeds.find((feed) => feed.id === record.id || feed.id === record.code || feed.name === record.name); const video = liveVideos.find((item) => item.cameraId === record.id || item.cameraId === record.code); const related = cameraAlerts(record, alerts); const open = related.filter((alert) => alert.status === "active"); const status = record.availability === "unavailable" ? { label: "Offline", tone: "offline" } : open.some((alert) => alert.severity === "critical") ? { label: "Action", tone: "action" } : open.length ? { label: "Watch", tone: "watch" } : { label: "Clear", tone: "clear" }; return <button type="button" className="camera-wall-card" key={record.id} onClick={() => openCamera(record)}><CameraPreview record={record} feed={cameraFeed} video={video} latestAlert={related[0]} /><footer><div><strong>{record.name}</strong><span>{record.code} · {record.zoneName}</span></div><b className={`camera-card-status ${status.tone}`}><i />{status.label}</b></footer></button>; })}{!filtered.length && <div className="camera-wall-empty"><span>NO CAMERAS IN THIS ZONE</span><p>Add a camera or choose another registered zone.</p><button type="button" onClick={() => setShowAdd(true)}>+ Add camera</button></div>}</section>
-    {showAdd && <AddCameraModal sites={sites} zones={zones} nextNumber={nextNumber} onClose={() => setShowAdd(false)} onCreated={(camera) => openCamera(camera, true)} onCreateZone={onCreateZone} onCreateCamera={onCreateCamera} />}
+    <section className="camera-wall-grid" aria-label="Camera views" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}>{filtered.map((record) => { const cameraFeed = feeds.find((feed) => feed.id === record.id || feed.id === record.code || feed.name === record.name); const video = liveVideos.find((item) => item.cameraId === record.id || item.cameraId === record.code); const related = cameraAlerts(record, alerts); const monitored = v2Cameras.find((camera) => camera.id === record.id); const open = related.filter(unresolvedAlert); const currentLive = monitoringCameras[record.id]; const enabled = monitoringEnabledFor(record); const busy = Boolean(currentLive?.controlBusy); const condition = open.some((alert) => alert.severity === "critical") ? { label: "Action", tone: "action" } : open.length ? { label: "Watch", tone: "watch" } : { label: "Clear", tone: "clear" }; return <article role="link" tabIndex={0} aria-label={`Open ${record.name}`} className="camera-wall-card" key={record.id} onClick={() => openCamera(record)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openCamera(record); } }}><CameraPreview readOnly={readOnly} record={record} feed={cameraFeed} video={video} latestAlert={related[0]} monitoringCamera={monitored} /><footer><div><strong>{record.name}</strong><span>{record.code} · {record.zoneName}</span></div><div className="camera-card-footer-actions"><b className={`camera-card-status ${condition.tone}`}><i />{condition.label}</b>{!readOnly && monitored && monitor && <button type="button" className={`camera-card-power ${enabled ? "enabled" : "disabled"}`} disabled={busy} aria-label={`${enabled ? "Disable" : "Enable"} ${record.name}`} onClick={(event) => { event.stopPropagation(); void monitor.toggle(record.id); }}>{busy ? "Updating…" : enabled ? "Disable" : "Enable"}</button>}</div></footer></article>; })}{!filtered.length && <div className="camera-wall-empty"><span>NO CAMERAS MATCH THIS VIEW</span><p>Change the Zone or monitoring-state filter to show another Camera.</p></div>}</section>
+    {canManageCameraPlacement && showAdd && <V2CameraCreationPage canCreateCamera onClose={() => setShowAdd(false)} onPublished={async (cameraId) => { setShowAdd(false); await onCameraPublished?.(cameraId); go("/cameras", { cameraId, from: "cameras" }); }} />}
   </section>;
 }
