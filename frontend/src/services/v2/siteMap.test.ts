@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("./http", () => ({ v2Request: request }));
 
-import { changeSiteMapCameraPlacement, discardSiteMapDraft, getActiveSiteMap, getRetiredSiteMapZones, getSiteMapAuditEvents, getSiteMapDraft, publishSiteMapDraft, saveSiteMapDraft, startSiteMapDraft, uploadSiteMapBackground, validateSiteMapDraft } from "./siteMap";
+import { changeSiteMapCameraPlacement, discardSiteMapDraft, getActiveSiteMap, getRetiredSiteMapZones, getSiteMapAuditEvents, getSiteMapDraft, publishSiteMapDraft, saveSiteMapDraft, siteMapBackgroundCacheKey, startSiteMapDraft, uploadSiteMapBackground, validateSiteMapDraft } from "./siteMap";
 
 const draft = { id: "site-1", siteId: "site-1", baseRevisionId: "map-1", widthMeters: 100, heightMeters: 80, gridSizeMeters: 5, backgroundMediaId: null, backgroundTransform: null, coordinateOrigin: "top_left", xAxisDirection: "right", yAxisDirection: "down", validationStatus: "not_validated", validationErrors: [], revision: 1 };
 
@@ -46,6 +46,12 @@ describe("Site Map API client", () => {
     request.mockResolvedValueOnce({ background: { mediaId: "media-1" } });
     await uploadSiteMapBackground(file);
     expect(request).toHaveBeenCalledWith("/api/site-map/background", expect.objectContaining({ method: "POST", body: expect.any(FormData) }));
+  });
+
+  it("shares one background cache entry across map instances", () => {
+    const background = { mediaId: "map-background-1", contentUrl: "/api/media/map-background-1/content", mimeType: "image/png", width: 1536, height: 1024, storageStatus: "available" };
+    expect(siteMapBackgroundCacheKey(background, background.contentUrl)).toBe(siteMapBackgroundCacheKey(background, background.contentUrl));
+    expect(siteMapBackgroundCacheKey(null, "/api/cleaner/map/background")).toBe("site-map-background:/api/cleaner/map/background");
   });
 
   it("sends a confirmed Root Camera placement change with concurrency guards", async () => {

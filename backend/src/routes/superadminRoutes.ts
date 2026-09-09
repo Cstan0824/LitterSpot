@@ -3,9 +3,10 @@ import { z } from "zod";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
 import { getMediaContent } from "../services/mediaService.js";
-import { listV2AuditEvents, writeV2AuditEvent } from "../services/v2AuditService.js";
+import { listV2AuditEvents, listV2AuditEventsPage, writeV2AuditEvent } from "../services/v2AuditService.js";
 import { createV2Site, recoverV2Root, updateV2SiteStatus } from "../services/v2SuperadminService.js";
-import { getV2SuperadminAlert, getV2SuperadminAnalytics, getV2SuperadminCamera, getV2SuperadminOperationsView, getV2SuperadminSiteDetail, getV2SuperadminWork, listV2SuperadminSites, rewriteSuperadminSiteMediaUrls } from "../services/v2SuperadminReadService.js";
+import { getV2SuperadminAlert, getV2SuperadminAnalytics, getV2SuperadminCamera, getV2SuperadminListPage, getV2SuperadminOperationsView, getV2SuperadminSiteDetail, getV2SuperadminWork, listV2SuperadminSitesPage, rewriteSuperadminSiteMediaUrls } from "../services/v2SuperadminReadService.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 import { getV2SiteOperation, reconcileV2SiteOperation } from "../services/v2SiteOperationService.js";
 import { getV2OrchestratorRun } from "../services/v2OrchestratorService.js";
 
@@ -27,12 +28,19 @@ superadminRoutes.post("/sites/:siteId/operations/:operationId/reconcile", async 
 });
 
 superadminRoutes.get("/sites", async (req, res) => {
-  const status = z.enum(["active", "inactive", "all"]).default("all").parse(req.query.status);
-  return res.json({ sites: await listV2SuperadminSites(status) });
+  const query = z.object({ ...boundedListQueryFields, status: z.enum(["active", "inactive", "all"]).default("all") }).strict().parse(req.query);
+  const page = await listV2SuperadminSitesPage(query);
+  return res.json({ sites: page.items, ...page });
 });
 
 superadminRoutes.get("/sites/:siteId", async (req, res) => res.json(await getV2SuperadminSiteDetail(req.params.siteId)));
 superadminRoutes.get("/sites/:siteId/view/operations", async (req, res) => res.json(await getV2SuperadminOperationsView(req.params.siteId)));
+superadminRoutes.get("/sites/:siteId/view/lists/:resource", async (req, res) => {
+  const resource = z.enum(["alerts", "work-orders", "cleaners", "supervisors", "runs"]).parse(req.params.resource);
+  const query = z.object({ ...boundedListQueryFields, status: z.string().trim().min(1).optional(), zoneId: z.string().trim().min(1).optional(), severity: z.enum(["warning", "critical"]).optional(), origin: z.enum(["alert", "manual"]).optional() }).strict().parse(req.query);
+  const page = await getV2SuperadminListPage(req.params.siteId, resource, query);
+  return res.json({ [resource === "work-orders" ? "workOrders" : resource]: page.items, ...page });
+});
 superadminRoutes.get("/sites/:siteId/view/alerts/:alertId", async (req, res) => res.json(rewriteSuperadminSiteMediaUrls(req.params.siteId, await getV2SuperadminAlert(req.params.siteId, req.params.alertId))));
 superadminRoutes.get("/sites/:siteId/view/cameras/:cameraId", async (req, res) => res.json(rewriteSuperadminSiteMediaUrls(req.params.siteId, await getV2SuperadminCamera(req.params.siteId, req.params.cameraId))));
 superadminRoutes.get("/sites/:siteId/view/work-orders/:workOrderId", async (req, res) => res.json(rewriteSuperadminSiteMediaUrls(req.params.siteId, await getV2SuperadminWork(req.params.siteId, req.params.workOrderId))));
@@ -41,7 +49,7 @@ superadminRoutes.get("/sites/:siteId/view/analytics", async (req, res) => {
   const query = z.object({ from: z.string().optional(), to: z.string().optional() }).strict().parse(req.query);
   return res.json(await getV2SuperadminAnalytics(req.params.siteId, query.from, query.to));
 });
-superadminRoutes.get("/sites/:siteId/view/audit-events", async (req, res) => res.json({ events: await listV2AuditEvents({ siteId: req.params.siteId, actorRole: "superadmin", limit: 100 }) }));
+superadminRoutes.get("/sites/:siteId/view/audit-events", async (req, res) => { const query = z.object(boundedListQueryFields).strict().parse(req.query); const page = await listV2AuditEventsPage({ siteId: req.params.siteId, actorRole: "superadmin", ...query }); return res.json({ events: page.items, ...page }); });
 superadminRoutes.get("/sites/:siteId/view/media/:mediaId/content", async (req, res) => {
   const record = await firestore.collection("mediaAssets").doc(req.params.mediaId).get();
   if (!record.exists || record.data()?.siteId !== req.params.siteId) throw new HttpError(404, "Media not found.");
@@ -80,5 +88,7 @@ superadminRoutes.post("/sites/:siteId/root-recovery", async (req, res) => {
 });
 
 superadminRoutes.get("/audit-events", async (req, res) => {
-  return res.json({ events: await listV2AuditEvents({ siteId: typeof req.query.siteId === "string" ? req.query.siteId : undefined, actorUid: typeof req.query.actorUid === "string" ? req.query.actorUid : undefined, actorRole: "superadmin" }) });
+  const query = z.object({ ...boundedListQueryFields, siteId: z.string().trim().min(1).optional(), actorUid: z.string().trim().min(1).optional() }).strict().parse(req.query);
+  const page = await listV2AuditEventsPage({ ...query, actorRole: "superadmin" });
+  return res.json({ events: page.items, ...page });
 });

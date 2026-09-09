@@ -5,13 +5,15 @@ import { getCameraListConfiguration } from "./cameraConfigurationCache.js";
 import { getDashboardV2 } from "./phase11Service.js";
 import { getDailySummaries } from "./phase11Service.js";
 import { v2Json } from "./v2Presentation.js";
-import { getV2Alert, listV2Alerts } from "./v2AlertService.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
+import { getV2Alert, listV2AlertsPage } from "./v2AlertService.js";
 import { getV2CameraDetail } from "./v2CameraDetailService.js";
-import { listV2Cleaners } from "./v2CleanerService.js";
+import { listV2CleanersPage } from "./v2CleanerService.js";
 import { getV2Map } from "./v2MapService.js";
 import { getV2SystemView } from "./v2SystemService.js";
-import { listV2Supervisors } from "./v2IdentityService.js";
-import { getV2WorkOrder, listV2Verifications, listV2WorkEvents, listV2WorkOrders } from "./v2WorkOrderService.js";
+import { listV2SupervisorsPage } from "./v2IdentityService.js";
+import { getV2WorkOrder, listV2Verifications, listV2WorkEvents, listV2WorkOrdersPage } from "./v2WorkOrderService.js";
+import { listV2OrchestratorRunsPage } from "./v2OrchestratorService.js";
 
 const timestamp = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
 
@@ -83,11 +85,15 @@ export async function presentV2SuperadminSite(siteId: string) {
 }
 
 export async function listV2SuperadminSites(status: "active" | "inactive" | "all" = "all") {
-  const snapshot = await firestore.collection("sites").limit(200).get();
-  const sites = await Promise.all(snapshot.docs
-    .filter((site) => site.data()?.schemaVersion === 2 && (status === "all" || site.data()?.status === status))
-    .map((site) => presentV2SuperadminSite(site.id)));
-  return sites.sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
+  return (await listV2SuperadminSitesPage({ status, limit: 100 })).items;
+}
+
+export async function listV2SuperadminSitesPage(input: { status: "active" | "inactive" | "all"; limit: number; cursor?: string }) {
+  const filters = { status: input.status };
+  let query: FirebaseFirestore.Query = firestore.collection("sites").where("schemaVersion", "==", 2);
+  if (input.status !== "all") query = query.where("status", "==", input.status);
+  const page = await queryCursorPage({ query, totalQuery: query, resource: "superadminSites", orderField: "name", direction: "asc", filters, limit: input.limit, cursor: input.cursor, present: (document) => document.id });
+  return { ...page, items: await Promise.all(page.items.map(presentV2SuperadminSite)) };
 }
 
 export async function getV2SuperadminSiteDetail(siteId: string) {
@@ -104,18 +110,27 @@ export async function getV2SuperadminSiteDetail(siteId: string) {
 
 export async function getV2SuperadminOperationsView(siteId: string) {
   const site = await presentV2SuperadminSite(siteId);
-  const [siteMap, alerts, cleaners, supervisors, workOrders, cameraConfiguration, system, dashboardSnapshot] = await Promise.all([
+  const [siteMap, alertPage, cleanerPage, supervisorPage, workPage, cameraConfiguration, system, dashboardSnapshot] = await Promise.all([
     getV2Map(siteId, { allowInactive: true }),
-    listV2Alerts(siteId),
-    listV2Cleaners(siteId, "all"),
-    listV2Supervisors(siteId, "root"),
-    listV2WorkOrders(siteId, { status: "all", limit: 100 }),
+    listV2AlertsPage(siteId, { limit: 25 }),
+    listV2CleanersPage(siteId, { status: "all", limit: 25 }),
+    listV2SupervisorsPage(siteId, "root", { status: "all", limit: 25 }),
+    listV2WorkOrdersPage(siteId, { status: "all", limit: 25 }),
     getCameraListConfiguration(siteId),
     getV2SystemView(siteId),
     firestore.collection("dashboardSummaries").doc(siteId).get(),
   ]);
   const dashboard = site.status === "active" ? await getDashboardV2(siteId) : dashboardSnapshot.exists ? v2Json(dashboardSnapshot.data()) : null;
-  return rewriteSuperadminSiteMediaUrls(siteId, v2Json({ site, dashboard, siteMap, alerts, cleaners, supervisors, workOrders, cameras: cameraConfiguration.cameras, system }));
+  return rewriteSuperadminSiteMediaUrls(siteId, v2Json({ site, dashboard, siteMap, alerts: alertPage.items, cleaners: cleanerPage.items, supervisors: supervisorPage.items, workOrders: workPage.items, cameras: cameraConfiguration.cameras, system, pagination: { alerts: { nextCursor: alertPage.nextCursor, hasMore: alertPage.hasMore, totalCount: alertPage.totalCount }, cleaners: { nextCursor: cleanerPage.nextCursor, hasMore: cleanerPage.hasMore, totalCount: cleanerPage.totalCount }, supervisors: { nextCursor: supervisorPage.nextCursor, hasMore: supervisorPage.hasMore, totalCount: supervisorPage.totalCount }, workOrders: { nextCursor: workPage.nextCursor, hasMore: workPage.hasMore, totalCount: workPage.totalCount } } }));
+}
+
+export async function getV2SuperadminListPage(siteId: string, resource: "alerts" | "work-orders" | "cleaners" | "supervisors" | "runs", input: { limit: number; cursor?: string; status?: string; zoneId?: string; severity?: string; origin?: "alert" | "manual" }) {
+  await presentV2SuperadminSite(siteId);
+  if (resource === "alerts") return listV2AlertsPage(siteId, { limit: input.limit, cursor: input.cursor, status: input.status, zoneId: input.zoneId, severity: input.severity });
+  if (resource === "work-orders") return listV2WorkOrdersPage(siteId, { limit: input.limit, cursor: input.cursor, status: input.status ?? "all", zoneId: input.zoneId, origin: input.origin });
+  if (resource === "cleaners") return listV2CleanersPage(siteId, { limit: input.limit, cursor: input.cursor, status: input.status === "active" || input.status === "inactive" ? input.status : "all" });
+  if (resource === "runs") return listV2OrchestratorRunsPage(siteId, { limit: input.limit, cursor: input.cursor, status: input.status });
+  return listV2SupervisorsPage(siteId, "root", { limit: input.limit, cursor: input.cursor, status: input.status === "active" || input.status === "inactive" ? input.status : "all" });
 }
 
 export const getV2SuperadminAlert = (siteId: string, alertId: string) => getV2Alert(siteId, alertId);

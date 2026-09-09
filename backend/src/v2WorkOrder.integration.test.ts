@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Timestamp } from "firebase-admin/firestore";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
@@ -50,9 +51,9 @@ run("V2 Work Order and Verification", () => {
     await map.collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Main Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 60, yMeters: 0 }, { xMeters: 60, yMeters: 60 }, { xMeters: 0, yMeters: 60 }] });
     await map.collection("cleanerStations").doc(cleanerId).set({ schemaVersion: 2, siteId, cleanerId, cleanerNameSnapshot: "Work Cleaner", point: { xMeters: 10, yMeters: 10 }, zoneId });
     await map.collection("cleanerStations").doc(secondCleanerId).set({ schemaVersion: 2, siteId, cleanerId: secondCleanerId, cleanerNameSnapshot: "Second Cleaner", point: { xMeters: 12, yMeters: 10 }, zoneId });
-    await map.collection("cameraPlacements").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, zoneId, zoneNameSnapshot: "Main Zone", point: { xMeters: 20, yMeters: 20 } });
+    await map.collection("cameraPlacements").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, zoneId, point: { xMeters: 20, yMeters: 20 } });
     await firestore.collection("cameras").doc(cameraId).set({ schemaVersion: 2, cameraId, siteId, name: "Work Camera", status: "active" });
-    await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, alertId, siteId, mapRevisionId: mapId, zoneId, zoneNameSnapshot: "Main Zone", cameraId, cameraNameSnapshot: "Work Camera", issueType: "floor_litter", observedCondition: "litter", status: "waiting_for_cleaner", severity: "warning", highestSeverity: "warning", priorityScore: 40, activeWorkOrderId: null, managementMode: "orchestrated", isSimulation: false, revision: 1 });
+    await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, alertId, siteId, mapRevisionId: mapId, zoneId, zoneNameSnapshot: zoneId, cameraId, cameraNameSnapshot: "Work Camera", issueType: "floor_litter", observedCondition: "litter", status: "waiting_for_cleaner", severity: "warning", highestSeverity: "warning", priorityScore: 40, activeWorkOrderId: null, managementMode: "orchestrated", isSimulation: false, revision: 1 });
     rootToken = await signIn(rootEmail, password);
     cleanerToken = await signIn(cleanerEmail, password);
   });
@@ -63,7 +64,7 @@ run("V2 Work Order and Verification", () => {
     const assignment = await request(app).post(`/api/alerts/${alertId}/manual-assignment`).set("Authorization", `Bearer ${rootToken}`).send({ assignedCleanerId: cleanerId, idempotencyKey: `assign-${suffix}` });
     expect(assignment.status).toBe(201);
     workOrderId = assignment.body.workOrder.id;
-    expect(assignment.body.workOrder).toMatchObject({ origin: "alert", status: "assigned", assignedCleanerId: cleanerId, managementMode: "manual" });
+    expect(assignment.body.workOrder).toMatchObject({ origin: "alert", status: "assigned", assignedCleanerId: cleanerId, managementMode: "manual", title: "Clean floor litter at Work Camera, Main Zone", instructions: "Clean floor litter at Work Camera, Main Zone", target: { zoneId, zoneNameSnapshot: "Main Zone" } });
     expect((await firestore.collection("cleaners").doc(cleanerId).get()).data()?.activeWorkOrderId).toBe(workOrderId);
     expect((await firestore.collection("alerts").doc(alertId).get()).data()?.status).toBe("assigned");
 
@@ -203,5 +204,30 @@ run("V2 Work Order and Verification", () => {
     await firestore.collection("workOrders").doc(id).update({ assignedCleanerId: secondCleanerId });
     expect((await request(app).get(`/api/cleaner/work-orders/${id}/camera-evidence`).set("Authorization", `Bearer ${cleanerToken}`)).status).toBe(404);
     expect((await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${cleanerToken}`).send({})).status).toBe(403);
+  });
+
+  it("paginates a filtered Work ledger and keeps direct detail independent from the first page", async () => {
+    const pagedCameraId = `paged-camera-${suffix}`;
+    const batch = firestore.batch();
+    for (let index = 0; index < 27; index += 1) {
+      const id = `paged-work-${String(index).padStart(2, "0")}-${suffix}`;
+      const occurredAt = Timestamp.fromMillis(Date.UTC(2026, 7, 1, 0, index));
+      batch.set(firestore.collection("workOrders").doc(id), { schemaVersion: 2, workOrderId: id, siteId, origin: "manual", alertId: null, managementMode: "manual", status: "resolved", severity: "warning", issueType: "general_cleanup", title: `Paged Work ${index}`, instructions: "Pagination fixture", assignedCleanerId: cleanerId, cleanerNameSnapshot: "Work Cleaner", zoneId, cameraId: pagedCameraId, target: { type: "camera", zoneId, zoneNameSnapshot: "Main Zone", point: { xMeters: 20, yMeters: 20 }, cameraId: pagedCameraId, cameraNameSnapshot: "Paged Camera" }, createdAt: occurredAt, updatedAt: occurredAt, assignedAt: occurredAt, startedAt: occurredAt, submittedAt: occurredAt, resolvedAt: occurredAt, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: "passed", reworkCount: 0, revision: 1 });
+    }
+    await batch.commit();
+    const first = await request(app).get("/api/work-orders").query({ status: "all", cameraId: pagedCameraId, limit: 10 }).set("Authorization", `Bearer ${rootToken}`);
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ hasMore: true, totalCount: 27, statusCounts: { assigned: 0, in_progress: 0, awaiting_review: 0, resolved: 27, dismissed: 0 } });
+    expect(first.body.workOrders).toHaveLength(10);
+    expect(first.body.nextCursor).toEqual(expect.any(String));
+    const second = await request(app).get("/api/work-orders").query({ status: "all", cameraId: pagedCameraId, limit: 10, cursor: first.body.nextCursor }).set("Authorization", `Bearer ${rootToken}`);
+    expect(second.status).toBe(200);
+    expect(second.body.workOrders).toHaveLength(10);
+    expect(new Set([...first.body.workOrders, ...second.body.workOrders].map((work) => work.id)).size).toBe(20);
+    const outsideFirstPage = `paged-work-00-${suffix}`;
+    expect(first.body.workOrders.some((work: { id: string }) => work.id === outsideFirstPage)).toBe(false);
+    const detail = await request(app).get(`/api/work-orders/${outsideFirstPage}`).set("Authorization", `Bearer ${rootToken}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.workOrder.id).toBe(outsideFirstPage);
   });
 });

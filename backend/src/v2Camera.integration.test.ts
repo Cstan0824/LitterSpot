@@ -38,7 +38,7 @@ run("V2 composite Camera workflow", () => {
     expect(published.status).toBe(200);
     expect((await firestore.collection("cameras").doc(laptopCameraId).get()).data()).toMatchObject({ sourceType: "laptop_camera", monitoringEnabled: false, status: "active" });
     const site = await firestore.collection("sites").doc(siteId).get();
-    expect((await firestore.collection("siteMapRevisions").doc(site.data()?.activeMapRevisionId).collection("cameraPlacements").doc(laptopCameraId).get()).data()?.zoneId).toBe(zoneId);
+    expect((await firestore.collection("siteMapRevisions").doc(site.data()?.activeMapRevisionId).collection("cameraPlacements").doc(laptopCameraId).get()).data()).toMatchObject({ zoneId, zoneNameSnapshot: "Main" });
     const audits = await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "camera_created").get();
     expect(audits.docs.find((event) => event.data().resourceId === laptopCameraId)?.data()).toMatchObject({ actorUid: uid, actorRole: "supervisor", actorAuthority: "root", actorNameSnapshot: "Camera Root" });
   });

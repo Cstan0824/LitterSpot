@@ -5,9 +5,9 @@ import {
   createV2ManualWorkOrder,
   dismissV2WorkOrder,
   getV2WorkOrder,
-  listV2WorkEvents,
-  listV2Verifications,
-  listV2WorkOrders,
+  listV2WorkEventsPage,
+  listV2VerificationsPage,
+  listV2WorkOrdersPage,
   reassignV2WorkOrder,
   takeOverV2WorkOrder,
   transitionV2WorkOrder,
@@ -15,6 +15,7 @@ import {
 } from "../services/v2WorkOrderService.js";
 import { v2AlertAssignmentSchema, v2ManualWorkSchema, v2WorkDismissSchema, v2WorkListQuerySchema, v2WorkReassignSchema, v2WorkTakeoverSchema, v2WorkTransitionSchema, v2VerificationOverrideSchema, v2VerificationSchema } from "../schemas/v2WorkOrder.js";
 import { HttpError } from "../shared/httpError.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 
 const actor = (req: Express.Request) => ({ uid: req.authUser.uid, role: "supervisor" as const, authority: req.authUser.authority, displayName: req.authUser.displayName, type: "supervisor" as const });
 
@@ -22,7 +23,8 @@ export const v2WorkOrderRoutes = Router();
 
 v2WorkOrderRoutes.get("/", async (req, res) => {
   const query = v2WorkListQuerySchema.parse(req.query);
-  return res.json({ workOrders: await listV2WorkOrders(String(req.authUser.siteId), query) });
+  const page = await listV2WorkOrdersPage(String(req.authUser.siteId), query);
+  return res.json({ workOrders: page.items, ...page });
 });
 
 v2WorkOrderRoutes.post("/", async (req, res) => {
@@ -41,8 +43,8 @@ v2WorkOrderRoutes.post("/manual", async (req, res) => {
 });
 
 v2WorkOrderRoutes.get("/:workOrderId", async (req, res) => res.json({ workOrder: await getV2WorkOrder(String(req.authUser.siteId), req.params.workOrderId) }));
-v2WorkOrderRoutes.get("/:workOrderId/history", async (req, res) => res.json({ events: await listV2WorkEvents(String(req.authUser.siteId), req.params.workOrderId) }));
-v2WorkOrderRoutes.get("/:workOrderId/verifications", async (req, res) => res.json({ verifications: await listV2Verifications(String(req.authUser.siteId), req.params.workOrderId) }));
+v2WorkOrderRoutes.get("/:workOrderId/history", async (req, res) => { const query = z.object(boundedListQueryFields).strict().parse(req.query); const page = await listV2WorkEventsPage(String(req.authUser.siteId), req.params.workOrderId, query); return res.json({ events: page.items, ...page }); });
+v2WorkOrderRoutes.get("/:workOrderId/verifications", async (req, res) => { const query = z.object({ ...boundedListQueryFields, limit: boundedListQueryFields.limit.default(20) }).strict().parse(req.query); const page = await listV2VerificationsPage(String(req.authUser.siteId), req.params.workOrderId, query); return res.json({ verifications: page.items, ...page }); });
 v2WorkOrderRoutes.post("/:workOrderId/reassign", async (req, res) => { const input = v2WorkReassignSchema.parse(req.body); return res.json({ workOrder: await reassignV2WorkOrder({ ...input, siteId: String(req.authUser.siteId), workOrderId: req.params.workOrderId }, actor(req), req.requestId) }); });
 v2WorkOrderRoutes.post("/:workOrderId/takeover", async (req, res) => { const input = v2WorkTakeoverSchema.parse(req.body); return res.json({ workOrder: await takeOverV2WorkOrder(String(req.authUser.siteId), req.params.workOrderId, actor(req), input.reason, input.idempotencyKey, req.requestId) }); });
 v2WorkOrderRoutes.post("/:workOrderId/dismiss", async (req, res) => { const input = v2WorkDismissSchema.parse(req.body); return res.json({ workOrder: await dismissV2WorkOrder({ ...input, siteId: String(req.authUser.siteId), workOrderId: req.params.workOrderId }, actor(req), req.requestId) }); });

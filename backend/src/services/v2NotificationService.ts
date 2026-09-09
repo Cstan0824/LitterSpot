@@ -3,6 +3,7 @@ import { firestore } from "../config/firebase.js";
 import { canonicalHash } from "./v2Persistence.js";
 import { v2Json } from "./v2Presentation.js";
 import type { V2Notification } from "./v2Notification.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 type NotificationInput = Omit<V2Notification, "schemaVersion" | "notificationId"> & { eventKey: string };
 
@@ -26,9 +27,11 @@ export async function writeV2Notification(input: NotificationInput) {
 }
 
 export async function listV2Notifications(siteId: string, recipientUid: string, limit = 50) {
-  const snapshot = await firestore.collection("notifications").where("recipientUid", "==", recipientUid)
-    .where("siteId", "==", siteId).orderBy("createdAt", "desc").limit(Math.min(limit, 100)).get();
-  return snapshot.docs.filter((doc) => doc.data().schemaVersion === 2).map((doc) => v2Json({ id: doc.id, ...doc.data() }));
+  return (await listV2NotificationsPage(siteId, recipientUid, { limit })).items;
+}
+export async function listV2NotificationsPage(siteId: string, recipientUid: string, input: { limit: number; cursor?: string }) {
+  const query = firestore.collection("notifications").where("recipientUid", "==", recipientUid).where("siteId", "==", siteId).where("schemaVersion", "==", 2);
+  return queryCursorPage({ query, totalQuery: query, resource: "notifications", orderField: "createdAt", filters: { siteId, recipientUid }, limit: Math.min(input.limit, 100), cursor: input.cursor, present: (doc) => v2Json({ id: doc.id, ...doc.data() }) });
 }
 
 export async function notifyV2SiteSupervisors(input: Omit<NotificationInput, "recipientUid" | "recipientRole">) {

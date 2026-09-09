@@ -163,6 +163,7 @@ run("V2 platform operations", () => {
     const cleanerId = `system-cleaner-${suffix}`;
     const workOrderId = `system-work-${suffix}`;
     const runId = `system-run-${suffix}`;
+    const noOpRunId = `system-no-op-run-${suffix}`;
     await firestore.collection("orchestratorConfigs").doc(siteId).update({ status: "running", revision: 10 });
     const paused = await request(app).post("/api/orchestrator/v2/status")
       .set("Authorization", `Bearer ${regularToken}`)
@@ -190,6 +191,19 @@ run("V2 platform operations", () => {
       createdAt: new Date(),
       completedAt: new Date(),
     });
+    await firestore.collection("orchestratorRuns").doc(noOpRunId).set({
+      schemaVersion: 2,
+      runId: noOpRunId,
+      siteId,
+      type: "assignment",
+      status: "exhausted",
+      resultCode: "no_waiting_alerts",
+      providerRequestCount: 0,
+      candidateAttemptCount: 0,
+      toolCallCount: 1,
+      createdAt: new Date(),
+      completedAt: new Date(),
+    });
 
     const result = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${regularToken}`);
     expect(result.status).toBe(200);
@@ -204,5 +218,6 @@ run("V2 platform operations", () => {
         workOrder: expect.objectContaining({ id: workOrderId, title: "Clean floor litter at Entrance Camera, Main Entrance" }),
       },
     })]));
+    expect(result.body.recentRuns).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: noOpRunId })]));
   });
 });

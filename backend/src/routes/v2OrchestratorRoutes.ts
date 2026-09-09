@@ -12,11 +12,13 @@ import {
   getV2OrchestratorRun,
   getV2ReviewContext,
   listV2OrchestratorRuns,
+  listV2OrchestratorRunsPage,
   requestV2Rework,
   resolveV2VerifiedWork,
   runV2AssignmentCycle,
   setV2OrchestratorStatus,
 } from "../services/v2OrchestratorService.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 
 const siteBody = z.object({ siteId: z.string().trim().min(1) }).strict();
 const runBody = siteBody.extend({ triggerType: z.string().trim().min(1).max(100).default("manual_cycle") }).strict();
@@ -32,8 +34,9 @@ v2OrchestratorSupervisorRoutes.post("/status", async (req, res) => {
   return res.json({ config: await setV2OrchestratorStatus(String(req.authUser.siteId), input.status, { uid: req.authUser.uid, role: "supervisor", authority: req.authUser.authority, displayName: req.authUser.displayName }, input.reason ?? null, req.requestId) });
 });
 v2OrchestratorSupervisorRoutes.get("/runs", async (req, res) => {
-  const limit = z.coerce.number().int().min(1).max(100).default(50).parse(req.query.limit);
-  return res.json({ runs: await listV2OrchestratorRuns(String(req.authUser.siteId), limit) });
+  const query = z.object({ ...boundedListQueryFields, status: z.string().trim().min(1).optional() }).strict().parse(req.query);
+  const page = await listV2OrchestratorRunsPage(String(req.authUser.siteId), query);
+  return res.json({ runs: page.items, ...page });
 });
 v2OrchestratorSupervisorRoutes.get("/runs/:runId", async (req, res) => res.json(await getV2OrchestratorRun(String(req.authUser.siteId), req.params.runId)));
 v2OrchestratorSupervisorRoutes.post("/assignment-cycle", async (req, res) => {

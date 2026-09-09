@@ -8,6 +8,7 @@ import { beginIdentityOperation, compensateIdentityOperation, createIdentityAuth
 import { canonicalHash } from "./v2Persistence.js";
 import { publishV2CleanerStation } from "./v2MapService.js";
 import { enqueueV2ImmediateAssignmentTrigger } from "./v2OrchestratorTriggers.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 const timestamp = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
 const normalizeStaffCode = (value: string) => value.trim().toUpperCase();
@@ -38,9 +39,15 @@ export async function presentV2Cleaner(cleanerId: string, expectedSiteId: string
 }
 
 export async function listV2Cleaners(siteId: string, status: "active" | "inactive" | "all" = "all") {
-  const snapshot = await firestore.collection("cleaners").where("siteId", "==", siteId).limit(500).get();
-  const profiles = snapshot.docs.filter((document) => document.data().schemaVersion === 2 && (status === "all" || document.data().status === status));
-  return Promise.all(profiles.map((document) => presentV2Cleaner(document.id, siteId)));
+  return (await listV2CleanersPage(siteId, { status, limit: 100 })).items;
+}
+
+export async function listV2CleanersPage(siteId: string, input: { status: "active" | "inactive" | "all"; limit: number; cursor?: string }) {
+  const filters = { siteId, status: input.status };
+  let query: FirebaseFirestore.Query = firestore.collection("cleaners").where("siteId", "==", siteId).where("schemaVersion", "==", 2);
+  if (input.status !== "all") query = query.where("status", "==", input.status);
+  const page = await queryCursorPage({ query, totalQuery: query, resource: "cleaners", orderField: "fullName", direction: "asc", filters, limit: input.limit, cursor: input.cursor, present: (document) => document.id });
+  return { ...page, items: await Promise.all(page.items.map((id) => presentV2Cleaner(id, siteId))) };
 }
 
 export async function createV2Cleaner(input: {

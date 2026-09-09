@@ -10,7 +10,7 @@ describe("V2 Superadmin read client", () => {
 
   it("uses selected-Site GET routes without mutation options", async () => {
     await getV2SuperadminSites("inactive");
-    expect(request).toHaveBeenLastCalledWith("/api/superadmin/sites?status=inactive", { signal: undefined });
+    expect(request).toHaveBeenLastCalledWith("/api/superadmin/sites?status=inactive&limit=25", { signal: undefined });
     await getV2SuperadminSite("site/one");
     expect(request).toHaveBeenLastCalledWith("/api/superadmin/sites/site%2Fone", { signal: undefined });
     await getV2SuperadminOperationsView("site/one");

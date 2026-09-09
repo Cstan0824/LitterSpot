@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { createV2Cleaner, listV2Cleaners, presentV2Cleaner, updateV2Cleaner } from "../services/v2CleanerService.js";
+import { createV2Cleaner, listV2CleanersPage, presentV2Cleaner, updateV2Cleaner } from "../services/v2CleanerService.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 
 const range = z.object({ startMinute: z.number().int().min(0).max(1439), endMinute: z.number().int().min(0).max(1439) }).strict().nullable();
 const schedule = z.object({ mon: range.optional(), tue: range.optional(), wed: range.optional(), thu: range.optional(), fri: range.optional(), sat: range.optional(), sun: range.optional() }).strict();
@@ -10,8 +11,9 @@ const actor = (req: Express.Request) => ({ uid: req.authUser.uid, role: "supervi
 export const v2CleanerRoutes = Router();
 
 v2CleanerRoutes.get("/", async (req, res) => {
-  const status = z.enum(["active", "inactive", "all"]).default("all").parse(req.query.status);
-  return res.json({ cleaners: await listV2Cleaners(String(req.authUser.siteId), status) });
+  const query = z.object({ ...boundedListQueryFields, status: z.enum(["active", "inactive", "all"]).default("all") }).strict().parse(req.query);
+  const page = await listV2CleanersPage(String(req.authUser.siteId), query);
+  return res.json({ cleaners: page.items, ...page });
 });
 
 v2CleanerRoutes.get("/:cleanerId", async (req, res) => res.json({ cleaner: await presentV2Cleaner(req.params.cleanerId, String(req.authUser.siteId)) }));

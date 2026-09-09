@@ -778,6 +778,7 @@ async function listLegacyWorkflowFallback<T>(options: {
   return {
     items,
     nextCursor: null,
+    hasMore: false,
     paginationMode: "bounded_legacy_scan",
     resultCompleteness: snapshot.size < LEGACY_SCAN_LIMIT ? "complete" : "bounded",
     scannedCount: snapshot.size,

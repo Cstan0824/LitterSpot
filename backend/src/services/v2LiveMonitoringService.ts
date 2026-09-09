@@ -52,6 +52,7 @@ type MinuteAccumulator = { contributionId: string; pending: number; siteId: stri
 const temporal = new Map<string, V2LiveObservation[]>();
 const evidence = new Map<string, V2EvidenceCandidate>();
 const minute = new Map<string, MinuteAccumulator>();
+const lastOperationalSampleAt = new Map<string, number>();
 let inference: typeof inferFrame = inferFrame;
 const inferenceTails = new Map<string, Promise<void>>();
 
@@ -63,6 +64,7 @@ async function serializeInference<T>(cameraId: string, work: () => Promise<T>) {
 export function setV2LiveInferenceForTests(replacement: typeof inferFrame | null) { inference = replacement ?? inferFrame; }
 export function resetV2LiveMemory(cameraId?: string, preserveMinute = false) {
   for (const store of preserveMinute ? [temporal, evidence] : [temporal, evidence, minute]) for (const key of store.keys()) if (!cameraId || key.includes(`:${cameraId}:`) || key.endsWith(`:${cameraId}`)) store.delete(key);
+  for (const key of lastOperationalSampleAt.keys()) if (!cameraId || key.endsWith(`:${cameraId}`)) lastOperationalSampleAt.delete(key);
 }
 export function inspectV2LiveMemory(cameraId: string) {
   return { temporalKeys: [...temporal.keys()].filter((key) => key.includes(`:${cameraId}:`)), evidenceKeys: [...evidence.keys()].filter((key) => key.includes(`:${cameraId}:`)), minuteKeys: [...minute.keys()].filter((key) => key.endsWith(`:${cameraId}`)) };
@@ -76,6 +78,7 @@ export function getV2LiveIssueState(siteId: string, cameraId: string, issueType:
 export function clearV2EvidenceCandidate(siteId: string, cameraId: string, issueType: string) { evidence.delete(`${siteId}:${cameraId}:${issueType}`); }
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+export function shouldAdmitOperationalSample(previousCapturedAtMs: number | null, capturedAtMs: number) { return previousCapturedAtMs === null || capturedAtMs - previousCapturedAtMs >= 900; }
 function issues(result: PipelineAnalysisResponse): LiveIssue[] {
   const floor = result.floorHazards.map((hazard, index) => ({ issueType: hazard.className, condition: hazard.className === "floor_litter" ? "litter" as const : "spill" as const, confidence: hazard.confidence, entityId: `floor-${index + 1}`, geometry: { bbox: hazard.bbox, polygon: hazard.polygon } }));
   const bins = result.bins.filter((bin) => bin.state === "full" || bin.state === "overflow").map((bin) => ({ issueType: "bin_service" as const, condition: bin.state as "full" | "overflow", confidence: bin.stateConfidence, entityId: bin.binId ?? `bin-${bin.binIndex}`, geometry: { bbox: bin.bbox, binId: bin.binId ?? null } }));
@@ -104,7 +107,13 @@ export async function startMonitoringEpisode(input: { siteId: string; cameraId: 
   if (site.data()?.status !== "active") throw new HttpError(409, "Site is inactive.");
   const reference = await loadRegistrationReference(registration.data()!);
   const zoneId = String(placement.data()?.zoneId ?? "");
-  const zoneName = String(placement.data()?.zoneNameSnapshot ?? zoneId);
+  const zoneGeometry = zoneId
+    ? await firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("zoneGeometry").doc(zoneId).get()
+    : null;
+  const storedZoneName = String(placement.data()?.zoneNameSnapshot ?? "");
+  const zoneName = storedZoneName && storedZoneName !== zoneId
+    ? storedZoneName
+    : String(zoneGeometry?.data()?.zoneNameSnapshot ?? zoneId);
   const episode = {
     episodeId: episodeRef.id, siteId: input.siteId, cameraId: input.cameraId, cameraName: String(camera.data()?.name ?? input.cameraId),
     cameraRevision: Number(camera.data()?.revision ?? 0), monitoringSessionId: input.sessionId,
@@ -161,8 +170,13 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
   if (!shouldAcceptSample({ session, sessionId: input.sessionId, tokenHash: hash(input.token), expectedSequence: expected, sequence: input.sequence, nowMs: Date.now() })) throw new HttpError(409, "Live sample sequence or Monitoring Session is invalid.");
   episode.sequence = input.sequence;
   episode.lastActivityAtMs = Date.now();
+  const operationalKey = `${input.siteId}:${input.cameraId}`;
+  const previousOperationalAt = lastOperationalSampleAt.get(operationalKey) ?? Number.NEGATIVE_INFINITY;
+  const operationalSample = shouldAdmitOperationalSample(Number.isFinite(previousOperationalAt) ? previousOperationalAt : null, input.capturedAt.getTime());
+  if (operationalSample) lastOperationalSampleAt.set(operationalKey, input.capturedAt.getTime());
   const minuteStart = `${input.capturedAt.toISOString().slice(0, 16)}:00.000Z`; const minuteKey = `${input.siteId}:${minuteStart}:${input.episodeId}:${input.cameraId}`;
-  const accumulator = minute.get(minuteKey) ?? { contributionId: randomUUID(), pending: 0, siteId: input.siteId, minuteStart, timeZone: episode.timeZone, mapRevisionId: episode.mapRevisionId, cameraId: input.cameraId, zoneId: episode.zoneId, zoneName: episode.zoneName, sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, litter: 0, spill: 0, full: 0, overflow: 0, simulation: 0, latencySum:0, latencyCount:0 }; accumulator.pending += 1; accumulator.sampleAttemptCount += 1; minute.set(minuteKey, accumulator);
+  const accumulator = operationalSample ? minute.get(minuteKey) ?? { contributionId: randomUUID(), pending: 0, siteId: input.siteId, minuteStart, timeZone: episode.timeZone, mapRevisionId: episode.mapRevisionId, cameraId: input.cameraId, zoneId: episode.zoneId, zoneName: episode.zoneName, sampleAttemptCount: 0, successfulSampleCount: 0, failedSampleCount: 0, peopleSum: 0, peopleMax: 0, litter: 0, spill: 0, full: 0, overflow: 0, simulation: 0, latencySum:0, latencyCount:0 } : undefined;
+  if (accumulator) { accumulator.pending += 1; accumulator.sampleAttemptCount += 1; minute.set(minuteKey, accumulator); }
   try {
     const result = await serializeInference(input.cameraId, () => inference({ contents: input.frame.buffer, fileName: input.frame.originalname || `sample-${input.sequence}.${detected.extension}`, mimeType: detected.mimeType, floorConfidence: 0.25, binLocalizerConfidence: 0.8, focusRegion: episode.registration.walkableFloorPolygon ?? [], registration: { ...episode.registration, status: "ready", alignmentStatus: "valid" }, reference: episode.reference as any, binReviewEnabled: true }));
     const latestSession = runtimeSession(input.siteId); const latestEpisode = runtimeEpisode(input.episodeId);
@@ -184,8 +198,10 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
       modelVersions: result.modelVersions,
       isSimulation: episode.isSimulation,
     };
-    for (const issueType of ["floor_litter", "floor_spill", "bin_service"] as const) { const key = `${input.siteId}:${input.cameraId}:${issueType}`; const values = temporal.get(key) ?? []; values.push(observation); temporal.set(key, values.slice(-5)); const matching = observation.issues.filter((issue) => issue.issueType === issueType); const best = matching.sort((a, b) => b.confidence - a.confidence)[0]; if (best) { const current = getV2LiveIssueState(input.siteId, input.cameraId, issueType).candidate; if (!current || best.confidence >= current.confidence) evidence.set(key, { confidence: best.confidence, frame: Buffer.from(input.frame.buffer), mimeType: detected.mimeType, observation }); } }
-    accumulator.successfulSampleCount += 1; accumulator.latencySum+=result.processingTimeMs; accumulator.latencyCount++; accumulator.peopleSum += result.peopleCount; accumulator.peopleMax = Math.max(accumulator.peopleMax, result.peopleCount); accumulator.litter += observation.issues.filter((issue) => issue.condition === "litter" && issue.confidence >= 0.5).length; accumulator.spill += observation.issues.filter((issue) => issue.condition === "spill" && issue.confidence >= 0.5).length; accumulator.full += observation.issues.filter((issue) => issue.condition === "full" && issue.confidence >= 0.5).length; accumulator.overflow += observation.issues.filter((issue) => issue.condition === "overflow" && issue.confidence >= 0.5).length; accumulator.simulation += observation.isSimulation ? 1 : 0;
+    if (operationalSample) {
+      for (const issueType of ["floor_litter", "floor_spill", "bin_service"] as const) { const key = `${input.siteId}:${input.cameraId}:${issueType}`; const values = temporal.get(key) ?? []; values.push(observation); temporal.set(key, values.slice(-5)); const matching = observation.issues.filter((issue) => issue.issueType === issueType); const best = matching.sort((a, b) => b.confidence - a.confidence)[0]; if (best) { const current = getV2LiveIssueState(input.siteId, input.cameraId, issueType).candidate; if (!current || best.confidence >= current.confidence) evidence.set(key, { confidence: best.confidence, frame: Buffer.from(input.frame.buffer), mimeType: detected.mimeType, observation }); } }
+      accumulator!.successfulSampleCount += 1; accumulator!.latencySum+=result.processingTimeMs; accumulator!.latencyCount++; accumulator!.peopleSum += result.peopleCount; accumulator!.peopleMax = Math.max(accumulator!.peopleMax, result.peopleCount); accumulator!.litter += observation.issues.filter((issue) => issue.condition === "litter" && issue.confidence >= 0.5).length; accumulator!.spill += observation.issues.filter((issue) => issue.condition === "spill" && issue.confidence >= 0.5).length; accumulator!.full += observation.issues.filter((issue) => issue.condition === "full" && issue.confidence >= 0.5).length; accumulator!.overflow += observation.issues.filter((issue) => issue.condition === "overflow" && issue.confidence >= 0.5).length; accumulator!.simulation += observation.isSimulation ? 1 : 0;
+    }
     const previousRuntime = cameraRuntimeSnapshot(input.cameraId);
     const summary = { litter: observation.issues.filter(issue => issue.condition === "litter").length, spill: observation.issues.filter(issue => issue.condition === "spill").length, full: observation.issues.filter(issue => issue.condition === "full").length, overflow: observation.issues.filter(issue => issue.condition === "overflow").length };
     updateCameraRuntimeSnapshot(input.siteId, input.cameraId, { connectionStatus: "online", monitoringSessionId: input.sessionId, monitoringEpisodeId: input.episodeId, lastFrameCapturedAtMs: input.capturedAt.getTime(), lastSampleAcceptedAtMs: Date.now(), lastInferenceSucceededAtMs: Date.now(), lastPeopleCount: result.peopleCount, lastIssueSummary: summary, sourceErrorCode: null, sourceErrorMessage: null });
@@ -193,9 +209,9 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
       await firestore.collection("cameraRuntimeStates").doc(input.cameraId).set({ connectionStatus: "online", monitoringSessionId: input.sessionId, monitoringEpisodeId: input.episodeId, lastFrameCapturedAt: Timestamp.fromDate(input.capturedAt), lastSampleAcceptedAt: FieldValue.serverTimestamp(), lastInferenceSucceededAt: FieldValue.serverTimestamp(), lastPeopleCount: result.peopleCount, lastIssueSummary: summary, sourceErrorCode: null, sourceErrorMessage: null, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       publishCameraControl(input.siteId, input.cameraId, { configurationChanged: false });
     }
-    return { accepted: true, sequence: input.sequence, observation: { ...observation, issues: observation.issues, image: result.image, processingTimeMs: result.processingTimeMs } };
+    return { accepted: true, operationalSample, sequence: input.sequence, observation: { ...observation, issues: observation.issues, image: result.image, processingTimeMs: result.processingTimeMs } };
   } catch (error) {
-    accumulator.failedSampleCount += 1;
+    if (accumulator) accumulator.failedSampleCount += 1;
     const previousRuntime = cameraRuntimeSnapshot(input.cameraId);
     updateCameraRuntimeSnapshot(input.siteId, input.cameraId, { lastFrameCapturedAtMs: input.capturedAt.getTime(), lastSampleAcceptedAtMs: Date.now(), sourceErrorCode: "inference_failed", sourceErrorMessage: "The sampled frame could not be analyzed." });
     if (previousRuntime?.sourceErrorCode !== "inference_failed") {
@@ -204,7 +220,7 @@ export async function processLiveSample(input: { siteId: string; cameraId: strin
     }
     throw error;
   } finally {
-    accumulator.pending -= 1;
+    if (accumulator) accumulator.pending -= 1;
   }
 }
 

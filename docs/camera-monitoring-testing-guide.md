@@ -25,7 +25,11 @@ Existing enabled Cameras retain their state; this update does not silently disab
 6. Close the owner. The remaining browser takes over after release or lease expiry. Allow around 40 seconds for expiry plus retry.
 7. Disable one Camera. Its feed stops and existing Alerts/Work remain. Other Cameras continue.
 
-Detection mode updates at the achieved inference rate. Watch live video displays smooth original playback on the owning browser. It intentionally does not draw stale boxes on a newer frame.
+Camera cards show exact analyzed snapshots with their matching overlays. The capture-owner browser builds compressed delayed playback only after Camera Detail opens. Detail starts after at least five seconds of footage and sufficient successful analysis coverage, then displays at up to 1280 × 720. `Original video` hides overlays without changing the delayed playback position.
+
+If analysis coverage becomes unsafe, Detail freezes the last valid frame and shows `Rebuffering analysis`. A short interruption resumes from the frozen point; an interruption that falls more than two seconds behind skips missed presentation footage and resumes at the newest safely analyzed delayed position. Failure to build or recover coverage within thirty seconds shows `Camera analysis unavailable` with Retry. It never silently continues as raw footage.
+
+Sampling is adaptive. Camera Detail requests a two-frame-per-second target, visible cards and positive or Verification bursts request one frame per second, and enabled Cameras without a visible consumer request one frame every four seconds. The owner submits through one Site-wide scheduler so the selected Detail Camera receives reserved capacity while background Cameras retain fair operational monitoring. Node admits at most one observation per second per Camera into Alert, Verification, evidence-candidate, and analytics policy, so presentation cadence does not accelerate business decisions.
 
 ## Prepare clean and dirty scenes
 
@@ -47,7 +51,27 @@ npm run demo:camera-scene -- --camera CAMERA_ID --scene dirty
 npm run demo:camera-scene -- --camera CAMERA_ID --scene clean
 ```
 
+The shared emulator fixture also includes `clean` and `dirty` scenes for
+`WPLR CAM1`. Use these shortcuts from the repository root while
+`npm run start:emulator` is running:
+
+```sh
+npm run demo:scene:dirty
+npm run demo:scene:clean
+```
+
+These shortcuts authenticate only against the loopback Firebase Auth emulator
+and refuse non-loopback API URLs. Use the generic command above for another
+Camera or development environment.
+
 Scene keys are immutable. Upload a replacement under a new key. After formal Camera reconfiguration, old scenes cannot be selected against the new Registration. Upload compatible scenes again.
+
+The emulator media normalization command also covers development scenes. It converts browser-incompatible codecs such as HEVC to H.264, backs up the originals, and refreshes stored media metadata:
+
+```sh
+npm run media:compress:emulator:apply
+npm run media:sync:emulator
+```
 
 The browser visibly changes clips. No scene control appears in the product. The Camera keeps its episode, sequence, qualification window, Alerts, Work, analytics and verification context. The new clip starts at video time zero, but capture timestamps continue using current time.
 
@@ -76,7 +100,7 @@ Tests use isolated emulator data and controlled model responses for repeatable w
 
 ## Repeatable browser acceptance fixture
 
-The repository includes `scripts/camera-runtime-fixture.mts` and `scripts/test-camera-runtime-browser.mjs`. They create deterministic emulator-only Camera records and test six feeds, navigation, viewer ownership, failover and enablement. The fixture refuses to start without both Firebase emulator host variables. It never connects to the canonical cloud database.
+The repository includes `scripts/camera-runtime-fixture.mts`, `scripts/test-camera-runtime-browser.mjs`, and `scripts/test-camera-buffer-timeout-browser.mjs`. The browser checks use isolated emulator Camera data to verify grid snapshots, compressed delayed Detail playback, adaptive sampling, bounded memory, rebuffer recovery, the thirty-second unavailable state and Retry, `Original video`, secondary-browser snapshots, ownership failover, and desktop/tablet rendering. The fixture refuses to start without both Firebase emulator host variables. It never connects to the canonical cloud database.
 
 Install optional browser tooling into ignored local storage:
 
@@ -84,8 +108,8 @@ Install optional browser tooling into ignored local storage:
 npm install --prefix .local/camera-browser --no-save --package-lock=false playwright
 ```
 
-Use running Auth/Firestore emulators and set `APP_ENV=local-emulator`, `FIREBASE_PROJECT_ID=demo-litterspot`, `EXPECTED_FIREBASE_PROJECT_ID=demo-litterspot`, `FIREBASE_DATABASE_ID=(default)`, both emulator hosts, an ignored `MEDIA_STORAGE_ROOT`, `CAMERA_DEMO_SCENES_ENABLED=true`, and `CORS_ORIGINS=http://127.0.0.1:5183`. Run `npm run test:camera:fixture` on free port 3180.
+Use running Auth/Firestore emulators and set `APP_ENV=local-emulator`, `FIREBASE_PROJECT_ID=demo-litterspot`, `EXPECTED_FIREBASE_PROJECT_ID=demo-litterspot`, `FIREBASE_DATABASE_ID=(default)`, both emulator hosts, an ignored `MEDIA_STORAGE_ROOT`, `CAMERA_DEMO_SCENES_ENABLED=true`, and `CORS_ORIGINS=http://127.0.0.1:5193`. Run `npm run test:camera:fixture` on free port 3180.
 
-Start a separate frontend on 5183 with Firebase web values for `demo-litterspot`, `VITE_FIREBASE_AUTH_EMULATOR_URL` pointing to the Auth emulator, and `VITE_BACKEND_PROXY_TARGET=http://127.0.0.1:3180`. These are process environment overrides; do not replace the product `.env` files. Run `npm run test:camera:browser`. Chrome must be installed. Screenshots go under `.local/`.
+Start a separate frontend on 5193 with Firebase web values for `demo-litterspot`, `VITE_FIREBASE_AUTH_EMULATOR_URL` pointing to the Auth emulator, and `VITE_BACKEND_PROXY_TARGET=http://127.0.0.1:3180`. These are process environment overrides; do not replace the product `.env` files. Run `npm run test:camera:browser` and `npm run test:camera:buffer-timeout`. Chrome must be installed. Screenshots go under `.local/`.
 
 The fixture uses visible red/green video clips and controlled model responses to test state transitions. It is separate from the normal Camera source clips used for your presentation.

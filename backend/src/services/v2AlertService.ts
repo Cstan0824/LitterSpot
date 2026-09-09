@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 import { HttpError } from "../shared/httpError.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { writeMedia } from "./localMediaStorage.js";
@@ -110,5 +111,15 @@ export async function ageV2Alerts(siteId: string, now = new Date()) {
   return changed;
 }
 
-export async function listV2Alerts(siteId: string) { const snapshot = await firestore.collection("alerts").where("siteId", "==", siteId).limit(500).get(); return snapshot.docs.map((document) => ({ id: document.id, ...document.data(), createdAt: timestamp(document.data().createdAt), updatedAt: timestamp(document.data().updatedAt) })).sort((a, b) => Number((b as any).priorityScore) - Number((a as any).priorityScore)); }
+export async function listV2AlertsPage(siteId: string, input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; severity?: string } = {}) {
+  const filters = { siteId, status: input.status ?? "all", zoneId: input.zoneId ?? null, cameraId: input.cameraId ?? null, severity: input.severity ?? null };
+  let query: FirebaseFirestore.Query = firestore.collection("alerts").where("siteId", "==", siteId).where("schemaVersion", "==", 2);
+  if (input.status && input.status !== "all") query = input.status === "unresolved" ? query.where("status", "in", ["waiting_for_cleaner", "assigned", "in_progress", "awaiting_review"]) : query.where("status", "==", input.status);
+  if (input.zoneId) query = query.where("zoneId", "==", input.zoneId);
+  if (input.cameraId) query = query.where("cameraId", "==", input.cameraId);
+  if (input.severity) query = query.where("severity", "==", input.severity);
+  const page = await queryCursorPage({ query, totalQuery: query, resource: "alerts", orderField: "updatedAt", filters, limit: input.limit ?? 25, cursor: input.cursor, present: (document) => ({ id: document.id, ...document.data(), createdAt: timestamp(document.data().createdAt), updatedAt: timestamp(document.data().updatedAt) }) });
+  return page;
+}
+export async function listV2Alerts(siteId: string) { return (await listV2AlertsPage(siteId, { limit: 100 })).items; }
 export async function getV2Alert(siteId: string, alertId: string) { const alert = await firestore.collection("alerts").doc(alertId).get(); if (!alert.exists || alert.data()?.siteId !== siteId) throw new HttpError(404, "Alert not found."); const [events, occurrences, flags] = await Promise.all([alert.ref.collection("events").orderBy("occurredAt", "desc").limit(100).get(), alert.ref.collection("occurrences").orderBy("capturedAt", "desc").limit(100).get(), firestore.collection("flags").where("alertId", "==", alertId).limit(100).get()]); return { alert: { id: alert.id, ...alert.data() }, events: events.docs.map((d) => ({ id: d.id, ...d.data() })), occurrences: occurrences.docs.map((d) => ({ id: d.id, ...d.data() })), flags: flags.docs.map((d) => ({ id: d.id, ...d.data() })) }; }

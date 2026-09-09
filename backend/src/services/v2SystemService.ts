@@ -3,7 +3,7 @@ import { firestore } from "../config/firebase.js";
 import { env } from "../config/env.js";
 import { canonicalHash } from "./v2Persistence.js";
 import { v2Json } from "./v2Presentation.js";
-import { getV2OrchestratorConfig, listV2OrchestratorRuns } from "./v2OrchestratorService.js";
+import { getV2OrchestratorConfig, listV2OrchestratorRunsPage } from "./v2OrchestratorService.js";
 
 /** Text comes from this catalogue, never a provider exception or raw model response. */
 const catalogue = {
@@ -50,13 +50,17 @@ export async function recoverV2OrchestratorSystemEvents(siteId: string, runType:
 }
 
 export async function getV2SystemView(siteId: string) {
-  const [config, runs, events, waitingAlerts, awaitingReviewWork] = await Promise.all([
-    getV2OrchestratorConfig(siteId), listV2OrchestratorRuns(siteId, 20),
+  const [config, runPage, events, waitingAlerts, awaitingReviewWork] = await Promise.all([
+    getV2OrchestratorConfig(siteId), listV2OrchestratorRunsPage(siteId, { limit: 25 }),
     firestore.collection("systemEvents").where("siteId", "==", siteId).where("schemaVersion", "==", 2).get(),
     firestore.collection("alerts").where("siteId", "==", siteId).where("schemaVersion", "==", 2).where("status", "==", "waiting_for_cleaner").count().get(),
     firestore.collection("workOrders").where("siteId", "==", siteId).where("schemaVersion", "==", 2).where("status", "==", "awaiting_review").count().get(),
   ]);
   const observedAt = new Date().toISOString();
+  // A no-waiting-alerts Run is a durable worker check, not an assignment or
+  // review decision. Keep it in the Run ledger for diagnostics, but do not
+  // present it as Supervisor decision activity.
+  const decisionRuns = runPage.items.filter((run) => run.resultCode !== "no_waiting_alerts").slice(0, 20);
   const persistedEvents = events.docs.map(doc => v2Json({ id: doc.id, ...doc.data() }));
   const runtimeEvents = config.status === "running" && !env.orchestratorWorkerEnabled ? [{
     id: `runtime-worker-disabled:${siteId}`,
@@ -86,7 +90,7 @@ export async function getV2SystemView(siteId: string) {
       },
     },
     controlHistory: Array.isArray(config.controlHistory) ? [...config.controlHistory].reverse() : [],
-    recentRuns: runs.slice(0, 20).map(run => ({
+    recentRuns: decisionRuns.map(run => ({
       id: run.id, type: run.type, status: run.status, resultCode: run.resultCode, selectedAlertId: run.selectedAlertId,
       selectedCleanerId: run.selectedCleanerId, workOrderId: run.workOrderId, provider: run.provider, model: run.model,
       decisionSummary: run.decisionSummary, decisionFactors: run.decisionFactors, isSimulation: run.isSimulation,
@@ -97,6 +101,7 @@ export async function getV2SystemView(siteId: string) {
       toolCallCount: Number(run.toolCallCount ?? 0),
       errorCode: run.errorCode, startedAt: run.startedAt, completedAt: run.completedAt, createdAt: run.createdAt,
     })),
+    recentRunsPage: { nextCursor: runPage.nextCursor, hasMore: runPage.hasMore, totalCount: runPage.totalCount ?? runPage.items.length },
     events: [...runtimeEvents, ...persistedEvents].sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? ""))),
   };
 }

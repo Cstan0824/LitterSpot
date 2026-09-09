@@ -17,7 +17,8 @@ const cursorPayloadSchema = z.object({
   resource: z.string().min(1).max(80),
   order: z.object({
     field: z.string().min(1).max(80),
-    value: z.string().datetime({ offset: true }),
+    value: z.union([z.string(), z.number()]),
+    type: z.enum(["timestamp", "string", "number"]).default("timestamp"),
   }).strict(),
   id: z.string().min(1).max(1500),
   query: z.string().length(64).regex(/^[a-f0-9]+$/),
@@ -32,6 +33,8 @@ type PageCursorContext = {
 export type CursorPage<T> = {
   items: T[];
   nextCursor: string | null;
+  hasMore: boolean;
+  totalCount?: number;
   paginationMode?: "cursor" | "bounded_legacy_scan";
   resultCompleteness?: "complete" | "bounded";
   scannedCount?: number;
@@ -56,13 +59,15 @@ export function paginationQueryFingerprint(filters: Record<string, unknown>) {
 
 export function encodePageCursor(
   context: PageCursorContext,
-  orderValue: Timestamp,
+  orderValue: Timestamp | string | number,
   id: string,
 ) {
+  const type = orderValue instanceof Timestamp ? "timestamp" : typeof orderValue === "number" ? "number" : "string";
+  const value = orderValue instanceof Timestamp ? orderValue.toDate().toISOString() : orderValue;
   const payload = cursorPayloadSchema.parse({
     version: 1,
     resource: context.resource,
-    order: { field: context.orderField, value: orderValue.toDate().toISOString() },
+    order: { field: context.orderField, value, type },
     id,
     query: paginationQueryFingerprint(context.filters),
   });
@@ -77,17 +82,20 @@ export function decodePageCursor(cursor: string, context: PageCursorContext) {
       || parsed.query !== paginationQueryFingerprint(context.filters)) {
       throw new Error("Cursor context mismatch.");
     }
-    const orderDate = new Date(parsed.order.value);
-    if (Number.isNaN(orderDate.getTime())) throw new Error("Invalid cursor timestamp.");
-    return { orderValue: Timestamp.fromDate(orderDate), id: parsed.id };
+    if (parsed.order.type === "timestamp") {
+      const orderDate = new Date(parsed.order.value);
+      if (Number.isNaN(orderDate.getTime())) throw new Error("Invalid cursor timestamp.");
+      return { orderValue: Timestamp.fromDate(orderDate), id: parsed.id };
+    }
+    return { orderValue: parsed.order.value, id: parsed.id };
   } catch {
     throw new HttpError(400, "The pagination cursor is invalid for this query.");
   }
 }
 
-function requiredOrderTimestamp(snapshot: QueryDocumentSnapshot, orderField: string) {
+function requiredOrderValue(snapshot: QueryDocumentSnapshot, orderField: string) {
   const value = snapshot.get(orderField);
-  if (!(value instanceof Timestamp)) {
+  if (!(value instanceof Timestamp) && typeof value !== "string" && typeof value !== "number") {
     throw new TypeError(`Stored ${snapshot.ref.path} is missing the pagination field ${orderField}.`);
   }
   return value;
@@ -100,6 +108,8 @@ export async function queryCursorPage<T>(options: {
   filters: Record<string, unknown>;
   limit: number;
   cursor?: string;
+  direction?: "asc" | "desc";
+  totalQuery?: Query<DocumentData>;
   present: (snapshot: QueryDocumentSnapshot) => T;
 }): Promise<CursorPage<T>> {
   const context: PageCursorContext = {
@@ -108,19 +118,21 @@ export async function queryCursorPage<T>(options: {
     filters: options.filters,
   };
   let query = options.query
-    .orderBy(options.orderField, "desc")
-    .orderBy(FieldPath.documentId(), "desc");
+    .orderBy(options.orderField, options.direction ?? "desc")
+    .orderBy(FieldPath.documentId(), options.direction ?? "desc");
   if (options.cursor) {
     const decoded = decodePageCursor(options.cursor, context);
     query = query.startAfter(decoded.orderValue, decoded.id);
   }
-  const snapshot = await query.limit(options.limit + 1).get();
+  const [snapshot, count] = await Promise.all([query.limit(options.limit + 1).get(), options.totalQuery?.count().get()]);
   const selected = snapshot.docs.slice(0, options.limit);
   const last = selected.at(-1);
   return {
     items: selected.map(options.present),
     nextCursor: snapshot.size > options.limit && last
-      ? encodePageCursor(context, requiredOrderTimestamp(last, options.orderField), last.id)
+      ? encodePageCursor(context, requiredOrderValue(last, options.orderField), last.id)
       : null,
+    hasMore: snapshot.size > options.limit,
+    ...(count ? { totalCount: count.data().count } : {}),
   };
 }

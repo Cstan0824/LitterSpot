@@ -15,7 +15,7 @@ describe("Camera sample display when event delivery is unavailable", () => {
     const driver = { camera, episodeId: "episode", sequence: 1, nextAt: 0, busy: false, stopped: false, loading: false, video: { videoWidth: 640, videoHeight: 480, currentTime: 2 } };
     await runtime.sample(driver);
     const view = monitor.snapshot().cameras.camera;
-    expect(view.message).toBe("Online");
+    expect(view.message).toBe("Live monitoring");
     expect(view.observation).toMatchObject({ sampleId: "episode:1", peopleCount: 1 });
     expect(view.frameDataUrl).toMatch(/^blob:/);
     expect(await fetch(view.frameDataUrl!).then(r => r.text())).toBe("captured-frame");

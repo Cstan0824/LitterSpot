@@ -1,3 +1,5 @@
+import { DelayedCameraPlayback, type DelayedPlaybackSnapshot } from "./delayedCameraPlayback";
+
 export type Box = { x1: number; y1: number; x2: number; y2: number };
 export type CameraObservation = {
   sampleId: string; cameraId: string; episodeId: string; sequence: number; capturedAtMs: number;
@@ -11,15 +13,22 @@ export type MonitoringCamera = {
   id: string; name: string; status: string; monitoringEnabled: boolean; revision: number;
   sourceType: "laptop_camera" | "looped_video"; activeSourceRevisionId: string; activeRegistrationRevisionId: string;
   playbackGeneration: number; source: { contentUrl: string | null; sampleIntervalSeconds: number };
-  registration: { sourceWidth: number; sourceHeight: number }; runtime?: { connectionStatus?: string };
+  registration: { sourceWidth: number; sourceHeight: number }; runtime?: { connectionStatus?: string; cleanlinessState?: string };
 };
-export type CameraView = { camera: MonitoringCamera; frameDataUrl?: string; observation?: CameraObservation; sourceVideo?: HTMLVideoElement; message: string; controlBusy: boolean; lastReceivedAt?: number };
+export type CameraPlaybackMetrics = { droppedFrames: number; lateResults: number; latestInferenceMs: number; requestedIntervalMs?: number };
+export type CameraView = { camera: MonitoringCamera; frameDataUrl?: string; observation?: CameraObservation; sourceVideo?: HTMLVideoElement; detailPlayback?: DelayedPlaybackSnapshot; analysisTimeline?: CameraObservation[]; analysisUpdating?: boolean; metrics?: CameraPlaybackMetrics; message: string; controlBusy: boolean; lastReceivedAt?: number };
 export type MonitoringSnapshot = { cameras: Record<string, CameraView>; owner: boolean; error: string };
 export type CameraTransport = (path: string, options?: RequestInit) => Promise<Response>;
 type Lease = { sessionId: string; leaseToken: string };
-type Driver = { camera: MonitoringCamera; video?: HTMLVideoElement; url?: string; stream?: MediaStream; episodeId?: string; sequence: number; busy: boolean; loading: boolean; stopped: boolean; nextAt: number };
+type Driver = { camera: MonitoringCamera; video?: HTMLVideoElement; url?: string; stream?: MediaStream; episodeId?: string; sequence: number; busy: boolean; loading: boolean; stopped: boolean; nextAt: number; lastSampleStartedAt: number; burstUntil: number; observations: CameraObservation[]; detailPlayback?: DelayedCameraPlayback; droppedFrames: number; lateResults: number };
 const message = (error: unknown) => error instanceof Error ? error.message : "Camera connection failed.";
 const pause = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+export function adaptiveCameraSampleInterval(input: { detail: boolean; visibleCard: boolean; positiveBurst: boolean; verification: boolean }) {
+  if (input.detail) return 500;
+  if (input.verification || input.positiveBurst || input.visibleCard) return 1_000;
+  return 4_000;
+}
 
 /** Route-independent browser runtime shared by the sandbox and Supervisor shell. */
 export class SiteCameraMonitoring {
@@ -33,7 +42,10 @@ export class SiteCameraMonitoring {
   private refreshAgain = false;
   private claiming = false;
   private heartbeatBusy = false;
+  private sampleSchedulerBusy = false;
   private lastMaintenance = 0;
+  private detailCameraIds = new Set<string>();
+  private visibleCardIds = new Set<string>();
   private timers: ReturnType<typeof setInterval>[] = [];
   private abort = new AbortController();
   private pageHide = () => { void this.stop(); };
@@ -54,7 +66,7 @@ export class SiteCameraMonitoring {
     window.addEventListener("pagehide", this.pageHide);
     void this.refresh(); void this.events();
     this.timers.push(setInterval(() => { void this.maintain(); }, 10_000));
-    this.timers.push(setInterval(() => { for (const driver of this.drivers.values()) void this.sample(driver); }, 250));
+    this.timers.push(setInterval(() => { void this.scheduleSample(); }, 100));
   }
   async refresh() {
     if (!this.active) return;
@@ -107,9 +119,13 @@ export class SiteCameraMonitoring {
     if (!this.lease || !this.active) return;
     let driver = this.drivers.get(camera.id);
     if (driver && (driver.camera.activeSourceRevisionId !== camera.activeSourceRevisionId || driver.camera.activeRegistrationRevisionId !== camera.activeRegistrationRevisionId)) { this.stopDriver(camera.id, "reconfigured"); driver = undefined; }
+    if (driver && driver.camera.playbackGeneration !== camera.playbackGeneration) {
+      driver.detailPlayback?.stop(); driver.detailPlayback = undefined; driver.observations = []; driver.burstUntil = 0;
+      this.update(camera.id, { detailPlayback: undefined, analysisTimeline: undefined, frameDataUrl: undefined, observation: undefined });
+    }
     if (driver?.loading) return;
     if (driver && driver.camera.playbackGeneration === camera.playbackGeneration && driver.video) return;
-    if (!driver) { driver = { camera, sequence: 1, busy: false, loading: false, stopped: false, nextAt: 0 }; this.drivers.set(camera.id, driver); }
+    if (!driver) { driver = { camera, sequence: 1, busy: false, loading: false, stopped: false, nextAt: 0, lastSampleStartedAt: 0, burstUntil: 0, observations: [], droppedFrames: 0, lateResults: 0 }; this.drivers.set(camera.id, driver); }
     const current = driver; current.loading = true;
     try {
       const video = document.createElement("video"); video.muted = true; video.autoplay = true; video.playsInline = true; video.loop = true;
@@ -119,7 +135,7 @@ export class SiteCameraMonitoring {
       let url: string | undefined, stream: MediaStream | undefined;
       try {
         if (camera.sourceType === "laptop_camera") { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); video.srcObject = stream; }
-        else { if (!camera.source.contentUrl) throw new Error("Source video is unavailable."); const response = await this.transport(camera.source.contentUrl, { signal: this.abort.signal }); if (!response.ok) throw new Error("Source video could not be loaded."); url = URL.createObjectURL(await response.blob()); video.src = url; }
+        else { if (!camera.source.contentUrl) throw new Error("Source video is unavailable."); const response = await this.transport(camera.source.contentUrl, { signal: this.abort.signal, cache: "no-store" }); if (!response.ok) throw new Error("Source video could not be loaded."); url = URL.createObjectURL(await response.blob()); video.src = url; }
         await video.play();
         if (current.stopped || !this.active || !this.lease) throw new Error("Camera stopped.");
         current.video?.pause(); current.video?.remove(); current.stream?.getTracks().forEach(t => t.stop()); if (current.url) URL.revokeObjectURL(current.url);
@@ -129,15 +145,67 @@ export class SiteCameraMonitoring {
           if (current.stopped) return;
           current.episodeId = episode.episodeId; current.sequence = episode.nextSequence;
         }
-        this.update(camera.id, { sourceVideo: video, message: "Connecting" });
+        this.update(camera.id, { sourceVideo: video, analysisUpdating: false, message: "Live monitoring", metrics: { droppedFrames: 0, lateResults: 0, latestInferenceMs: 0 } });
+        if (this.detailCameraIds.has(camera.id)) this.startDetailPlayback(current);
       } catch (error) { video.pause(); video.remove(); stream?.getTracks().forEach(t => t.stop()); if (url) URL.revokeObjectURL(url); throw error; }
     } catch (error) { if (!current.stopped) { this.update(camera.id, { message: message(error) }); this.stopDriver(camera.id, "source_failure"); } }
     finally { current.loading = false; }
   }
-  private async sample(driver: Driver) {
-    if (!this.active || !this.lease || driver.stopped || driver.loading || driver.busy || !driver.episodeId || !driver.video?.videoWidth || Date.now() < driver.nextAt) return;
+  setPresentationInterest(id: string, mode: "detail" | "card", active: boolean) {
+    const interests = mode === "detail" ? this.detailCameraIds : this.visibleCardIds;
+    if (active) interests.add(id); else interests.delete(id);
+    const driver = this.drivers.get(id);
+    if (mode === "detail" && driver) {
+      if (active) this.startDetailPlayback(driver);
+      else {
+        driver.detailPlayback?.stop();
+        driver.detailPlayback = undefined;
+        this.update(id, { detailPlayback: undefined, analysisTimeline: undefined });
+      }
+    } else if (mode === "detail" && active && this.lease && this.state.cameras[id]?.camera.monitoringEnabled) {
+      this.update(id, { detailPlayback: { state: "buffering", recordingStartedAtMs: Date.now(), delayMs: null, analysisLeadMs: null, width: 1, height: 1, bufferedSeconds: 0, encodedBytes: 0, queuedBytes: 0 } });
+    }
+  }
+  retryDetailPlayback(id: string) { this.drivers.get(id)?.detailPlayback?.retry(); }
+  private startDetailPlayback(driver: Driver) {
+    if (driver.detailPlayback || !driver.video || !this.lease || !this.active) return;
+    try {
+      const playback = new DelayedCameraPlayback(driver.video, (snapshot) => {
+        if (this.drivers.get(driver.camera.id) === driver) this.update(driver.camera.id, { detailPlayback: snapshot, analysisTimeline: [...driver.observations] });
+      });
+      driver.detailPlayback = playback;
+      playback.start();
+      driver.observations.forEach((observation) => playback.addObservation(observation));
+      this.update(driver.camera.id, { detailPlayback: playback.snapshot(), analysisTimeline: [...driver.observations] });
+    } catch (error) {
+      this.update(driver.camera.id, { detailPlayback: { state: "unavailable", recordingStartedAtMs: Date.now(), delayMs: null, analysisLeadMs: null, error: message(error), width: 1, height: 1, bufferedSeconds: 0, encodedBytes: 0, queuedBytes: 0 } });
+    }
+  }
+  private desiredSampleInterval(driver: Driver, now = Date.now()) {
+    return adaptiveCameraSampleInterval({ detail: this.detailCameraIds.has(driver.camera.id), visibleCard: this.visibleCardIds.has(driver.camera.id), positiveBurst: driver.burstUntil > now, verification: driver.camera.runtime?.cleanlinessState === "awaiting_review" });
+  }
+  private async scheduleSample() {
+    if (this.sampleSchedulerBusy || !this.active || !this.lease) return;
+    const now = Date.now();
+    const candidates = [...this.drivers.values()].filter((driver) => !driver.stopped && !driver.loading && !driver.busy && driver.episodeId && driver.video?.videoWidth).map((driver) => {
+      const interval = this.desiredSampleInterval(driver, now);
+      const elapsed = driver.lastSampleStartedAt ? now - driver.lastSampleStartedAt : Number.POSITIVE_INFINITY;
+      return { driver, interval, urgency: elapsed / interval, detail: this.detailCameraIds.has(driver.camera.id) };
+    }).filter((item) => item.urgency >= 1).sort((left, right) => right.urgency - left.urgency || Number(right.detail) - Number(left.detail));
+    const detail = candidates.find((item) => item.detail);
+    const starvedBackground = candidates.find((item) => !item.detail && item.driver.lastSampleStartedAt > 0 && now - item.driver.lastSampleStartedAt >= 4_000);
+    const selected = starvedBackground ?? detail ?? candidates[0];
+    if (!selected) return;
+    selected.driver.lastSampleStartedAt = now;
+    selected.driver.nextAt = now + selected.interval;
+    this.sampleSchedulerBusy = true;
+    try { await this.sample(selected.driver, selected.interval); }
+    finally { this.sampleSchedulerBusy = false; }
+  }
+  private async sample(driver: Driver, requestedIntervalMs = Math.max(1_000, driver.camera.source.sampleIntervalSeconds * 1_000)) {
+    if (!this.active || !this.lease || driver.stopped || driver.loading || driver.busy || !driver.episodeId || !driver.video?.videoWidth) return;
     driver.busy = true; const lease = this.lease; const camera = driver.camera; const capturedAt = new Date();
-    driver.nextAt = Date.now() + Math.max(1000, camera.source.sampleIntervalSeconds * 1000);
+    driver.nextAt = Date.now() + requestedIntervalMs;
     try {
       const canvas = document.createElement("canvas"); canvas.width = driver.video.videoWidth; canvas.height = driver.video.videoHeight;
       const sourceTime = driver.video.currentTime; canvas.getContext("2d")!.drawImage(driver.video, 0, 0);
@@ -147,11 +215,12 @@ export class SiteCameraMonitoring {
       const result = await this.json<{ observation: CameraObservation; nextSequence: number }>(`/api/monitoring/sessions/${lease.sessionId}/cameras/${camera.id}/samples`, { method: "POST", headers: { "x-monitoring-token": lease.leaseToken }, body });
       driver.sequence = result.nextSequence;
       if (!driver.stopped && driver.camera.playbackGeneration === camera.playbackGeneration && this.state.cameras[camera.id]?.camera.monitoringEnabled && this.state.cameras[camera.id]?.camera.activeRegistrationRevisionId === camera.activeRegistrationRevisionId) {
-        const previous = this.localFrames.get(camera.id);
-        const frameDataUrl = URL.createObjectURL(blob);
-        this.localFrames.set(camera.id, frameDataUrl);
-        this.update(camera.id, { frameDataUrl, observation: result.observation, message: "Online", lastReceivedAt: Date.now() });
-        if (previous) URL.revokeObjectURL(previous);
+        driver.observations ??= []; driver.observations.push(result.observation); driver.observations = driver.observations.filter((item) => Date.now() - item.capturedAtMs <= 90_000);
+        if (result.observation.issues.length) driver.burstUntil = Date.now() + 10_000;
+        driver.detailPlayback?.addObservation(result.observation);
+        if (Date.now() - result.observation.capturedAtMs > Math.max(3_000, camera.source.sampleIntervalSeconds * 2_500)) driver.lateResults += 1;
+        const previous = this.localFrames.get(camera.id); const frameDataUrl = URL.createObjectURL(blob); this.localFrames.set(camera.id, frameDataUrl);
+        this.update(camera.id, { frameDataUrl, observation: result.observation, analysisTimeline: driver.detailPlayback ? [...driver.observations] : undefined, analysisUpdating: false, message: "Live monitoring", lastReceivedAt: Date.now(), metrics: { droppedFrames: driver.droppedFrames, lateResults: driver.lateResults, latestInferenceMs: result.observation.processingTimeMs, requestedIntervalMs } }); if (previous) URL.revokeObjectURL(previous);
       }
     } catch (error) {
       if (!driver.stopped) {
@@ -169,9 +238,11 @@ export class SiteCameraMonitoring {
   private stopDriver(id: string, reason = "disabled") {
     const driver = this.drivers.get(id); if (!driver) return;
     driver.stopped = true; this.drivers.delete(id);
+    driver.detailPlayback?.stop(); driver.detailPlayback = undefined;
     driver.video?.pause(); driver.video?.remove(); driver.stream?.getTracks().forEach(t => t.stop()); if (driver.url) URL.revokeObjectURL(driver.url);
+    const frame = this.localFrames.get(id); if (frame) { URL.revokeObjectURL(frame); this.localFrames.delete(id); }
     if (driver.episodeId && this.lease) void this.post(`/api/monitoring/sessions/${this.lease.sessionId}/cameras/${id}/stop`, { episodeId: driver.episodeId, reason }, this.lease).catch(() => undefined);
-    this.update(id, { sourceVideo: undefined });
+    this.update(id, { sourceVideo: undefined, detailPlayback: undefined, analysisTimeline: undefined, analysisUpdating: false, observation: undefined, frameDataUrl: undefined, lastReceivedAt: undefined });
   }
   async toggle(id: string) {
     const view = this.state.cameras[id]; if (!view || view.controlBusy) return;

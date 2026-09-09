@@ -4,6 +4,7 @@ import { createIdempotencyKey } from "./idempotency";
 import { v2Request } from "./http";
 import type { V2Cleaner, V2Point, V2WorkOrder, V2Zone } from "./operations";
 import type { SiteBackgroundTransform } from "./siteMap";
+import { cachedPageRequest, type V2ListPage } from "./pagination";
 
 export type V2CleanerNotification = {
   id: string;
@@ -49,7 +50,8 @@ export const submitV2CleanerForReview = (workOrderId: string, completionEvidence
   json: { idempotencyKey: createIdempotencyKey("cleaner-ready-for-review"), ...(completionEvidenceMediaId ? { completionEvidenceMediaId } : {}) },
 });
 
-export const getV2CleanerNotifications = (signal?: AbortSignal) => v2Request<{ notifications: V2CleanerNotification[] }>("/api/cleaner/notifications?limit=50", { signal });
+export const getV2CleanerNotifications = (signal?: AbortSignal) => v2Request<{ notifications: V2CleanerNotification[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>("/api/cleaner/notifications?limit=20", { signal });
+export const getV2CleanerNotificationsPage = (cursor?: string, signal?: AbortSignal): Promise<V2ListPage<V2CleanerNotification>> => { const url = `/api/cleaner/notifications?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`; return cachedPageRequest(url, async () => { const result = await v2Request<{ notifications: V2CleanerNotification[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return { items: result.notifications, nextCursor: result.nextCursor, hasMore: result.hasMore, totalCount: result.totalCount }; }, 30_000, signal); };
 
 function notificationFromSnapshot(id: string, value: Record<string, unknown>): V2CleanerNotification {
   const createdAt = value.createdAt && typeof value.createdAt === "object" && "toDate" in value.createdAt && typeof value.createdAt.toDate === "function"

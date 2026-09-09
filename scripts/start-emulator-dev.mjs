@@ -38,7 +38,7 @@ writeFileSync(configPath, JSON.stringify({
 const common = {
   APP_ENV: "local-emulator", FIREBASE_PROJECT_ID: project, EXPECTED_FIREBASE_PROJECT_ID: project, FIREBASE_DATABASE_ID: "(default)", GCLOUD_PROJECT: project,
   FIRESTORE_EMULATOR_HOST: "127.0.0.1:8180", FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9199", MEDIA_STORAGE_ROOT: mediaRoot,
-  ORCHESTRATOR_WORKER_ENABLED: "false", ANALYTICS_WORKER_ENABLED: "false", CAMERA_DEMO_SCENES_ENABLED: "true", ORCHESTRATOR_INTERNAL_TOKEN: "emulator-orchestrator-token",
+  ORCHESTRATOR_WORKER_ENABLED: process.env.ORCHESTRATOR_WORKER_ENABLED ?? "true", ANALYTICS_WORKER_ENABLED: "false", CAMERA_DEMO_SCENES_ENABLED: "true", ORCHESTRATOR_INTERNAL_TOKEN: "emulator-orchestrator-token",
 };
 
 function portInUse(port) { return new Promise(resolvePort => { const socket = createConnection({ host: "127.0.0.1", port }); socket.once("connect", () => { socket.destroy(); resolvePort(true); }); socket.once("error", () => resolvePort(false)); }); }

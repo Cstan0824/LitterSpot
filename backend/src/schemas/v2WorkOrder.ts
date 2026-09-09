@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { opaqueCursorSchema } from "./pagination.js";
 
 const id = z.string().trim().min(1).max(160);
 const key = id.regex(/^[A-Za-z0-9._:-]+$/);
@@ -9,9 +10,13 @@ export const v2WorkListQuerySchema = z.object({
   status: z.union([v2WorkStatusSchema, z.literal("active"), z.literal("all")]).default("active"),
   cleanerId: id.optional(),
   alertId: id.optional(),
+  zoneId: id.optional(),
+  cameraId: id.optional(),
+  origin: z.enum(["alert", "manual"]).optional(),
+  cursor: opaqueCursorSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 }).strict().superRefine((value, context) => {
-  if (value.cleanerId && value.alertId) context.addIssue({ code: z.ZodIssueCode.custom, message: "Use at most one of cleanerId or alertId." });
+  if ([value.cleanerId, value.alertId, value.cameraId].filter(Boolean).length > 1) context.addIssue({ code: z.ZodIssueCode.custom, message: "Use at most one of cleanerId, alertId, or cameraId." });
 });
 
 export const v2AlertAssignmentSchema = z.object({ assignedCleanerId: id, idempotencyKey: key }).strict();

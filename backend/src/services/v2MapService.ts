@@ -246,6 +246,7 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
   const unusedCorrections = [...correctionByCameraId.keys()].filter((cameraId) => !changedCameraIds.has(cameraId));
   if (unusedCorrections.length) throw new HttpError(400, "Camera Placement correction metadata was supplied for an unchanged Camera.", { code: "camera_placement_correction_without_change", cameraIds: unusedCorrections });
   const suppliedZones = new Set(input.zones.map((value) => value.zoneId));
+  const zoneNameById = new Map(input.zones.map((value) => [value.zoneId, value.zoneNameSnapshot]));
   await firestore.runTransaction(async (transaction) => {
     const current = await transaction.get(draftRef);
     if (!current.exists) throw new HttpError(409, "Start a Site Map draft before saving changes.", { code: "site_map_draft_required" });
@@ -262,7 +263,8 @@ export async function saveV2MapDraft(input: { siteId: string; baseRevisionId: st
     for (const placement of input.cameraPlacements ?? []) {
       const correction = correctionByCameraId.get(placement.id);
       const base = baseCameraById.get(placement.id);
-      transaction.set(draftRef.collection("cameraPlacements").doc(placement.id), { ...oldCameraById.get(placement.id), schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: placement.id, point: placement.point, zoneId: containingPolygon(placement.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), changeMode: correction?.mode ?? null, changeReason: correction?.reason ?? null, previousPoint: correction ? base?.point ?? null : null, previousZoneId: correction ? base?.zoneId ?? null : null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
+      const zoneId = containingPolygon(placement.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon })));
+      transaction.set(draftRef.collection("cameraPlacements").doc(placement.id), { ...oldCameraById.get(placement.id), schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: placement.id, point: placement.point, zoneId, zoneNameSnapshot: zoneId ? zoneNameById.get(zoneId) ?? zoneId : null, changeMode: correction?.mode ?? null, changeReason: correction?.reason ?? null, previousPoint: correction ? base?.point ?? null : null, previousZoneId: correction ? base?.zoneId ?? null : null, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
     }
     for (const station of input.cleanerStations ?? []) transaction.set(draftRef.collection("cleanerStations").doc(station.id), { ...oldCleanerById.get(station.id), schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cleanerId: station.id, point: station.point, zoneId: containingPolygon(station.point, input.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))), updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid });
     const auditRef = firestore.collection("auditEvents").doc();

@@ -2,6 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { sanitizeAuditSummary } from "./v2Persistence.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 export type AuditActor = {
   uid: string;
@@ -71,35 +72,14 @@ function timestamp(value: unknown) {
   return value instanceof Timestamp ? value.toDate().toISOString() : null;
 }
 
-export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: string; actorRole?: "superadmin" | "supervisor"; limit?: number } = {}) {
-  const limit = Math.min(filters.limit ?? 100, 200);
-  let query = firestore.collection("auditEvents").orderBy("occurredAt", "desc").limit(limit);
+export async function listV2AuditEventsPage(filters: { siteId?: string; actorUid?: string; actorRole?: "superadmin" | "supervisor"; limit?: number; cursor?: string } = {}) {
+  let query: FirebaseFirestore.Query = firestore.collection("auditEvents");
   if (filters.siteId) query = query.where("siteId", "==", filters.siteId);
   if (filters.actorUid) query = query.where("actorUid", "==", filters.actorUid);
   if (filters.actorRole) query = query.where("actorRole", "==", filters.actorRole);
-  let documents: FirebaseFirestore.QueryDocumentSnapshot[];
-  try {
-    documents = (await query.get()).docs;
-  } catch (error) {
-    const code = typeof error === "object" && error !== null && "code" in error ? Number(error.code) : null;
-    if (code !== 9) throw error;
-    const fallback = await firestore.collection("auditEvents").limit(501).get();
-    if (fallback.size > 500) {
-      throw new Error("Audit Event indexes are still building and the bounded fallback limit was exceeded.");
-    }
-    documents = fallback.docs
-      .filter((doc) => !filters.siteId || doc.data().siteId === filters.siteId)
-      .filter((doc) => !filters.actorUid || doc.data().actorUid === filters.actorUid)
-      .filter((doc) => !filters.actorRole || doc.data().actorRole === filters.actorRole)
-      .sort((left, right) => {
-        const leftTime = left.data().occurredAt instanceof Timestamp ? left.data().occurredAt.toMillis() : 0;
-        const rightTime = right.data().occurredAt instanceof Timestamp ? right.data().occurredAt.toMillis() : 0;
-        return rightTime - leftTime || right.id.localeCompare(left.id);
-      })
-      .slice(0, limit);
-  }
-  return documents.map((doc) => {
+  return queryCursorPage({ query, totalQuery: query, resource: "auditEvents", orderField: "occurredAt", filters: { siteId: filters.siteId ?? null, actorUid: filters.actorUid ?? null, actorRole: filters.actorRole ?? null }, limit: Math.min(filters.limit ?? 25, 100), cursor: filters.cursor, present: (doc) => {
     const data = doc.data();
     return { ...data, id: doc.id, occurredAt: timestamp(data.occurredAt) };
-  });
+  } });
 }
+export async function listV2AuditEvents(filters: { siteId?: string; actorUid?: string; actorRole?: "superadmin" | "supervisor"; limit?: number } = {}) { return (await listV2AuditEventsPage({ ...filters, limit: filters.limit ?? 100 })).items; }

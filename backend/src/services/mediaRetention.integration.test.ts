@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { firestore } from "../config/firebase.js";
 import { deleteStoredMedia, inspectMedia, writeMedia } from "./localMediaStorage.js";
 import { runMediaRetention } from "./mediaRetentionService.js";
+import { getMediaContent } from "./mediaService.js";
 
 const emulatorDescribe = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 const prefix = `retention-integration-${process.pid}`;
@@ -11,6 +12,7 @@ const ids = {
   alertProtected: `${prefix}-alert-protected`,
   jobProtected: `${prefix}-job-protected`,
   recent: `${prefix}-recent`,
+  recoverable: `${prefix}-recoverable`,
 };
 const paths = Object.fromEntries(Object.entries(ids).map(([name, id]) => [name, `media/${id}/original.jpg`])) as Record<keyof typeof ids, string>;
 const now = new Date("2026-08-17T00:00:00.000Z");
@@ -36,6 +38,7 @@ emulatorDescribe("media retention execution", () => {
     batch.set(firestore.collection("mediaAssets").doc(ids.alertProtected), mediaDocument(ids.alertProtected, paths.alertProtected, old));
     batch.set(firestore.collection("mediaAssets").doc(ids.jobProtected), mediaDocument(ids.jobProtected, paths.jobProtected, old));
     batch.set(firestore.collection("mediaAssets").doc(ids.recent), mediaDocument(ids.recent, paths.recent, recent));
+    batch.set(firestore.collection("mediaAssets").doc(ids.recoverable), { ...mediaDocument(ids.recoverable, paths.recoverable, recent), storageStatus: "missing", mimeType: "image/jpeg" });
     batch.set(firestore.collection("alerts").doc(`${prefix}-alert`), {
       status: "new",
       latestEvidenceMediaId: ids.alertProtected,
@@ -77,5 +80,11 @@ emulatorDescribe("media retention execution", () => {
       const snapshot = await firestore.collection("mediaAssets").doc(protectedId).get();
       expect(snapshot.data()?.storageStatus).toBe("available");
     }
+  });
+
+  it("recovers a stale missing status when the configured file exists", async () => {
+    await firestore.collection("mediaAssets").doc(ids.recoverable).update({ storageStatus: "missing" });
+    await expect(getMediaContent(ids.recoverable)).resolves.toMatchObject({ byteSize: 14, mimeType: "image/jpeg" });
+    expect((await firestore.collection("mediaAssets").doc(ids.recoverable).get()).data()?.storageStatus).toBe("available");
   });
 });

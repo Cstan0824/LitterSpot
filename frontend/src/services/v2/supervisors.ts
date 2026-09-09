@@ -1,5 +1,6 @@
 import { createIdempotencyKey } from "./idempotency";
 import { v2Request } from "./http";
+import { cachedPageRequest, type V2ListPage } from "./pagination";
 
 export type V2SupervisorDirectoryItem = {
   uid: string;
@@ -27,7 +28,8 @@ export function isV2SupervisorManagementItem(supervisor: V2SupervisorListItem): 
   return "status" in supervisor && "email" in supervisor && "revision" in supervisor;
 }
 
-export const getV2Supervisors = (signal?: AbortSignal) => v2Request<{ supervisors: V2SupervisorListItem[] }>("/api/supervisors", { signal });
+export const getV2Supervisors = (signal?: AbortSignal) => v2Request<{ supervisors: V2SupervisorListItem[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>("/api/supervisors?limit=25", { signal });
+export const getV2SupervisorsPage = (cursor?: string, signal?: AbortSignal): Promise<V2ListPage<V2SupervisorListItem>> => { const url = `/api/supervisors?limit=25${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`; return cachedPageRequest(url, async () => { const result = await v2Request<{ supervisors: V2SupervisorListItem[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return { items: result.supervisors, nextCursor: result.nextCursor, hasMore: result.hasMore, totalCount: result.totalCount }; }, 30_000, signal); };
 
 export const createV2RegularSupervisor = (input: CreateV2RegularSupervisorInput) => v2Request<{ supervisor: { uid: string; replayed: boolean } }>("/api/supervisors", {
   method: "POST",

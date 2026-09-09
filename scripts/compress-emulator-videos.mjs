@@ -17,7 +17,7 @@ async function collect(directory) {
   for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...await collect(path));
-    else if (entry.isFile() && entry.name === "camera-source.mp4") files.push(path);
+    else if (entry.isFile() && ["camera-source.mp4", "scene.mp4"].includes(entry.name)) files.push(path);
   }
   return files;
 }
@@ -51,7 +51,8 @@ if (!apply) {
 
 const files = [];
 for (const path of await collect(join(mediaRoot, "media"))) {
-  if ((await stat(path)).size >= minimumBytes) files.push(path);
+  const details = await probe(path);
+  if ((await stat(path)).size >= minimumBytes || details.codec !== "h264") files.push(path);
 }
 if (!files.length) {
   console.log(JSON.stringify({ status: "nothing_to_compress", mediaRoot }, null, 2));

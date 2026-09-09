@@ -1,11 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
-import { createV2RegularSupervisor, listV2Supervisors, updateV2Supervisor } from "../services/v2IdentityService.js";
+import { createV2RegularSupervisor, listV2SupervisorsPage, updateV2Supervisor } from "../services/v2IdentityService.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 
 export const v2SupervisorAccountRoutes = Router();
 
 v2SupervisorAccountRoutes.get("/", async (req, res) => {
-  return res.json({ supervisors: await listV2Supervisors(String(req.authUser.siteId), req.authUser.authority === "root" ? "root" : "regular") });
+  const query = z.object({ ...boundedListQueryFields, status: z.enum(["active", "inactive", "all"]).default("all") }).strict().parse(req.query);
+  const page = await listV2SupervisorsPage(String(req.authUser.siteId), req.authUser.authority === "root" ? "root" : "regular", query);
+  return res.json({ supervisors: page.items, ...page });
 });
 
 v2SupervisorAccountRoutes.post("/", async (req, res) => {

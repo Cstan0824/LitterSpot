@@ -10,7 +10,7 @@ describe("V2 Supervisor account client", () => {
 
   it("loads the authority-projected Supervisor directory", async () => {
     await getV2Supervisors();
-    expect(request).toHaveBeenCalledWith("/api/supervisors", { signal: undefined });
+    expect(request).toHaveBeenCalledWith("/api/supervisors?limit=25", { signal: undefined });
   });
 
   it("creates a Regular Supervisor with an idempotency key", async () => {

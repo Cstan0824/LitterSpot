@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActiveSiteMap } from "../../services/v2/siteMap";
 import type { SuperadminSiteViewPage } from "../../services/v2/routing";
-import type { V2Dashboard, V2OperationsReadModel } from "../../services/v2/operations";
+import type { V2Alert, V2Cleaner, V2Dashboard, V2OperationsReadModel, V2WorkOrder } from "../../services/v2/operations";
 import {
   getV2SuperadminAnalytics,
+  getV2SuperadminAlert,
   getV2SuperadminCamera,
+  getV2SuperadminListPage,
   getV2SuperadminOperationsView,
   getV2SuperadminSystemRun,
+  getV2SuperadminWork,
   v2SuperadminMediaContentUrl,
   type V2SuperadminOperationsView,
 } from "../../services/v2/superadmin";
@@ -18,7 +21,8 @@ import { WorkManagementPage } from "../operations/WorkManagementPage";
 import { TeamManagementPage } from "../operations/TeamManagementPage";
 import { SystemPage } from "../../pages/SystemPage";
 import { SiteAdministrationPage } from "../../pages/SiteAdministrationPage";
-import type { V2SystemView } from "../../services/v2/system";
+import type { V2SystemRun, V2SystemView } from "../../services/v2/system";
+import type { V2SupervisorListItem } from "../../services/v2/supervisors";
 import type { BinPlacementSnapshot } from "../../services/v2/binPlacement";
 import "./superadmin-site-view.css";
 
@@ -101,21 +105,27 @@ export function SuperadminSiteView({ siteId, page, profile, onNavigate, onExit, 
   useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [page]);
   const navigatePath = useCallback((path: string, params?: Record<string, string>) => onNavigate(superadminSiteViewPageFromPath(path), params), [onNavigate]);
   const loadCamera = useCallback((cameraId: string, signal?: AbortSignal) => getV2SuperadminCamera(siteId, cameraId, signal), [siteId]);
+  const loadWorkDetail = useCallback((workOrderId: string, signal?: AbortSignal) => getV2SuperadminWork(siteId, workOrderId, signal), [siteId]);
+  const loadAlertPage = useCallback((input: { limit?: number; cursor?: string; status?: string; zoneId?: string; severity?: string }, signal?: AbortSignal) => getV2SuperadminListPage<V2Alert>(siteId, "alerts", input, signal), [siteId]);
+  const loadAlertDetail = useCallback((alertId: string, signal?: AbortSignal) => getV2SuperadminAlert(siteId, alertId, signal), [siteId]);
+  const loadWorkPage = useCallback(async (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; origin?: string }, signal?: AbortSignal) => { const page = await getV2SuperadminListPage<V2WorkOrder>(siteId, "work-orders", input, signal); return { ...page, statusCounts: page.statusCounts ?? { assigned: 0, in_progress: 0, awaiting_review: 0, resolved: 0, dismissed: 0 } }; }, [siteId]);
+  const loadMoreResource = useCallback(async (resource: "cleaners" | "supervisors", cursor: string) => { const items = resource === "cleaners" ? await getV2SuperadminListPage<V2Cleaner>(siteId, resource, { cursor }) : await getV2SuperadminListPage<V2SupervisorListItem>(siteId, resource, { cursor }); setView((current) => current ? { ...current, [resource]: [...current[resource], ...items.items.filter((item) => !current[resource].some((loaded) => ("id" in loaded ? loaded.id : loaded.uid) === ("id" in item ? item.id : item.uid)))], pagination: { ...current.pagination!, [resource]: { nextCursor: items.nextCursor, hasMore: items.hasMore, totalCount: items.totalCount } } } as V2SuperadminOperationsView : current); }, [siteId]);
   const loadSystem = useCallback(async (_signal?: AbortSignal) => view!.system, [view]);
   const loadRun = useCallback((runId: string, signal?: AbortSignal) => getV2SuperadminSystemRun(siteId, runId, signal), [siteId]);
+  const loadRunsPage = useCallback((cursor?: string, signal?: AbortSignal) => getV2SuperadminListPage<V2SystemRun>(siteId, "runs", { cursor, limit: 20 }, signal), [siteId]);
   const adapted = useMemo(() => view ? adaptV2Operations({ dashboard: view.dashboard ?? emptyDashboard(view), siteMap: view.siteMap, alerts: view.alerts, cleaners: view.cleaners, workOrders: view.workOrders, cameras: view.cameras } satisfies V2OperationsReadModel) : null, [view]);
   const activeMap = useMemo(() => view ? ({ ...view.siteMap, siteStatus: view.site.status, timeZone: view.site.timeZone, revision: { ...view.siteMap.revision, id: view.site.activeMap?.revisionId ?? view.siteMap.activeRevisionId, revisionNumber: view.site.activeMap?.revisionNumber ?? 0, coordinateOrigin: "top_left", xAxisDirection: "right", yAxisDirection: "down", publishedAt: view.site.activeMap?.publishedAt ?? null } } as unknown as ActiveSiteMap) : null, [view]);
   if (loading && !view) return <div className="site-view-shell"><div className="site-view-state">Loading selected Site…</div></div>;
   if (!view || !adapted || !activeMap) return <div className="site-view-shell"><div className="site-view-state error"><strong>Site View unavailable.</strong><p>{error}</p><button type="button" onClick={() => void load()}>Try again</button><button type="button" onClick={onExit}>Exit Site</button></div></div>;
   const mediaUrl = (mediaId: string) => v2SuperadminMediaContentUrl(siteId, mediaId);
   const unavailable = async () => { throw new Error("This action is unavailable in Site View."); };
-  const content = page === "dashboard" ? <GeographicOperationsDashboard zones={adapted.zones} cameras={adapted.cameras} alerts={adapted.alerts} cleaners={adapted.staff} recommendations={[]} availabilityById={adapted.availabilityById} busyZones={(view.dashboard ?? emptyDashboard(view)).busyZones} siteMap={view.siteMap} siteName={view.site.name} onNavigate={navigatePath} statusLabel="Site snapshot" statusDetail={view.site.status === "active" ? "Current Site data" : "Inactive Site data"} />
-    : page === "cameras" ? <CameraOperationsPage readOnly showPermissionNotice={false} canManageCameraPlacement={false} sites={adapted.sites} zones={adapted.zones} cameras={adapted.cameras} feeds={[]} liveVideos={[]} alerts={adapted.alerts} cleaners={adapted.staff} onCreateZone={unavailable} onCreateCamera={unavailable} v2Cameras={view.cameras} getCameraDetail={loadCamera} onNavigate={navigatePath} />
-    : page === "alerts" ? <AlertManagementPage readOnly showPermissionNotice={false} alerts={adapted.alerts} cameras={adapted.cameras} cleaners={adapted.staff} workOrders={view.workOrders} onStatus={() => undefined} mediaContentUrl={mediaUrl} onNavigate={navigatePath} />
-    : page === "work" ? <WorkManagementPage readOnly showPermissionNotice={false} siteMap={view.siteMap} cleaners={adapted.staff} zones={adapted.zones} cameras={adapted.cameras} alerts={adapted.alerts} workOrders={view.workOrders} availableCleanerIds={view.cleaners.filter((cleaner) => cleaner.availability.available).map((cleaner) => cleaner.id)} mediaContentUrl={mediaUrl} onNavigate={navigatePath} />
-    : page === "team" ? <TeamManagementPage readOnly viewer={{ uid: profile.uid, authority: "root" }} staff={adapted.staff} zones={adapted.zones} v2Cleaners={view.cleaners} workOrders={view.workOrders} siteMap={view.siteMap} supervisors={view.supervisors} supervisorsLoading={false} onRetrySupervisors={() => void load()} onCreateSupervisor={unavailable} onUpdateSupervisor={unavailable} onCreate={unavailable} onUpdate={unavailable} onMoveStation={unavailable} onAvailabilityOverride={unavailable} />
+  const content = page === "dashboard" ? <GeographicOperationsDashboard zones={adapted.zones} cameras={adapted.cameras} alerts={adapted.alerts} workOrders={view.workOrders} loadAlertPage={loadAlertPage} loadWorkPage={loadWorkPage} cleaners={adapted.staff} recommendations={[]} availabilityById={adapted.availabilityById} busyZones={(view.dashboard ?? emptyDashboard(view)).busyZones} siteMap={view.siteMap} siteName={view.site.name} onNavigate={navigatePath} statusLabel="Site snapshot" statusDetail={view.site.status === "active" ? "Current Site data" : "Inactive Site data"} />
+    : page === "cameras" ? <CameraOperationsPage readOnly showPermissionNotice={false} canManageCameraPlacement={false} sites={adapted.sites} zones={adapted.zones} cameras={adapted.cameras} feeds={[]} liveVideos={[]} alerts={adapted.alerts} cleaners={adapted.staff} siteMap={view.siteMap} workOrders={view.workOrders} onCreateZone={unavailable} onCreateCamera={unavailable} v2Cameras={view.cameras} getCameraDetail={loadCamera} getWorkDetail={loadWorkDetail} onNavigate={navigatePath} />
+    : page === "alerts" ? <AlertManagementPage readOnly showPermissionNotice={false} alerts={adapted.alerts} cameras={adapted.cameras} cleaners={adapted.staff} workOrders={view.workOrders} loadPage={loadAlertPage} loadDetail={loadAlertDetail} onStatus={() => undefined} mediaContentUrl={mediaUrl} onNavigate={navigatePath} />
+    : page === "work" ? <WorkManagementPage readOnly showPermissionNotice={false} siteMap={view.siteMap} cleaners={adapted.staff} zones={adapted.zones} cameras={adapted.cameras} alerts={adapted.alerts} workOrders={view.workOrders} loadPage={loadWorkPage} availableCleanerIds={view.cleaners.filter((cleaner) => cleaner.availability.available).map((cleaner) => cleaner.id)} mediaContentUrl={mediaUrl} onNavigate={navigatePath} />
+    : page === "team" ? <TeamManagementPage readOnly viewer={{ uid: profile.uid, authority: "root" }} staff={adapted.staff} zones={adapted.zones} v2Cleaners={view.cleaners} cleanerTotal={view.pagination?.cleaners.totalCount} cleanerHasMore={view.pagination?.cleaners.hasMore} onLoadMoreCleaners={() => loadMoreResource("cleaners", view.pagination!.cleaners.nextCursor!)} workOrders={view.workOrders} siteMap={view.siteMap} supervisors={view.supervisors} supervisorTotal={view.pagination?.supervisors.totalCount} supervisorHasMore={view.pagination?.supervisors.hasMore} onLoadMoreSupervisors={() => loadMoreResource("supervisors", view.pagination!.supervisors.nextCursor!)} supervisorsLoading={false} onRetrySupervisors={() => void load()} onCreateSupervisor={unavailable} onUpdateSupervisor={unavailable} onCreate={unavailable} onUpdate={unavailable} onMoveStation={unavailable} onAvailabilityOverride={unavailable} />
     : page === "insights" ? <InsightsPage siteId={siteId} />
-    : page === "system" ? <SystemPage readOnly initialView={view.system as V2SystemView} loadView={loadSystem} loadRun={loadRun} />
+    : page === "system" ? <SystemPage readOnly initialView={view.system as V2SystemView} loadView={loadSystem} loadRun={loadRun} loadRunsPage={loadRunsPage} />
     : <SiteAdministrationPage readOnly quietReadOnly initialMap={activeMap} siteName={view.site.name} onNavigate={navigatePath} />;
   return <div className="site-view-shell"><SiteViewNavigation page={page} siteName={view.site.name} profile={profile} alertCount={(view.dashboard ?? emptyDashboard(view)).counts.activeAlertCount} onNavigate={onNavigate} onExit={onExit} onLogout={onLogout} />{view.site.status === "inactive" && <div className="site-view-inactive"><strong>Site inactive</strong><span>Historical data remains available. Site users and monitoring are stopped.</span></div>}<div className="site-view-content">{content}</div></div>;
 }
