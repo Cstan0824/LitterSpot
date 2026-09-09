@@ -2,6 +2,7 @@ import { v2Request } from "./http";
 import { createIdempotencyKey } from "./idempotency";
 import type { CameraObservation } from "../../../../shared/cameraMonitoring";
 import type { SiteBackgroundTransform, SiteMapBackground } from "./siteMap";
+import { cachedPageRequest, type V2ListPage } from "./pagination";
 
 export type V2Point = { xMeters: number; yMeters: number };
 export type V2Zone = { id: string; zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] };
@@ -32,6 +33,8 @@ export type V2WorkOrder = {
   assignedAt?: string | null; createdAt: string | null; updatedAt: string | null; submittedAt: string | null; resolvedAt: string | null; completionEvidenceMediaId: string | null;
   latestVerificationId: string | null; latestVerificationOutcome: string | null; reworkCount: number; revision: number;
 };
+export type V2WorkStatusCounts = Record<"assigned" | "in_progress" | "awaiting_review" | "resolved" | "dismissed", number>;
+export type V2WorkOrderPage = V2ListPage<V2WorkOrder> & { statusCounts: V2WorkStatusCounts };
 export type V2Dashboard = {
   counts: { zoneCount: number; cameraCount: number; cleanerCount: number; availableCleanerCount: number; alertCount: number; activeAlertCount: number; workCount: number; activeWorkCount: number; onlineCameraCount: number };
   topAlerts: Array<{ alertId: string; zoneId: string | null; zoneNameSnapshot: string; issueType: string; status: string; severity: string; priority: number; createdAt: string | null }>;
@@ -41,7 +44,7 @@ export type V2Dashboard = {
   generatedAt: string;
 };
 export type V2AlertDetail = { alert: V2Alert; events: Array<Record<string, unknown>>; occurrences: Array<Record<string, unknown>>; flags: Array<Record<string, unknown>> };
-export type V2WorkDetail = { workOrder: V2WorkOrder; events: Array<Record<string, unknown>>; verifications: Array<Record<string, unknown>> };
+export type V2WorkDetail = { workOrder: V2WorkOrder; alert?: V2Alert; events: Array<Record<string, unknown>>; verifications: Array<Record<string, unknown>> };
 export type V2CameraDetail = {
   camera: V2Camera & { activeMapRevisionId: string };
   currentAssignments: V2WorkOrder[];
@@ -61,9 +64,14 @@ export type V2OperationsReadModel = {
 
 export const getV2DashboardResource = async (signal?: AbortSignal) => (await v2Request<{ dashboard: V2Dashboard }>("/api/dashboard/v2", { signal })).dashboard;
 export const getV2SiteMapResource = async (signal?: AbortSignal) => (await v2Request<{ map: V2OperationsReadModel["siteMap"] }>("/api/site-map", { signal })).map;
-export const getV2AlertsResource = async (signal?: AbortSignal) => (await v2Request<{ alerts: V2Alert[] }>("/api/alerts", { signal })).alerts;
-export const getV2CleanersResource = async (signal?: AbortSignal) => (await v2Request<{ cleaners: V2Cleaner[] }>("/api/cleaners", { signal })).cleaners;
-export const getV2WorkOrdersResource = async (signal?: AbortSignal) => (await v2Request<{ workOrders: V2WorkOrder[] }>("/api/work-orders?status=all&limit=100", { signal })).workOrders;
+const pageUrl = (path: string, input: Record<string, string | number | undefined>) => { const query = new URLSearchParams(); Object.entries(input).forEach(([key, value]) => { if (value !== undefined && value !== "") query.set(key, String(value)); }); return `${path}?${query}`; };
+const normalizePage = <T>(response: { items?: T[]; nextCursor: string | null; hasMore: boolean; totalCount: number }, fallback: T[]): V2ListPage<T> => ({ items: response.items ?? fallback, nextCursor: response.nextCursor, hasMore: response.hasMore, totalCount: response.totalCount });
+export const getV2AlertsPage = (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; severity?: string } = {}, signal?: AbortSignal) => { const url = pageUrl("/api/alerts", { limit: input.limit ?? 25, ...input }); return cachedPageRequest(url, async () => { const response = await v2Request<{ alerts: V2Alert[]; items?: V2Alert[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return normalizePage(response, response.alerts); }, 30_000, signal); };
+export const getV2CleanersPage = (input: { limit?: number; cursor?: string; status?: string } = {}, signal?: AbortSignal) => { const url = pageUrl("/api/cleaners", { limit: input.limit ?? 25, ...input }); return cachedPageRequest(url, async () => { const response = await v2Request<{ cleaners: V2Cleaner[]; items?: V2Cleaner[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return normalizePage(response, response.cleaners); }, 30_000, signal); };
+export const getV2WorkOrdersPage = (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; cleanerId?: string; origin?: string } = {}, signal?: AbortSignal): Promise<V2WorkOrderPage> => { const url = pageUrl("/api/work-orders", { status: input.status ?? "all", limit: input.limit ?? 25, ...input }); return cachedPageRequest(url, async () => { const response = await v2Request<{ workOrders: V2WorkOrder[]; items?: V2WorkOrder[]; nextCursor: string | null; hasMore: boolean; totalCount: number; statusCounts: V2WorkStatusCounts }>(url); return { ...normalizePage(response, response.workOrders), statusCounts: response.statusCounts }; }, 30_000, signal); };
+export const getV2AlertsResource = async (signal?: AbortSignal) => (await getV2AlertsPage({}, signal)).items;
+export const getV2CleanersResource = async (signal?: AbortSignal) => (await getV2CleanersPage({}, signal)).items;
+export const getV2WorkOrdersResource = async (signal?: AbortSignal) => (await getV2WorkOrdersPage({}, signal)).items;
 export const getV2CamerasResource = async (signal?: AbortSignal) => (await v2Request<{ cameras: V2Camera[] }>("/api/camera-creation/cameras", { signal })).cameras;
 
 export async function getV2OperationsReadModel(signal?: AbortSignal): Promise<V2OperationsReadModel> {
@@ -83,12 +91,13 @@ export async function getV2AlertDetail(alertId: string, signal?: AbortSignal) {
 }
 
 export async function getV2WorkDetail(workOrderId: string, signal?: AbortSignal): Promise<V2WorkDetail> {
-  const [work, events, verifications] = await Promise.all([
-    v2Request<{ workOrder: V2WorkOrder }>(`/api/work-orders/${encodeURIComponent(workOrderId)}`, { signal }),
+  const work = await v2Request<{ workOrder: V2WorkOrder }>(`/api/work-orders/${encodeURIComponent(workOrderId)}`, { signal });
+  const [events, verifications, alert] = await Promise.all([
     v2Request<{ events: Array<Record<string, unknown>> }>(`/api/work-orders/${encodeURIComponent(workOrderId)}/history`, { signal }),
     v2Request<{ verifications: Array<Record<string, unknown>> }>(`/api/work-orders/${encodeURIComponent(workOrderId)}/verifications`, { signal }),
+    work.workOrder.alertId ? getV2AlertDetail(work.workOrder.alertId, signal).then((result) => result.alert) : Promise.resolve(undefined),
   ]);
-  return { workOrder: work.workOrder, events: events.events, verifications: verifications.verifications };
+  return { workOrder: work.workOrder, alert, events: events.events, verifications: verifications.verifications };
 }
 
 export const getV2CameraDetail = (cameraId: string, signal?: AbortSignal) => v2Request<V2CameraDetail>(`/api/camera-creation/cameras/${encodeURIComponent(cameraId)}/detail`, { signal });

@@ -147,9 +147,9 @@ export async function getMediaContent(mediaId: string) {
   const reference = firestore.collection("mediaAssets").doc(mediaId);
   const snapshot = await reference.get();
   const data = assertExists(snapshot, "Media asset");
-  if (data.storageStatus !== "available") throw new HttpError(410, "Stored media file is unavailable.");
   try {
     const stored = await inspectMedia(String(data.storageKey));
+    if (data.storageStatus !== "available") await reference.update({ storageStatus: "available", storageCheckedAt: FieldValue.serverTimestamp() });
     return {
       ...stored,
       mimeType: String(data.mimeType),

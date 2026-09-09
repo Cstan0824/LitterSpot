@@ -34,6 +34,7 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
   if (!pointInMapBounds(input.point, Number(revision.data()?.widthMeters), Number(revision.data()?.heightMeters))) throw new HttpError(422, "Camera Placement must remain inside the Site Map boundary.", { code: "camera_placement_outside_bounds" });
   const zoneId = containingPolygon(input.point, zones.docs.map((document) => ({ id: document.id, polygon: document.data()?.polygon as Polygon })));
   if (!zoneId) throw new HttpError(422, "Camera Placement must be inside exactly one active Zone.", { code: "camera_placement_not_in_exactly_one_zone" });
+  const zoneNameSnapshot = String(zones.docs.find((document) => document.id === zoneId)?.data()?.zoneNameSnapshot ?? zoneId);
   const previous = cameraPlacements.docs.find((document) => document.id === input.cameraId);
   if (!previous) throw new HttpError(409, "The active Camera Placement is missing.");
   if (samePoint(previous.data()?.point, input.point)) throw new HttpError(400, "Choose a different Camera position.");
@@ -78,7 +79,7 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
       publicationRequestId: input.requestId,
     });
     for (const zone of zones.docs) transaction.create(replacementRevision.collection("zoneGeometry").doc(zone.id), { ...zone.data(), publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid });
-    for (const placement of cameraPlacements.docs) transaction.create(replacementRevision.collection("cameraPlacements").doc(placement.id), placement.id === input.cameraId ? { ...placement.data(), point: input.point, zoneId, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid, publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid } : { ...placement.data(), publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid });
+    for (const placement of cameraPlacements.docs) transaction.create(replacementRevision.collection("cameraPlacements").doc(placement.id), placement.id === input.cameraId ? { ...placement.data(), point: input.point, zoneId, zoneNameSnapshot, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid, publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid } : { ...placement.data(), publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid });
     for (const station of cleanerStations.docs) transaction.create(replacementRevision.collection("cleanerStations").doc(station.id), { ...station.data(), publishedAt: FieldValue.serverTimestamp(), publishedByUid: input.actor.uid });
     transaction.update(siteRef, { activeMapRevisionId: replacementRevision.id, mapRevisionNumber: revisionNumber, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid, revision: FieldValue.increment(1) });
     transaction.update(cameraRef, { placementMapRevisionId: replacementRevision.id, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid, revision: FieldValue.increment(1) });

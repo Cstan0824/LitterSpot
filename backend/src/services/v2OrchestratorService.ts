@@ -26,6 +26,7 @@ import { v2Json } from "./v2Presentation.js";
 import { recordV2SystemEvent, recoverV2OrchestratorSystemEvents, type V2SystemEventCode } from "./v2SystemService.js";
 import { notifyV2SiteSupervisors } from "./v2NotificationService.js";
 import { assignmentContextHash, OrchestrationConflict, type OrchestrationCommand } from "./v2OrchestratorCommit.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 type AssignmentAlert = {
   alertId: string;
@@ -572,8 +573,12 @@ export async function getV2OrchestratorRun(siteId: string, runId: string) {
 }
 
 export async function listV2OrchestratorRuns(siteId: string, limit = 50) {
-  const snapshot = await firestore.collection("orchestratorRuns").where("siteId", "==", siteId).where("schemaVersion", "==", 2).orderBy("createdAt", "desc").limit(Math.min(limit, 100)).get();
-  return snapshot.docs.filter((document) => document.data().schemaVersion === 2).map((document) => presentRun(document.id, document.data())).sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  return (await listV2OrchestratorRunsPage(siteId, { limit })).items;
+}
+export async function listV2OrchestratorRunsPage(siteId: string, input: { limit: number; cursor?: string; status?: string }) {
+  let query: FirebaseFirestore.Query = firestore.collection("orchestratorRuns").where("siteId", "==", siteId).where("schemaVersion", "==", 2);
+  if (input.status) query = query.where("status", "==", input.status);
+  return queryCursorPage({ query, totalQuery: query, resource: "orchestratorRuns", orderField: "createdAt", filters: { siteId, status: input.status ?? null }, limit: Math.min(input.limit, 100), cursor: input.cursor, present: (document) => presentRun(document.id, document.data()) });
 }
 
 export async function getV2OrchestratorConfig(siteId: string) {

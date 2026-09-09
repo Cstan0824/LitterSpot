@@ -18,7 +18,7 @@ export type FrameResult = {
 export type Camera = { id: string; name: string; zone: string; enabled: boolean; latest: FrameResult | null };
 export type Alert = {
   evidenceObservation?: import("../../../../shared/cameraMonitoring").CameraObservation;
-  id: string; analysisId: number; cameraId: string; cameraName: string; zone: string; kind: string;
+  id: string; analysisId: number; cameraId: string; cameraName: string; zoneId?: string | null; zone: string; kind: string;
   severity: "critical" | "warning"; confidence: number | null; status: string;
   createdAt: string; updatedAt: string; resolvedAt: string | null; imageName: string; peopleCount: number; evidenceAvailable: boolean; evidenceMediaId?: string | null; activeWorkOrderId?: string | null;
 };

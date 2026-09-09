@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import type { SiteBackgroundTransform, SiteMapBackground, SiteMapCameraPlacement, SiteMapCleanerStation } from "../services/v2/siteMap";
+import { siteMapBackgroundCacheKey, type SiteBackgroundTransform, type SiteMapBackground, type SiteMapCameraPlacement, type SiteMapCleanerStation } from "../services/v2/siteMap";
 import type { SiteMapPoint, SiteMapPolygon } from "../services/v2/mapGeometry";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../services/v2/media";
 import { completedSiteMapGesture, SITE_MAP_WHEEL_LISTENER_OPTIONS, siteMapButtonZoomFactor, siteMapCameraMarkerScale, siteMapDrawingPoints, siteMapGestureShouldPan, siteMapWheelZoomFactor } from "./siteMapInteraction";
@@ -53,17 +53,19 @@ function niceScale(value: number) {
 
 export function SiteMapViewer({ boundary, gridSizeMeters, background, backgroundContentUrl, backgroundTransform, zones, cameras = [], stations = [], selectedZoneId, editableZoneId, drawingZoneId, conflictingZoneIds = new Set(), onSelectZone, onAddZonePoint, onMoveZoneVertex, onSelectCamera, pointMarker, onPointMarkerClick, pointMarkerPopup, onPlacePoint, focusPoint, focusZoom = 3.25, pointMarkerClickZoom, showPointCoordinates = true, lockedView = false, fitBoundary = false, compact = false }: SiteMapViewerProps) {
   const patternId = `site-grid-${useId().replaceAll(":", "")}`;
-  const mediaKey = `site-map-background-${useId().replaceAll(":", "")}`;
+  const sourceUrl = backgroundContentUrl ?? background?.contentUrl ?? null;
+  const mediaKey = siteMapBackgroundCacheKey(background, sourceUrl);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<MapView>({ x: 0, y: 0, width: boundary.widthMeters, height: boundary.heightMeters });
   const [viewerSize, setViewerSize] = useState({ width: 1, height: 1 });
   const [cursor, setCursor] = useState<SiteMapPoint | null>(null);
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [backgroundState, setBackgroundState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [backgroundAttempt, setBackgroundAttempt] = useState(0);
   const viewAnimation = useRef<number | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ view: MapView; start: { x: number; y: number }; moved: boolean; pressedZoneId?: string; pinchDistance?: number; pinchCentre?: { x: number; y: number } } | null>(null);
   const draggingVertex = useRef<{ pointerId: number; zoneId: string; vertexIndex: number } | null>(null);
-  const sourceUrl = backgroundContentUrl ?? background?.contentUrl ?? null;
 
   const focusedView = (point: SiteMapPoint, zoom = focusZoom): MapView => {
     const width = Math.max(boundary.widthMeters / Math.max(1, zoom), Math.min(boundary.widthMeters, 30));
@@ -88,11 +90,12 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
   useEffect(() => () => { if (viewAnimation.current !== null) cancelAnimationFrame(viewAnimation.current); }, []);
   useEffect(() => {
     setBackgroundUrl(null);
+    setBackgroundState(sourceUrl ? "loading" : "idle");
     if (!sourceUrl) return;
     const controller = new AbortController();
-    void loadAuthenticatedMedia(mediaKey, sourceUrl, controller.signal).then(setBackgroundUrl).catch(() => setBackgroundUrl(null));
+    void loadAuthenticatedMedia(mediaKey, sourceUrl, controller.signal).then((url) => { if (!controller.signal.aborted) { setBackgroundUrl(url); setBackgroundState("loaded"); } }).catch(() => { if (!controller.signal.aborted) { setBackgroundUrl(null); setBackgroundState("error"); } });
     return () => { controller.abort(); releaseAuthenticatedMedia(mediaKey); };
-  }, [background?.mediaId, mediaKey, sourceUrl]);
+  }, [background?.mediaId, backgroundAttempt, mediaKey, sourceUrl]);
   useEffect(() => {
     const node = viewerRef.current;
     if (!node) return;
@@ -247,7 +250,8 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
         {pointMarker && <g className={`site-map-point-marker ${pointMarker.tone ?? "work"} ${onPointMarkerClick ? "interactive" : ""}`} role={onPointMarkerClick ? "button" : undefined} tabIndex={onPointMarkerClick ? 0 : undefined} transform={`translate(${pointMarker.point.xMeters} ${pointMarker.point.yMeters})`} aria-label={`${pointMarker.label}, X ${pointMarker.point.xMeters.toFixed(1)}, Y ${pointMarker.point.yMeters.toFixed(1)} metres`} onPointerDown={onPointMarkerClick ? (event) => event.stopPropagation() : undefined} onClick={activatePointMarker} onKeyDown={onPointMarkerClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activatePointMarker(); } } : undefined}><circle r={Math.max(view.width / 100, .8)} /><circle r={Math.max(view.width / 260, .28)} /><path d={`M 0 ${view.width / 105} v ${view.width / 70}`} /></g>}
       </svg>
       {!sourceUrl && <div className="site-map-empty-background"><strong>No Site background</strong><span>Coordinates and Zones still remain operational.</span></div>}
-      {sourceUrl && !backgroundUrl && <div className="site-map-empty-background"><strong>Loading Site background</strong><span>The coordinate layers remain available.</span></div>}
+      {sourceUrl && backgroundState === "loading" && <div className="site-map-empty-background"><strong>Loading Site background</strong><span>The coordinate layers remain available.</span></div>}
+      {sourceUrl && backgroundState === "error" && <div className="site-map-empty-background error" role="alert"><strong>Site background unavailable</strong><span>The coordinate layers remain available.</span><button type="button" onClick={() => setBackgroundAttempt((attempt) => attempt + 1)}>Retry background</button></div>}
     </div>
     <footer className="site-map-viewer-status"><span><i style={{ width: `${Math.min(150, Math.max(35, scalePixels))}px` }} />{scaleMeters >= 1000 ? `${Number((scaleMeters / 1000).toFixed(1))} km` : `${Number(scaleMeters.toFixed(2))} m`}</span>{showPointCoordinates && <span>{pointMarker ? `Exact point · X ${pointMarker.point.xMeters.toFixed(2)} m · Y ${pointMarker.point.yMeters.toFixed(2)} m` : cursor ? `X ${cursor.xMeters.toFixed(2)} m · Y ${cursor.yMeters.toFixed(2)} m` : `Boundary ${boundary.widthMeters} × ${boundary.heightMeters} m`}</span>}</footer>
   </section>;

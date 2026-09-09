@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("./http", () => ({ v2Request: request }));
 
-import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
+import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, getV2AlertsPage, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
 
 const alert = { id: "alert-1", revision: 4 } as any;
 const work = { id: "work-1", revision: 6 } as any;
@@ -16,6 +16,24 @@ describe("V2 Supervisor action client", () => {
     expect(request).toHaveBeenCalledWith("/api/alerts/alert-1/manual-assignment", expect.objectContaining({ method: "POST", json: expect.objectContaining({ assignedCleanerId: "cleaner-1", idempotencyKey: expect.stringMatching(/^assign-alert-/) }) }));
     await dismissV2Alert(alert, "Duplicate report");
     expect(request).toHaveBeenLastCalledWith("/api/alerts/alert-1/dismiss", expect.objectContaining({ method: "POST", json: { reason: "Duplicate report", expectedRevision: 4 } }));
+  });
+
+  it("keeps a shared Alert page request alive when its first caller unmounts", async () => {
+    let resolve!: (value: unknown) => void;
+    request.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const input = { cameraId: "abort-isolation-camera" };
+
+    const first = getV2AlertsPage(input, firstController.signal);
+    const second = getV2AlertsPage(input, secondController.signal);
+    firstController.abort();
+    resolve({ alerts: [{ id: "alert-1" }], nextCursor: "next", hasMore: true, totalCount: 193 });
+
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    await expect(second).resolves.toMatchObject({ totalCount: 193, hasMore: true, nextCursor: "next" });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("/api/alerts?limit=25&cameraId=abort-isolation-camera");
   });
 
   it("uses the V2 Work mutation contracts rather than local status changes", async () => {

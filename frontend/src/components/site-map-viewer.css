@@ -28,7 +28,7 @@
 .site-map-drawing-point { color: #1769e8; pointer-events: none; }
 .site-map-drawing-point circle:first-child { fill: #fff; stroke: currentColor; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
 .site-map-drawing-point circle:last-child { fill: currentColor; }
-.site-map-viewer text { fill: #102d42; font-family: "Prototype Text", sans-serif; font-weight: 800; text-anchor: middle; paint-order: stroke; stroke: rgba(255,255,255,.94); stroke-linejoin: round; pointer-events: none; }
+.site-map-viewer text { fill: #102d42; font-family: "Field Text", sans-serif; font-weight: 800; text-anchor: middle; paint-order: stroke; stroke: rgba(255,255,255,.94); stroke-linejoin: round; pointer-events: none; }
 .site-map-viewer text.conflict { fill: #a22d27; }
 .site-map-vertex { fill: #fff; stroke: #1769e8; stroke-width: 2.4; vector-effect: non-scaling-stroke; cursor: move; }
 .site-map-vertex:focus { outline: none; stroke: #061725; stroke-width: 4; }
@@ -60,10 +60,13 @@
 .site-map-point-marker circle:nth-child(2) { fill: currentColor; }
 .site-map-point-marker path { stroke: currentColor; stroke-width: 3; vector-effect: non-scaling-stroke; }
 .site-map-empty-background { position: absolute; inset-inline-start: 16px; inset-block-end: 15px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.32); background: rgba(6,23,37,.88); pointer-events: none; }
+.site-map-empty-background.error { pointer-events: auto; }
 .site-map-empty-background strong,
 .site-map-empty-background span { display: block; }
 .site-map-empty-background strong { font-size: 11px; }
 .site-map-empty-background span { margin-top: 4px; color: #afc3ce; font-size: 9px; }
+.site-map-empty-background button { margin-top: 8px; padding: 6px 9px; border: 1px solid rgba(255,255,255,.48); background: transparent; color: #fff; font: 800 10px/1 "Field Mono", monospace; cursor: pointer; }
+.site-map-empty-background button:hover { background: rgba(255,255,255,.12); }
 .site-map-viewer-status { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 20px; padding-inline: 13px; border-top: 1px solid rgba(255,255,255,.2); color: #a9bdca; font: 700 10px/1 "Field Mono", monospace; }
 .site-map-viewer-status span:first-child { display: flex; align-items: flex-end; gap: 8px; color: #fff; }
 .site-map-viewer-status i { display: block; max-width: 150px; border-top: 2px solid #fff; }

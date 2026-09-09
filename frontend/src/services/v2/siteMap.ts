@@ -13,6 +13,10 @@ export type SiteMapValidationIssue = { code: string; kind: "map" | "zone" | "zon
 export type SiteMapValidation = { valid: boolean; errors: string[]; issues: SiteMapValidationIssue[]; zoneConflicts: SiteMapValidationIssue[] };
 export type SiteMapAuditEvent = { id: string; action: string; resourceType: string; resourceId: string | null; outcome: "succeeded" | "failed"; reason: string | null; errorCode: string | null; actorUid: string; actorRole: string; actorAuthority: string | null; actorNameSnapshot: string; occurredAt: string | null; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
 
+export function siteMapBackgroundCacheKey(background: SiteMapBackground | null, sourceUrl: string | null) {
+  return `site-map-background:${background?.mediaId ?? sourceUrl ?? "none"}`;
+}
+
 export type SiteMapDraftSave = {
   baseRevisionId: string;
   expectedRevision: number;

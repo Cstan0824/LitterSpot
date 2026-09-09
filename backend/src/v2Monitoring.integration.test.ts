@@ -26,6 +26,7 @@ run("V2 live monitoring", () => {
     await firestore.collection("supervisors").doc(uid).set({ schemaVersion: 2, uid, siteId, authority: "root", fullName: "Monitor Root", status: "active", revision: 1 });
     await firestore.collection("sites").doc(siteId).set({ schemaVersion: 2, siteId, name: "Monitor Site", status: "active", activeMapRevisionId: mapId, revision: 1 });
     await firestore.collection("siteMapRevisions").doc(mapId).set({ schemaVersion: 2, revisionId: mapId, siteId, revisionNumber: 1 });
+    await firestore.collection("siteMapRevisions").doc(mapId).collection("zoneGeometry").doc(zoneId).set({ schemaVersion: 2, siteId, zoneId, zoneNameSnapshot: "Monitor Zone", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 10, yMeters: 0 }, { xMeters: 10, yMeters: 10 }] });
     await firestore.collection("siteMapRevisions").doc(mapId).collection("cameraPlacements").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, zoneId, point: { xMeters: 1, yMeters: 1 } });
     await firestore.collection("cameras").doc(cameraId).set({ schemaVersion: 2, cameraId, siteId, name: "Monitor Camera", status: "active", monitoringEnabled: true, activeSourceRevisionId: sourceId, activeRegistrationRevisionId: registrationId, sourceType: "looped_video", isSimulation: true, revision: 1 });
     await writeMedia(storageKey, jpeg);
@@ -40,6 +41,7 @@ run("V2 live monitoring", () => {
     const claim = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({}); expect(claim.status).toBe(201); sessionId = claim.body.sessionId; leaseToken = claim.body.leaseToken;
     const second = await request(app).post("/api/monitoring/sessions/claim").set("Authorization", `Bearer ${token}`).send({}); expect(second.status).toBe(409);
     const start = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/start`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).send({}); expect(start.status).toBe(201); episodeId = start.body.episodeId;
+    expect((await firestore.collection("monitoringEpisodes").doc(episodeId).get()).data()?.zoneNameSnapshot).toBe("Monitor Zone");
     const capturedAt = new Date(capturedBaseMs + 1_000).toISOString();
     const sample = await request(app).post(`/api/monitoring/sessions/${sessionId}/cameras/${cameraId}/samples`).set("Authorization", `Bearer ${token}`).set("x-monitoring-token", leaseToken).field("episodeId", episodeId).field("sequence", "1").field("capturedAt", capturedAt).attach("frame", jpeg, { filename: "frame.jpg", contentType: "image/jpeg" });
     expect(sample.status).toBe(200); expect(sample.body.observation).toMatchObject({ peopleCount: 4, isSimulation: true, people: [{ confidence: 0.88 }], bins: [{ binId: "bin-1", state: "normal", confidence: 0.9 }] });

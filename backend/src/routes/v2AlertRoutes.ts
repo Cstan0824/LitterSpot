@@ -3,15 +3,20 @@ import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
-import { ageV2Alerts, getV2Alert, listV2Alerts } from "../services/v2AlertService.js";
+import { ageV2Alerts, getV2Alert, listV2AlertsPage } from "../services/v2AlertService.js";
 import { canonicalHash } from "../services/v2Persistence.js";
 import { createV2AlertWorkOrder } from "../services/v2WorkOrderService.js";
 import { clearV2EvidenceCandidate } from "../services/v2LiveMonitoringService.js";
 import { publishCameraWorkflow } from "../services/cameraLiveEvents.js";
 import { updateCameraRuntimeSnapshot } from "../services/monitoringRuntimeRegistry.js";
+import { boundedListQueryFields } from "../schemas/pagination.js";
 
 export const v2AlertRoutes = Router();
-v2AlertRoutes.get("/", async (req, res) => res.json({ alerts: await listV2Alerts(String(req.authUser.siteId)) }));
+v2AlertRoutes.get("/", async (req, res) => {
+  const query = z.object({ ...boundedListQueryFields, status: z.enum(["all", "unresolved", "waiting_for_cleaner", "assigned", "in_progress", "awaiting_review", "resolved", "dismissed"]).default("all"), zoneId: z.string().trim().min(1).optional(), cameraId: z.string().trim().min(1).optional(), severity: z.enum(["warning", "critical"]).optional() }).strict().parse(req.query);
+  const page = await listV2AlertsPage(String(req.authUser.siteId), query);
+  return res.json({ alerts: page.items, ...page });
+});
 v2AlertRoutes.get("/:alertId", async (req, res) => res.json(await getV2Alert(String(req.authUser.siteId), String(req.params.alertId))));
 v2AlertRoutes.post("/age", async (req, res) => res.json({ alertsChanged: await ageV2Alerts(String(req.authUser.siteId), new Date()) }));
 v2AlertRoutes.post("/:alertId/dismiss", async (req, res) => {

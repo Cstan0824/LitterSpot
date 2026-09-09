@@ -134,6 +134,10 @@ _Avoid_: Root mode, impersonation, read-only banner
 A Supervisor-console-owned prototype session that plays or captures enabled Camera sources and periodically submits sampled frames while at least one authenticated Supervisor console is open. It continues across page navigation and stops after the last Supervisor console disappears. Cleaner mobile sessions never own or keep it alive.
 _Avoid_: Camera stream, processing job
 
+**Delayed Analyzed Playback**:
+The capture-owner browser's Camera Detail presentation, which starts only after compressed footage and successful analysis have built enough coverage, then plays at a controlled delay so time-matched overlays are ready before their footage is shown. Short analysis interruptions rebuffer; longer interruptions may skip missed presentation footage and resume at the newest safely analyzed delayed position. Camera grid cards and secondary browsers use exact analyzed snapshots instead.
+_Avoid_: Immediate live stream, raw-video fallback, per-frame inference
+
 **Camera Runtime State**:
 The replaceable current connection and sampling state for a Camera; it is operational status, not historical Camera identity.
 _Avoid_: Camera lifecycle, Camera history

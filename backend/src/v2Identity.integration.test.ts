@@ -76,6 +76,12 @@ run("V2 identity and Site workflow", () => {
     expect(view.status).toBe(200);
     expect(view.body).toMatchObject({ site: { id: siteId }, siteMap: { siteId }, alerts: [], cleaners: [], workOrders: [], cameras: [] });
     expect(view.body.system).toHaveProperty("configuration");
+    expect(view.body.pagination).toMatchObject({ alerts: { totalCount: 0 }, cleaners: { totalCount: 0 }, supervisors: { totalCount: 1 }, workOrders: { totalCount: 0 } });
+    for (const resource of ["alerts", "work-orders", "cleaners", "supervisors", "runs"]) {
+      const page = await request(app).get(`/api/superadmin/sites/${siteId}/view/lists/${resource}?limit=3`).set("Authorization", `Bearer ${superadminToken}`);
+      expect(page.status).toBe(200);
+      expect(page.body).toMatchObject({ hasMore: false, totalCount: expect.any(Number) });
+    }
 
     const audit = await request(app).get(`/api/superadmin/audit-events?siteId=${siteId}`).set("Authorization", `Bearer ${superadminToken}`);
     expect(audit.status).toBe(200);

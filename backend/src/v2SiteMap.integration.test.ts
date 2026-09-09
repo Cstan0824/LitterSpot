@@ -306,7 +306,7 @@ run("V2 Site Map workflow", () => {
     const movedCamera = await firestore.collection("cameras").doc(cameraId).get();
     expect(movedCamera.data()?.activeRegistrationRevisionId).not.toBe(registrationBefore);
     const movedMapId = (await firestore.collection("sites").doc(siteId).get()).data()?.activeMapRevisionId;
-    expect((await firestore.collection("siteMapRevisions").doc(movedMapId).collection("cameraPlacements").doc(cameraId).get()).data()?.point).toEqual({ xMeters: 20, yMeters: 20 });
+    expect((await firestore.collection("siteMapRevisions").doc(movedMapId).collection("cameraPlacements").doc(cameraId).get()).data()).toMatchObject({ point: { xMeters: 20, yMeters: 20 }, zoneNameSnapshot: zone.zoneNameSnapshot });
     const moveAudits = await firestore.collection("auditEvents").where("siteId", "==", siteId).where("action", "==", "camera_physically_moved").get();
     expect(moveAudits.docs.at(-1)?.data()).toMatchObject({ actorUid: uid, actorAuthority: "root", reason: "The Camera was installed at a new position.", before: { placement: { point: { xMeters: 15, yMeters: 15 } } }, after: { placement: { point: { xMeters: 20, yMeters: 20 } } } });
     const finalCamera = movedCamera.data()!;

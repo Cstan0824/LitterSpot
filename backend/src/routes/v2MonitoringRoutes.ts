@@ -74,8 +74,8 @@ v2MonitoringRoutes.post("/sessions/:sessionId/cameras/:cameraId/samples", frameU
   if (!owner || owner.ownerUid !== req.authUser.uid || owner.sessionId !== req.params.sessionId || owner.tokenHash !== hash(String(req.header("x-monitoring-token") ?? "")) || owner.status !== "active" || owner.leaseExpiresAtMs <= Date.now()) throw new HttpError(409, "Monitoring Session is not the active owner.");
   const response = await cameraSampleQueue.submit(`${req.supervisor.siteId}:${req.params.cameraId}`, async () => {
   const result = await processLiveSample({ ...input, siteId: String(req.supervisor.siteId), cameraId: String(req.params.cameraId), sessionId: String(req.params.sessionId), token: String(req.header("x-monitoring-token") ?? ""), capturedAt: new Date(input.capturedAt), frame: req.file! });
-  const alertEvaluation = await evaluateV2AlertsForCamera(String(req.supervisor.siteId), String(req.params.cameraId), input.episodeId);
-  const verificationsApplied = await recordV2CameraVerificationObservation(String(req.supervisor.siteId), String(req.params.cameraId), result.observation);
+  const alertEvaluation = result.operationalSample ? await evaluateV2AlertsForCamera(String(req.supervisor.siteId), String(req.params.cameraId), input.episodeId) : [];
+  const verificationsApplied = result.operationalSample ? await recordV2CameraVerificationObservation(String(req.supervisor.siteId), String(req.params.cameraId), result.observation) : 0;
   if (alertEvaluation.length > 0 || verificationsApplied > 0) publishCameraWorkflow(String(req.supervisor.siteId), String(req.params.cameraId));
   publishCameraFrame(String(req.supervisor.siteId), String(req.params.cameraId), result.observation, req.file!.buffer, req.file!.mimetype);
   return { ...result, nextSequence: input.sequence + 1, alertEvaluation, verificationsApplied, queue: { pending: cameraSampleQueue.pending, skipped: cameraSampleQueue.skipped } };

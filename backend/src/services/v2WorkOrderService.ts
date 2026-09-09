@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { publishCameraWorkflow } from "./cameraLiveEvents.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 import { FieldValue, Timestamp, type DocumentData, type Transaction } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
@@ -217,10 +218,17 @@ export async function createV2AlertWorkOrder(input: { siteId: string; alertId: s
     const account = await transaction.get(firestore.collection("userAccounts").doc(String(cleaner.data()?.authUid)));
     const station = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cleanerStations").doc(input.assignedCleanerId));
     const placement = await transaction.get(firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId)).collection("cameraPlacements").doc(String(alertData.cameraId)));
+    const zoneGeometry = await transaction.get(firestore.collection("siteMapRevisions").doc(String(alertData.mapRevisionId)).collection("zoneGeometry").doc(String(alertData.zoneId)));
     if (!account.exists || account.data()?.status !== "active" || account.data()?.siteId !== input.siteId) throw new HttpError(409, "Cleaner account is inactive."); assertCleanerAvailable(site.data()!, cleaner.data()!, station.exists ? station.data()! : null);
-    const target = { ...workTargetFromAlert(alertData), point: placement.data()?.point ?? null, zoneNameSnapshot: String(placement.data()?.zoneNameSnapshot ?? alertData.zoneNameSnapshot ?? alertData.zoneId) };
+    const storedZoneName = String(placement.data()?.zoneNameSnapshot ?? alertData.zoneNameSnapshot ?? "");
+    const zoneNameSnapshot = storedZoneName && storedZoneName !== String(alertData.zoneId)
+      ? storedZoneName
+      : String(zoneGeometry.data()?.zoneNameSnapshot ?? alertData.zoneId);
+    const normalizedAlert = { ...alertData, zoneNameSnapshot };
+    const instructions = deterministicInstructions(normalizedAlert);
+    const target = { ...workTargetFromAlert(normalizedAlert), point: placement.data()?.point ?? null, zoneNameSnapshot };
     const managementMode = actor.type === "orchestrator" ? "orchestrated" : "manual";
-    const data = { schemaVersion: V2_SCHEMA_VERSION, workOrderId: workId, siteId: input.siteId, origin: "alert", alertId: input.alertId, managementMode, status: "assigned", severity: String(alertData.severity ?? "warning"), issueType: String(alertData.issueType), title: deterministicInstructions(alertData), instructions: deterministicInstructions(alertData), target, mapRevisionId: String(alertData.mapRevisionId), zoneId: String(alertData.zoneId), cameraId: String(alertData.cameraId), assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(cleaner.data()!.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), startedAt: null, submittedAt: null, resolvedAt: null, resolvedBy: null, dismissedAt: null, dismissedBy: null, dismissReason: null, creationEvidenceMediaId: null, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: null, reworkCount: 0, isSimulation: Boolean(alertData.isSimulation), idempotencyKey: input.idempotencyKey, requestFingerprint, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.type === "supervisor" ? actor.uid : null, updatedAt: FieldValue.serverTimestamp(), revision: 1 };
+    const data = { schemaVersion: V2_SCHEMA_VERSION, workOrderId: workId, siteId: input.siteId, origin: "alert", alertId: input.alertId, managementMode, status: "assigned", severity: String(alertData.severity ?? "warning"), issueType: String(alertData.issueType), title: instructions, instructions, target, mapRevisionId: String(alertData.mapRevisionId), zoneId: String(alertData.zoneId), cameraId: String(alertData.cameraId), assignedCleanerId: input.assignedCleanerId, cleanerNameSnapshot: String(cleaner.data()!.fullName), assignedAt: FieldValue.serverTimestamp(), assignedBy: actorMap(actor), startedAt: null, submittedAt: null, resolvedAt: null, resolvedBy: null, dismissedAt: null, dismissedBy: null, dismissReason: null, creationEvidenceMediaId: null, completionEvidenceMediaId: null, latestVerificationId: null, latestVerificationOutcome: null, reworkCount: 0, isSimulation: Boolean(alertData.isSimulation), idempotencyKey: input.idempotencyKey, requestFingerprint, createdAt: FieldValue.serverTimestamp(), createdByUid: actor.type === "supervisor" ? actor.uid : null, updatedAt: FieldValue.serverTimestamp(), revision: 1 };
     if (command && guard) commitOrchestration(transaction, guard, command, { workOrder: { id: workId, ...data } });
     transaction.create(workRef, data);
     transaction.create(activeKeyRef, { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: input.alertId, workOrderId: workId, cleanerId: input.assignedCleanerId, createdAt: FieldValue.serverTimestamp() });
@@ -229,7 +237,7 @@ export async function createV2AlertWorkOrder(input: { siteId: string; alertId: s
     transaction.set(firestore.collection("cameraRuntimeStates").doc(String(alertData.cameraId)), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, cameraId: String(alertData.cameraId), cleanlinessState: "cleaning_in_progress", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     transaction.create(workRef.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: workId, type: "assigned", fromStatus: "waiting_for_cleaner", toStatus: "assigned", cleanerId: input.assignedCleanerId, previousCleanerId: null, actor: actorMap(actor), reasonCode: "cleaner_assigned", note: null, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
     transaction.create(alert.ref.collection("events").doc(), { schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: input.alertId, type: "assigned", fromStatus: "waiting_for_cleaner", toStatus: "assigned", workOrderId: workId, actor: actorMap(actor), reasonCode: "cleaner_assigned", note: null, requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
-    workNotification(transaction, data, String(cleaner.data()!.authUid), workId, "work_assigned", workId, deterministicInstructions(alertData));
+    workNotification(transaction, data, String(cleaner.data()!.authUid), workId, "work_assigned", workId, instructions);
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "work_order_assigned", resourceType: "WorkOrder", resourceId: workId, outcome: "succeeded", after: { alertId: input.alertId, cleanerId: input.assignedCleanerId }, requestId }));
   });
   if (replay) return v2Json(replay);
@@ -272,13 +280,25 @@ export async function createV2ManualWorkOrder(input: { siteId: string; title: st
 
 export async function getV2WorkOrder(siteId: string, workOrderId: string): Promise<V2WorkOrder> { const snapshot = await firestore.collection("workOrders").doc(workOrderId).get(); if (!snapshot.exists || snapshot.data()?.schemaVersion !== 2 || snapshot.data()?.siteId !== siteId) throw new HttpError(404, "Work Order not found."); return present(snapshot.id, snapshot.data()!); }
 
-export async function listV2WorkOrders(siteId: string, input: { status: string; cleanerId?: string; alertId?: string; limit: number }) {
-  let query = firestore.collection("workOrders").where("siteId", "==", siteId).where("schemaVersion", "==", 2).limit(Math.min(input.limit, 100));
-  if (input.cleanerId) query = query.where("assignedCleanerId", "==", input.cleanerId) as typeof query;
-  if (input.alertId) query = query.where("alertId", "==", input.alertId) as typeof query;
-  const snapshot = await query.get();
-  return snapshot.docs.map((doc) => present(doc.id, doc.data())).filter((work) => input.status === "all" || input.status === "active" ? (input.status === "active" ? ACTIVE.includes(work.status as any) : true) : work.status === input.status).sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")));
+export async function listV2WorkOrdersPage(siteId: string, input: { status: string; cleanerId?: string; alertId?: string; zoneId?: string; cameraId?: string; origin?: "alert" | "manual"; limit: number; cursor?: string }) {
+  const filters = { siteId, status: input.status, cleanerId: input.cleanerId ?? null, alertId: input.alertId ?? null, zoneId: input.zoneId ?? null, cameraId: input.cameraId ?? null, origin: input.origin ?? null };
+  let baseQuery: FirebaseFirestore.Query = firestore.collection("workOrders").where("siteId", "==", siteId).where("schemaVersion", "==", 2);
+  if (input.cleanerId) baseQuery = baseQuery.where("assignedCleanerId", "==", input.cleanerId);
+  if (input.alertId) baseQuery = baseQuery.where("alertId", "==", input.alertId);
+  if (input.zoneId) baseQuery = baseQuery.where("zoneId", "==", input.zoneId);
+  if (input.cameraId) baseQuery = baseQuery.where("cameraId", "==", input.cameraId);
+  if (input.origin) baseQuery = baseQuery.where("origin", "==", input.origin);
+  let query = baseQuery;
+  if (input.status === "active") query = query.where("status", "in", ACTIVE);
+  else if (input.status !== "all") query = query.where("status", "==", input.status);
+  const statuses = ["assigned", "in_progress", "awaiting_review", "resolved", "dismissed"] as const;
+  const [page, ...counts] = await Promise.all([
+    queryCursorPage({ query, totalQuery: query, resource: "workOrders", orderField: "updatedAt", filters, limit: Math.min(input.limit, 100), cursor: input.cursor, present: (doc) => present(doc.id, doc.data()) }),
+    ...statuses.map((status) => baseQuery.where("status", "==", status).count().get()),
+  ]);
+  return { ...page, statusCounts: Object.fromEntries(statuses.map((status, index) => [status, counts[index].data().count])) as Record<typeof statuses[number], number> };
 }
+export async function listV2WorkOrders(siteId: string, input: { status: string; cleanerId?: string; alertId?: string; zoneId?: string; cameraId?: string; origin?: "alert" | "manual"; limit: number }) { return (await listV2WorkOrdersPage(siteId, input)).items; }
 
 async function workContext(siteId: string, workOrderId: string, transaction: Transaction) {
   await readSite(siteId, transaction);
@@ -399,13 +419,15 @@ export async function reassignV2WorkOrder(input: { siteId: string; workOrderId: 
 
 export async function takeOverV2WorkOrder(siteId: string, workOrderId: string, actor: V2WorkActor, reason: string, idempotencyKey: string, requestId: string) { await firestore.runTransaction(async (transaction) => { const context = await workContext(siteId, workOrderId, transaction); const { data, workRef, alert } = context; const eventRef = workRef.collection("events").doc(hash("v2-takeover", workOrderId, idempotencyKey)); if ((await transaction.get(eventRef)).exists) return; if (String(data.managementMode) === "manual") return; const auditRef = firestore.collection("auditEvents").doc(); transaction.update(workRef, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); if (alert?.exists) transaction.update(alert.ref, { managementMode: "manual", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) }); transaction.create(eventRef, { schemaVersion: V2_SCHEMA_VERSION, siteId, workOrderId, type: "takeover", fromStatus: data.status, toStatus: data.status, cleanerId: String(data.assignedCleanerId), previousCleanerId: null, actor: actorMap(actor), reasonCode: "supervisor_takeover", note: reason, evidenceMediaIds: [], requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null }); transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId, action: "work_order_takeover", resourceType: "WorkOrder", resourceId: workOrderId, outcome: "succeeded", reason, before: { managementMode: data.managementMode }, after: { managementMode: "manual" }, requestId })); }); const work = await getV2WorkOrder(siteId, workOrderId); if (work.cameraId) publishCameraWorkflow(siteId, String(work.cameraId)); return work; }
 
-export async function listV2WorkEvents(siteId: string, workOrderId: string) { await getV2WorkOrder(siteId, workOrderId); const snapshot = await firestore.collection("workOrders").doc(workOrderId).collection("events").orderBy("occurredAt", "desc").limit(100).get(); return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })); }
+export async function listV2WorkEventsPage(siteId: string, workOrderId: string, input: { limit: number; cursor?: string }) { await getV2WorkOrder(siteId, workOrderId); const query = firestore.collection("workOrders").doc(workOrderId).collection("events"); return queryCursorPage({ query, totalQuery: query, resource: `workEvents:${workOrderId}`, orderField: "occurredAt", filters: { siteId, workOrderId }, limit: input.limit, cursor: input.cursor, present: (doc) => ({ id: doc.id, ...doc.data() }) }); }
+export async function listV2WorkEvents(siteId: string, workOrderId: string) { return (await listV2WorkEventsPage(siteId, workOrderId, { limit: 100 })).items; }
 
-export async function listV2Verifications(siteId: string, workOrderId: string) {
+export async function listV2VerificationsPage(siteId: string, workOrderId: string, input: { limit: number; cursor?: string }) {
   await getV2WorkOrder(siteId, workOrderId);
-  const snapshot = await firestore.collection("workOrders").doc(workOrderId).collection("verifications").orderBy("requestedAt", "desc").limit(20).get();
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  const query = firestore.collection("workOrders").doc(workOrderId).collection("verifications");
+  return queryCursorPage({ query, totalQuery: query, resource: `workVerifications:${workOrderId}`, orderField: "requestedAt", filters: { siteId, workOrderId }, limit: input.limit, cursor: input.cursor, present: (doc) => ({ id: doc.id, ...doc.data() }) });
 }
+export async function listV2Verifications(siteId: string, workOrderId: string) { return (await listV2VerificationsPage(siteId, workOrderId, { limit: 20 })).items; }
 
 export async function uploadV2CompletionEvidence(input: { siteId: string; workOrderId: string; cleanerId: string; file: { buffer: Buffer; mimetype: string; originalname: string } }) {
   const work = await getV2WorkOrder(input.siteId, input.workOrderId); if (work.assignedCleanerId !== input.cleanerId || work.status !== "in_progress" || work.origin !== "manual") throw new HttpError(409, "Completion Evidence is only accepted for the assigned Manual Work Order in progress.");

@@ -1,4 +1,5 @@
 import { v2Request } from "./http";
+import { cachedPageRequest, type V2ListPage } from "./pagination";
 
 export type V2SystemControlHistory = {
   status: "running" | "paused";
@@ -88,6 +89,7 @@ export type V2SystemView = {
   };
   controlHistory: V2SystemControlHistory[];
   recentRuns: V2SystemRun[];
+  recentRunsPage?: { nextCursor: string | null; hasMore: boolean; totalCount: number };
   events: V2SystemEvent[];
 };
 
@@ -147,6 +149,11 @@ export const setV2OrchestratorStatus = (status: "running" | "paused", reason?: s
 
 export const getV2OrchestratorRunDetail = (runId: string, signal?: AbortSignal) =>
   v2Request<V2OrchestratorRunDetail>(`/api/orchestrator/v2/runs/${encodeURIComponent(runId)}`, { signal });
+
+export const getV2OrchestratorRunsPage = (cursor?: string, signal?: AbortSignal): Promise<V2ListPage<V2SystemRun>> => {
+  const url = `/api/orchestrator/v2/runs?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+  return cachedPageRequest(url, async () => { const result = await v2Request<{ runs: V2SystemRun[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return { items: result.runs, nextCursor: result.nextCursor, hasMore: result.hasMore, totalCount: result.totalCount }; }, 30_000, signal);
+};
 
 export async function getV2ServiceHealth(signal?: AbortSignal): Promise<V2ServiceHealth> {
   const response = await fetch("/api/health", { signal, headers: { Accept: "application/json" } });

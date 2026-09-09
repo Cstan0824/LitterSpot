@@ -5,6 +5,7 @@ import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { canonicalHash, requestBodyHash } from "./v2Persistence.js";
 import { v2AuditEventData, writeV2AuditEvent, type AuditActor } from "./v2AuditService.js";
 import { projectV2SupervisorList, type V2SupervisorListSource } from "./v2SupervisorProjection.js";
+import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 export type IdentityOperationType = "create_site_root" | "create_supervisor" | "create_cleaner" | "recover_root";
 
@@ -77,8 +78,16 @@ export async function compensateIdentityOperation(input: {
 }
 
 export async function listV2Supervisors(siteId: string, viewerAuthority: "root" | "regular") {
-  const snapshot = await firestore.collection("supervisors").where("siteId", "==", siteId).limit(200).get();
-  const profiles = snapshot.docs
+  return (await listV2SupervisorsPage(siteId, viewerAuthority, { limit: 100 })).items;
+}
+
+export async function listV2SupervisorsPage(siteId: string, viewerAuthority: "root" | "regular", input: { limit: number; cursor?: string; status?: "active" | "inactive" | "all" }) {
+  const status = input.status ?? "all";
+  const filters = { siteId, status, viewerAuthority };
+  let query: FirebaseFirestore.Query = firestore.collection("supervisors").where("siteId", "==", siteId);
+  if (status !== "all") query = query.where("status", "==", status);
+  const page = await queryCursorPage({ query, totalQuery: query, resource: "supervisors", orderField: "fullName", direction: "asc", filters, limit: input.limit, cursor: input.cursor, present: (document) => document });
+  const profiles = page.items
     .map((document) => { const data = document.data(); return { uid: document.id, fullName: data.fullName, phone: data.phone, authority: data.authority, status: data.status, revision: data.revision }; })
     .filter((profile) => profile.authority === "root" || profile.authority === "regular")
     .filter((profile) => profile.status === "active" || profile.status === "inactive")
@@ -95,7 +104,7 @@ export async function listV2Supervisors(siteId: string, viewerAuthority: "root" 
     status: profile.status as "active" | "inactive",
     revision: Number(profile.revision ?? 0),
   }));
-  return projectV2SupervisorList(sources, viewerAuthority);
+  return { ...page, items: projectV2SupervisorList(sources, viewerAuthority) };
 }
 
 export async function createV2RegularSupervisor(input: {

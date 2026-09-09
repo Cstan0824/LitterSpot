@@ -4,9 +4,10 @@ import { V2ApiError } from "../../services/v2/errors";
 import { superadminRouteFromHash, superadminRouteHash, type SuperadminRoute } from "../../services/v2/routing";
 import {
   createV2SuperadminSite,
-  getV2SuperadminAudit,
+  getV2SuperadminAuditPage,
   getV2SuperadminSite,
-  getV2SuperadminSites,
+  getV2SuperadminSiteAuditPage,
+  getV2SuperadminSitesPage,
   reconcileV2SuperadminSiteOperation,
   recoverV2SuperadminRoot,
   updateV2SuperadminSiteStatus,
@@ -110,7 +111,7 @@ function CreateSiteDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   </form></Modal>;
 }
 
-function SitesPage({ sites, loading, error, onRetry, onOpen, onCreate }: { sites: V2SuperadminSite[]; loading: boolean; error: string; onRetry: () => void; onOpen: (siteId: string) => void; onCreate: () => void }) {
+function SitesPage({ sites, total, hasMore, loading, error, onRetry, onLoadMore, onOpen, onCreate }: { sites: V2SuperadminSite[]; total: number; hasMore: boolean; loading: boolean; error: string; onRetry: () => void; onLoadMore: () => void; onOpen: (siteId: string) => void; onCreate: () => void }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const shown = sites.filter((site) => status === "all" || site.status === status).filter((site) => `${site.name} ${site.rootSupervisor?.fullName ?? ""} ${site.rootSupervisor?.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -119,7 +120,7 @@ function SitesPage({ sites, loading, error, onRetry, onOpen, onCreate }: { sites
     <section className="sa-register-strip"><div><strong>{sites.length}</strong><span>Registered Sites</span></div><div><strong>{active}</strong><span>Active</span></div><div><strong>{sites.length - active}</strong><span>Inactive</span></div><p>{sites.length ? `${Math.round(active / sites.length * 100)}% of registered Sites can currently operate.` : "Create the first client Site to begin."}</p></section>
     <section className="sa-ledger"><header><div className="sa-status-tabs" role="group" aria-label="Filter Sites by status">{(["all", "active", "inactive"] as const).map((value) => <button type="button" className={status === value ? "active" : ""} onClick={() => setStatus(value)} key={value}>{readable(value)} <b>{value === "all" ? sites.length : sites.filter((site) => site.status === value).length}</b></button>)}</div><label className="sa-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Site or Root Supervisor" /></label></header>
       <div className="sa-site-table"><div className="sa-site-row labels"><span>Site</span><span>Status</span><span>Root Supervisor</span><span>Active map</span><span>Updated</span><i /></div>{loading ? <div className="sa-empty">Loading Sites…</div> : error ? <div className="sa-empty error"><p>{error}</p><button type="button" onClick={onRetry}>Try again</button></div> : shown.map((site) => <button className="sa-site-row" type="button" key={site.id} onClick={() => onOpen(site.id)}><span className="sa-site-name"><b>{site.name}</b><small>{site.description || site.timeZone}</small></span><span><em className={`sa-state ${site.status}`}>{site.status}</em></span><span><b>{site.rootSupervisor?.fullName || "Root missing"}</b><small>{site.rootSupervisor?.email || "No account email"}</small></span><span><b>{site.activeMap ? `${number.format(site.activeMap.widthMeters)} × ${number.format(site.activeMap.heightMeters)} m` : "Map missing"}</b><small>{site.activeMap ? `${site.activeMap.zoneCount} Zones · ${site.activeMap.cameraPlacementCount} Cameras` : "Requires attention"}</small></span><span><b>{when(site.updatedAt)}</b><small>Revision {site.revision}</small></span><i><Icon name="arrow" /></i></button>)}{!loading && !error && !shown.length && <div className="sa-empty">No Sites match this filter.</div>}</div>
-    </section>
+    </section>{hasMore && <button className="operations-load-more" type="button" onClick={onLoadMore}>Load more · {sites.length} of {total}</button>}
   </main>;
 }
 
@@ -158,7 +159,10 @@ function SiteDetailPage({ siteId, onBack, onOpenView }: { siteId: string; onBack
   const [statusDialog, setStatusDialog] = useState(false);
   const [recoveryDialog, setRecoveryDialog] = useState(false);
   const [recoveringOperation, setRecoveringOperation] = useState(false);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const [site, audit] = await Promise.all([getV2SuperadminSite(siteId), getV2SuperadminAudit(siteId)]); setDetail(site); setEvents(audit.events); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [siteId]);
+  const [auditCursor, setAuditCursor] = useState<string | null>(null);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const [site, audit] = await Promise.all([getV2SuperadminSite(siteId), getV2SuperadminSiteAuditPage(siteId)]); setDetail(site); setEvents(audit.items); setAuditCursor(audit.nextCursor); setAuditTotal(audit.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [siteId]);
+  const loadMoreAudit = async () => { if (!auditCursor) return; setLoading(true); try { const page = await getV2SuperadminSiteAuditPage(siteId, auditCursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setAuditCursor(page.nextCursor); setAuditTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [load]);
   if (loading) return <main className="sa-page"><div className="sa-page-loading">Loading Site register…</div></main>;
   if (error || !detail) return <main className="sa-page"><button className="sa-back" type="button" onClick={onBack}>← Back to Sites</button><div className="sa-page-error"><p>{error || "Site not found."}</p><button onClick={() => void load()}>Try again</button></div></main>;
@@ -174,7 +178,7 @@ function SiteDetailPage({ siteId, onBack, onOpenView }: { siteId: string; onBack
       <section className="sa-map-register"><header><h2>Published map</h2><span>{site.activeMap ? `Revision ${site.activeMap.revisionNumber}` : "Missing"}</span></header>{site.activeMap ? <><strong>{number.format(site.activeMap.widthMeters)} × {number.format(site.activeMap.heightMeters)} m</strong><p>{number.format(site.activeMap.gridSizeMeters)} m grid interval</p><div><span><b>{site.activeMap.zoneCount}</b>Zones</span><span><b>{site.activeMap.cameraPlacementCount}</b>Camera points</span></div><small>Published {when(site.activeMap.publishedAt)}</small></> : <div className="sa-root-missing"><strong>No active map</strong><p>The Site record does not reference a valid published map revision.</p></div>}</section>
     </div>
     <section className="sa-resource-register"><header><div><h2>Operational records</h2><p>Current volume retained inside this Site boundary.</p></div></header><div>{Object.entries(detail.counts).map(([key, value]) => <span key={key}><b>{number.format(value)}</b>{readable(key)}</span>)}</div></section>
-    <section className="sa-site-audit"><header><div><h2>Superadmin audit history</h2><p>Privileged actions against this Site, with the real actor identity retained.</p></div><span>{events.length} events</span></header><AuditLedger events={events} empty="No Superadmin actions are recorded for this Site." /></section>
+    <section className="sa-site-audit"><header><div><h2>Superadmin audit history</h2><p>Privileged actions against this Site, with the real actor identity retained.</p></div><span>{auditTotal} events</span></header><AuditLedger events={events} empty="No Superadmin actions are recorded for this Site." />{auditCursor && <button className="operations-load-more" type="button" disabled={loading} onClick={() => void loadMoreAudit()}>{loading ? "Loading…" : `Load more · ${events.length} of ${auditTotal}`}</button>}</section>
     {statusDialog && <ConfirmStatusDialog site={site} onClose={() => setStatusDialog(false)} onDone={() => { setStatusDialog(false); void load(); }} />}{recoveryDialog && <RootRecoveryDialog site={site} onClose={() => setRecoveryDialog(false)} onDone={() => { setRecoveryDialog(false); void load(); }} />}
   </main>;
 }
@@ -185,11 +189,14 @@ function AuditPage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<"all" | "succeeded" | "failed">("all");
-  const load = useCallback(async () => { setLoading(true); setError(""); try { setEvents((await getV2SuperadminAudit()).events); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const page = await getV2SuperadminAuditPage(); setEvents(page.items); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const loadMore = async () => { if (!cursor) return; setLoading(true); try { const page = await getV2SuperadminAuditPage(undefined, cursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [load]);
   const normalized = query.trim().toLowerCase();
   const shown = events.filter((event) => outcome === "all" || event.outcome === outcome).filter((event) => !normalized || `${event.action} ${event.siteNameSnapshot ?? ""} ${event.actorNameSnapshot} ${event.resourceType}`.toLowerCase().includes(normalized));
-  return <main className="sa-page"><header className="sa-page-head"><div><h1>Audit history</h1><p>Every privileged platform action, attributed to the Superadmin who performed it.</p></div><button type="button" onClick={() => void load()}><Icon name="refresh" />Refresh</button></header><section className="sa-site-audit global"><header><div><h2>Platform ledger</h2><p>Reads do not create audit events. Mutations and failed privileged requests do.</p></div><span>{shown.length} events</span></header><div className="sa-audit-controls"><div className="sa-status-tabs" role="group" aria-label="Filter audit outcome">{(["all", "succeeded", "failed"] as const).map((value) => <button type="button" className={outcome === value ? "active" : ""} onClick={() => setOutcome(value)} key={value}>{readable(value)}</button>)}</div><label className="sa-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search action, Site, actor, or resource" /></label></div>{loading ? <div className="sa-empty">Loading audit history…</div> : error ? <div className="sa-empty error">{error}</div> : <AuditLedger events={shown} empty="No audit events match this filter." />}</section></main>;
+  return <main className="sa-page"><header className="sa-page-head"><div><h1>Audit history</h1><p>Every privileged platform action, attributed to the Superadmin who performed it.</p></div><button type="button" onClick={() => void load()}><Icon name="refresh" />Refresh</button></header><section className="sa-site-audit global"><header><div><h2>Platform ledger</h2><p>Reads do not create audit events. Mutations and failed privileged requests do.</p></div><span>{total} events</span></header><div className="sa-audit-controls"><div className="sa-status-tabs" role="group" aria-label="Filter audit outcome">{(["all", "succeeded", "failed"] as const).map((value) => <button type="button" className={outcome === value ? "active" : ""} onClick={() => setOutcome(value)} key={value}>{readable(value)}</button>)}</div><label className="sa-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search action, Site, actor, or resource" /></label></div>{loading && !events.length ? <div className="sa-empty">Loading audit history…</div> : error ? <div className="sa-empty error">{error}</div> : <><AuditLedger events={shown} empty="No audit events match this filter." />{cursor && <button className="operations-load-more" type="button" disabled={loading} onClick={() => void loadMore()}>{loading ? "Loading…" : `Load more · ${events.length} of ${total}`}</button>}</>}</section></main>;
 }
 
 export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogout: () => void }) {
@@ -199,6 +206,8 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
   const [sites, setSites] = useState<V2SuperadminSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [siteTotal, setSiteTotal] = useState(0);
   useEffect(() => {
     if (!location.hash.startsWith("#/superadmin")) location.hash = superadminRouteHash({ kind: "sites" });
     const sync = () => {
@@ -215,7 +224,8 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
   }, []);
   useEffect(() => { siteViewSiteId.current = route.kind === "site-view" ? route.siteId : null; }, [route]);
   useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [route]);
-  const loadSites = useCallback(async () => { setLoading(true); setError(""); try { setSites((await getV2SuperadminSites()).sites); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const loadSites = useCallback(async () => { setLoading(true); setError(""); try { const page = await getV2SuperadminSitesPage(); setSites(page.items); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const loadMoreSites = useCallback(async () => { if (!nextCursor) return; setLoading(true); try { const page = await getV2SuperadminSitesPage("all", nextCursor); setSites((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [nextCursor]);
   useEffect(() => { void loadSites(); }, [loadSites]);
   const navigate = useCallback((next: SuperadminRoute) => { location.hash = superadminRouteHash(next); setRoute(next); }, []);
   const navigateSiteView = useCallback((siteId: string, page: import("../../services/v2/routing").SuperadminSiteViewPage, params?: Record<string, string>) => { const query = params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""; location.hash = `${superadminRouteHash({ kind: "site-view", siteId, page })}${query}`; setRoute({ kind: "site-view", siteId, page }); }, []);
@@ -223,8 +233,8 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
   const content = useMemo(() => {
     if (route.kind === "audit") return <AuditPage />;
     if (route.kind === "site") return <SiteDetailPage siteId={route.siteId} onBack={() => navigate({ kind: "sites" })} onOpenView={() => navigate({ kind: "site-view", siteId: route.siteId, page: "dashboard" })} />;
-    return <SitesPage sites={sites} loading={loading} error={error} onRetry={() => void loadSites()} onOpen={(siteId) => navigate({ kind: "site", siteId })} onCreate={() => setDialog("create")} />;
-  }, [error, loading, route, sites, loadSites]);
+    return <SitesPage sites={sites} total={siteTotal} hasMore={Boolean(nextCursor)} loading={loading} error={error} onRetry={() => void loadSites()} onLoadMore={() => void loadMoreSites()} onOpen={(siteId) => navigate({ kind: "site", siteId })} onCreate={() => setDialog("create")} />;
+  }, [error, loading, route, sites, siteTotal, nextCursor, loadSites, loadMoreSites]);
   if (route.kind === "site-view") return <SuperadminSiteView siteId={route.siteId} page={route.page} profile={profile} onNavigate={(page, params) => navigateSiteView(route.siteId, page, params)} onExit={() => navigate({ kind: "site", siteId: route.siteId })} onLogout={onLogout} />;
   return <div className="sa-shell"><header className="sa-nav"><button className="sa-brand" type="button" onClick={() => navigate({ kind: "sites" })}><b>LS</b><span><strong>LitterSpot</strong><small>Superadmin</small></span></button><nav aria-label="Superadmin navigation"><button type="button" className={currentSection === "sites" ? "active" : ""} aria-current={currentSection === "sites" ? "page" : undefined} onClick={() => navigate({ kind: "sites" })}><Icon name="sites" />Sites</button><button type="button" className={currentSection === "audit" ? "active" : ""} aria-current={currentSection === "audit" ? "page" : undefined} onClick={() => navigate({ kind: "audit" })}><Icon name="audit" />Audit history</button></nav><button className="sa-user" type="button" onClick={() => setDialog("account")} aria-label={`Open account controls for ${profile.displayName}`}>{initials(profile.displayName)}</button></header>{content}
     {dialog === "account" && <AccountDialog profile={profile} onClose={() => setDialog(null)} onLogout={onLogout} />}{dialog === "create" && <CreateSiteDialog onClose={() => setDialog(null)} onCreated={(siteId) => { setDialog(null); void loadSites(); navigate({ kind: "site", siteId }); }} />}

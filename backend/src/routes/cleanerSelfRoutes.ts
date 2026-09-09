@@ -26,8 +26,9 @@ import { submitCleanerForReview } from "../services/reviewService.js";
 import { HttpError } from "../shared/httpError.js";
 import { presentV2Cleaner } from "../services/v2CleanerService.js";
 import { getV2CleanerMap } from "../services/v2MapService.js";
-import { listV2Notifications } from "../services/v2NotificationService.js";
+import { listV2NotificationsPage } from "../services/v2NotificationService.js";
 import { getV2WorkOrder, listV2WorkOrders, transitionV2WorkOrder, uploadV2CompletionEvidence } from "../services/v2WorkOrderService.js";
+import { opaqueCursorSchema } from "../schemas/pagination.js";
 
 export const cleanerSelfRoutes = Router();
 const v2EvidenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
@@ -139,8 +140,9 @@ cleanerSelfRoutes.get("/work-orders/:workOrderId/completion-evidence", async (re
 
 cleanerSelfRoutes.get("/notifications", async (req, res) => {
   if (isV2Cleaner(req)) {
-    const limit = z.coerce.number().int().min(1).max(100).default(50).parse(req.query.limit);
-    return res.json({ notifications: await listV2Notifications(String(req.authUser.siteId), req.authUser.uid, limit) });
+    const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20), cursor: opaqueCursorSchema.optional() }).strict().parse(req.query);
+    const page = await listV2NotificationsPage(String(req.authUser.siteId), req.authUser.uid, query);
+    return res.json({ notifications: page.items, ...page });
   }
   const query = notificationListQuerySchema.parse(req.query);
   const page = await listCleanerNotifications(req.cleaner!.cleanerId, query);

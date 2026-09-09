@@ -15,7 +15,8 @@ describe("Firestore cursor pagination", () => {
     expect(opaqueCursorSchema.parse(cursor)).toBe(cursor);
     expect(cursor).not.toContain("detection-z");
     const decoded = decodePageCursor(cursor, context);
-    expect(decoded.orderValue.toMillis()).toBe(timestamp.toMillis());
+    expect(decoded.orderValue).toBeInstanceOf(Timestamp);
+    expect((decoded.orderValue as Timestamp).toMillis()).toBe(timestamp.toMillis());
     expect(decoded.id).toBe("detection-z");
   });
 
@@ -30,5 +31,12 @@ describe("Firestore cursor pagination", () => {
     expect(() => decodePageCursor("bm90LWpzb24", context)).toThrow(/invalid for this query/i);
     expect(opaqueCursorSchema.safeParse("not+base64").success).toBe(false);
     expect(paginationQueryFingerprint({ b: 2, a: 1 })).toBe(paginationQueryFingerprint({ a: 1, b: 2 }));
+  });
+
+  it("supports stable string ordering for names", () => {
+    const stringContext = { resource: "cleaners", orderField: "fullName", filters: { siteId: "site-1" } };
+    const cursor = encodePageCursor(stringContext, "Melissa Tan", "cleaner-2");
+    expect(cursor).toEqual(expect.any(String));
+    expect(decodePageCursor(cursor, stringContext)).toEqual({ orderValue: "Melissa Tan", id: "cleaner-2" });
   });
 });

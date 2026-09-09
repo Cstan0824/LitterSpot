@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getV2OrchestratorRunDetail,
+  getV2OrchestratorRunsPage,
   getV2ServiceHealth,
   getV2SystemView,
   setV2OrchestratorStatus,
@@ -11,6 +12,7 @@ import {
   type V2SystemView,
 } from "../services/v2/system";
 import "./system-page.css";
+import type { V2ListPage } from "../services/v2/pagination";
 
 type RunFilter = "all" | "assignment" | "review";
 
@@ -186,7 +188,7 @@ function ServiceStatus({ view, health }: { view: V2SystemView; health?: V2Servic
   </section>;
 }
 
-export function SystemPage({ readOnly = false, initialView, loadView = getV2SystemView, loadRun = getV2OrchestratorRunDetail }: { readOnly?: boolean; initialView?: V2SystemView; loadView?: (signal?: AbortSignal) => Promise<V2SystemView>; loadRun?: (runId: string, signal?: AbortSignal) => Promise<V2OrchestratorRunDetail> } = {}) {
+export function SystemPage({ readOnly = false, initialView, loadView = getV2SystemView, loadRun = getV2OrchestratorRunDetail, loadRunsPage = getV2OrchestratorRunsPage }: { readOnly?: boolean; initialView?: V2SystemView; loadView?: (signal?: AbortSignal) => Promise<V2SystemView>; loadRun?: (runId: string, signal?: AbortSignal) => Promise<V2OrchestratorRunDetail>; loadRunsPage?: (cursor?: string, signal?: AbortSignal) => Promise<V2ListPage<V2SystemRun>> } = {}) {
   const [view, setView] = useState<V2SystemView | undefined>(initialView);
   const [health, setHealth] = useState<V2ServiceHealth>();
   const [loading, setLoading] = useState(!initialView);
@@ -202,6 +204,9 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
   const [pauseReason, setPauseReason] = useState("");
   const [statusPending, setStatusPending] = useState(false);
   const [statusError, setStatusError] = useState("");
+  const [runCursor, setRunCursor] = useState<string | null>(null);
+  const [runTotal, setRunTotal] = useState(0);
+  const [runsLoading, setRunsLoading] = useState(false);
   const summaryController = useRef<AbortController | undefined>(undefined);
   const detailController = useRef<AbortController | undefined>(undefined);
   const runSummaryRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -214,6 +219,8 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
     try {
       const result = await loadView(controller.signal);
       setView(result);
+      setRunCursor(result.recentRunsPage?.nextCursor ?? null);
+      setRunTotal(result.recentRunsPage?.totalCount ?? result.recentRuns.length);
       setLastUpdated(new Date());
       setLoadError("");
     } catch (error) {
@@ -223,6 +230,7 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
       if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
     }
   }, [loadView]);
+  const loadMoreRuns = useCallback(async () => { if (!runCursor || !view || runsLoading) return; setRunsLoading(true); try { const page = await loadRunsPage(runCursor); setView({ ...view, recentRuns: [...view.recentRuns, ...page.items.filter((run) => run.resultCode !== "no_waiting_alerts" && !view.recentRuns.some((loaded) => loaded.id === run.id))] }); setRunCursor(page.nextCursor); setRunTotal(page.totalCount); } catch (error) { setLoadError(error instanceof Error ? error.message : "More decision activity could not be loaded."); } finally { setRunsLoading(false); } }, [loadRunsPage, runCursor, runsLoading, view]);
 
   useEffect(() => {
     void loadSystem();
@@ -327,7 +335,7 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
             </button>
             {expandedRun === run.id && <RunDetail run={run} detail={runDetails[run.id]} loading={Boolean(detailLoading[run.id])} error={detailErrors[run.id]} onRetry={() => void loadRunDetail(run.id)} onClose={() => closeRunDetails(run.id)} />}
           </li>)}</ol> : <div className="system-empty"><strong>No {filter === "all" ? "Orchestrator Runs" : `${filter} Runs`} recorded.</strong><p>{filter === "all" ? "Assignment and review activity will appear here after the Orchestrator processes operational work." : "Change the filter to inspect the other Run types."}</p></div>}
-          {visibleRuns.length > 0 && <div className="system-ledger-footer"><span>{visibleRuns.length === view.recentRuns.length ? `Showing ${visibleRuns.length} recent Run${visibleRuns.length === 1 ? "" : "s"}` : `Showing ${visibleRuns.length} of ${view.recentRuns.length} recent Runs`}</span><small>Most recent first</small></div>}
+          {visibleRuns.length > 0 && <div className="system-ledger-footer"><span>{visibleRuns.length === view.recentRuns.length ? `Showing ${visibleRuns.length} of ${runTotal} recent Runs` : `Showing ${visibleRuns.length} filtered Runs`}</span>{runCursor ? <button type="button" disabled={runsLoading} onClick={() => void loadMoreRuns()}>{runsLoading ? "Loading…" : "Load more"}</button> : <small>Most recent first</small>}</div>}
         </section>
 
         <aside className="system-side-column">
