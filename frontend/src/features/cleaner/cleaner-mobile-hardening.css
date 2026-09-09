@@ -21,6 +21,12 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.cleaner-mobile nav button svg {
+  width: 23px;
+  height: 23px;
+  stroke: currentColor;
+}
+
 .cleaner-info-action {
   display: grid;
   gap: 8px;

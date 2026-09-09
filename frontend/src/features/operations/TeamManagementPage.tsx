@@ -38,8 +38,8 @@ function StationMap({ point, siteMap, onChange }: { point: V2Point | null; siteM
   const zones = siteMap.zones.map((zone) => ({ id: zone.zoneId, name: zone.zoneNameSnapshot, polygon: zone.polygon }));
   const backgroundContentUrl = siteMap.background?.contentUrl ?? (siteMap.revision.backgroundMediaId ? `/api/media/${encodeURIComponent(siteMap.revision.backgroundMediaId)}/content` : null);
   return <div className={`team-station-map shared ${onChange ? "interactive" : "readonly"}`}>
-    <SiteMapViewer compact boundary={siteMap.revision} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background ?? null} backgroundContentUrl={backgroundContentUrl} backgroundTransform={siteMap.revision.backgroundTransform ?? null} zones={zones} pointMarker={point ? { point, label: "Station Point", tone: "station" } : null} onPlacePoint={onChange} />
-    <p>{onChange ? point ? "Station Point selected. Click elsewhere on the map to move it." : "No Station Point selected. Zoom or pan, then click the map to place it." : "Saved Cleaner Station Point"}</p>
+    <SiteMapViewer compact fitBoundary boundary={siteMap.revision} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background ?? null} backgroundContentUrl={backgroundContentUrl} backgroundTransform={siteMap.revision.backgroundTransform ?? null} zones={zones} pointMarker={point ? { point, label: "Station Point", tone: "station" } : null} onPlacePoint={onChange} />
+    <p>{onChange ? point ? "Station Point selected. Click elsewhere on the map to move it." : "No Station Point selected. Zoom or pan, then click the map to place it." : "Exact saved Cleaner Station Point"}</p>
   </div>;
 }
 
