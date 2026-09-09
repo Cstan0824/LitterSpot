@@ -27,7 +27,15 @@ export type SiteMapViewerProps = {
   onMoveZoneVertex?: (zoneId: string, vertexIndex: number, point: SiteMapPoint) => void;
   onSelectCamera?: (cameraId: string) => void;
   pointMarker?: { point: SiteMapPoint; label: string; tone?: "work" | "station" | "camera" } | null;
+  onPointMarkerClick?: () => void;
+  pointMarkerPopup?: { title: string; detail: string } | null;
   onPlacePoint?: (point: SiteMapPoint) => void;
+  focusPoint?: SiteMapPoint | null;
+  focusZoom?: number;
+  pointMarkerClickZoom?: number;
+  showPointCoordinates?: boolean;
+  lockedView?: boolean;
+  fitBoundary?: boolean;
   compact?: boolean;
 };
 
@@ -43,7 +51,7 @@ function niceScale(value: number) {
   return (normalized >= 5 ? 5 : normalized >= 2 ? 2 : 1) * magnitude;
 }
 
-export function SiteMapViewer({ boundary, gridSizeMeters, background, backgroundContentUrl, backgroundTransform, zones, cameras = [], stations = [], selectedZoneId, editableZoneId, drawingZoneId, conflictingZoneIds = new Set(), onSelectZone, onAddZonePoint, onMoveZoneVertex, onSelectCamera, pointMarker, onPlacePoint, compact = false }: SiteMapViewerProps) {
+export function SiteMapViewer({ boundary, gridSizeMeters, background, backgroundContentUrl, backgroundTransform, zones, cameras = [], stations = [], selectedZoneId, editableZoneId, drawingZoneId, conflictingZoneIds = new Set(), onSelectZone, onAddZonePoint, onMoveZoneVertex, onSelectCamera, pointMarker, onPointMarkerClick, pointMarkerPopup, onPlacePoint, focusPoint, focusZoom = 3.25, pointMarkerClickZoom, showPointCoordinates = true, lockedView = false, fitBoundary = false, compact = false }: SiteMapViewerProps) {
   const patternId = `site-grid-${useId().replaceAll(":", "")}`;
   const sourceUrl = backgroundContentUrl ?? background?.contentUrl ?? null;
   const mediaKey = siteMapBackgroundCacheKey(background, sourceUrl);
@@ -54,11 +62,32 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
   const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
   const [backgroundState, setBackgroundState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [backgroundAttempt, setBackgroundAttempt] = useState(0);
+  const viewAnimation = useRef<number | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ view: MapView; start: { x: number; y: number }; moved: boolean; pressedZoneId?: string; pinchDistance?: number; pinchCentre?: { x: number; y: number } } | null>(null);
   const draggingVertex = useRef<{ pointerId: number; zoneId: string; vertexIndex: number } | null>(null);
 
-  useEffect(() => { setView({ x: 0, y: 0, width: boundary.widthMeters, height: boundary.heightMeters }); }, [boundary.heightMeters, boundary.widthMeters]);
+  const focusedView = (point: SiteMapPoint, zoom = focusZoom): MapView => {
+    const width = Math.max(boundary.widthMeters / Math.max(1, zoom), Math.min(boundary.widthMeters, 30));
+    const height = width / boundary.widthMeters * boundary.heightMeters;
+    return { x: clamp(point.xMeters - width / 2, 0, Math.max(0, boundary.widthMeters - width)), y: clamp(point.yMeters - height / 2, 0, Math.max(0, boundary.heightMeters - height)), width, height };
+  };
+  const animateViewTo = (target: MapView) => {
+    if (viewAnimation.current !== null) cancelAnimationFrame(viewAnimation.current);
+    const start = view;
+    const startedAt = performance.now();
+    const duration = 360;
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - (1 - progress) ** 4;
+      setView({ x: start.x + (target.x - start.x) * eased, y: start.y + (target.y - start.y) * eased, width: start.width + (target.width - start.width) * eased, height: start.height + (target.height - start.height) * eased });
+      if (progress < 1) viewAnimation.current = requestAnimationFrame(step);
+      else viewAnimation.current = null;
+    };
+    viewAnimation.current = requestAnimationFrame(step);
+  };
+  useEffect(() => { setView(focusPoint ? focusedView(focusPoint) : { x: 0, y: 0, width: boundary.widthMeters, height: boundary.heightMeters }); }, [boundary.heightMeters, boundary.widthMeters, focusPoint?.xMeters, focusPoint?.yMeters, focusZoom]);
+  useEffect(() => () => { if (viewAnimation.current !== null) cancelAnimationFrame(viewAnimation.current); }, []);
   useEffect(() => {
     setBackgroundUrl(null);
     setBackgroundState(sourceUrl ? "loading" : "idle");
@@ -82,7 +111,7 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
   const scaleMeters = niceScale(100 / screenScale);
   const scalePixels = scaleMeters * screenScale;
   const editableZone = zones.find((zone) => zone.id === editableZoneId);
-  const modeLabel = drawingZoneId ? "Plot Zone boundary" : editableZoneId ? "Move boundary points" : onPlacePoint ? `Place ${pointMarker?.label ?? "point"}` : "Pan map";
+  const modeLabel = drawingZoneId ? "Plot Zone boundary" : editableZoneId ? "Move boundary points" : onPlacePoint ? `Place ${pointMarker?.label ?? "point"}` : focusPoint ? `Pinned ${pointMarker?.label ?? "point"}` : "Pan map";
 
   const clampView = (candidate: MapView): MapView => ({ ...candidate, x: clamp(candidate.x, 0, Math.max(0, boundary.widthMeters - candidate.width)), y: clamp(candidate.y, 0, Math.max(0, boundary.heightMeters - candidate.height)) });
 
@@ -113,13 +142,15 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
     const containWheel = (event: globalThis.WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();
+      if (lockedView) return;
       zoomAt(siteMapWheelZoomFactor(event.deltaY, event.deltaMode), event.clientX, event.clientY);
     };
     node.addEventListener("wheel", containWheel, SITE_MAP_WHEEL_LISTENER_OPTIONS);
     return () => node.removeEventListener("wheel", containWheel);
-  }, [boundary.heightMeters, boundary.widthMeters]);
+  }, [boundary.heightMeters, boundary.widthMeters, lockedView]);
 
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (lockedView) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const active = [...pointers.current.values()];
@@ -184,6 +215,10 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
       yMeters: clamp(pointMarker.point.yMeters + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0), 0, boundary.heightMeters),
     });
   };
+  const activatePointMarker = () => {
+    if (pointMarker && pointMarkerClickZoom) animateViewTo(focusedView(pointMarker.point, pointMarkerClickZoom));
+    onPointMarkerClick?.();
+  };
 
   const labels = useMemo(() => zones.map((zone) => ({ ...zone, centre: average(zone.polygon) })), [zones]);
   const drawingPoints = siteMapDrawingPoints(zones, drawingZoneId);
@@ -192,10 +227,13 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
   const zoneLabelStroke = Math.max(view.width / 360, .8);
   const drawingPointRadius = Math.max(view.width / 145, .55);
   const cameraMarkerScale = siteMapCameraMarkerScale(screenScale);
+  const pointPopupWidth = Math.max(view.width / 2.45, 100);
+  const pointPopupHeight = Math.max(view.width / 11.5, 33);
+  const pointPopupOffset = Math.max(view.width / 36, 9);
 
-  return <section className={`site-map-viewer ${compact ? "compact" : ""} ${drawingZoneId ? "drawing" : editableZoneId ? "editing" : onPlacePoint ? "placing" : "viewing"}`}>
-    <header className="site-map-viewer-toolbar"><div><strong>{modeLabel}</strong><span>{zoomPercent}%</span></div><div role="group" aria-label="Map view controls"><button type="button" onClick={() => zoomAt(siteMapButtonZoomFactor("in"))} aria-label="Zoom in">+</button><button type="button" onClick={() => zoomAt(siteMapButtonZoomFactor("out"))} aria-label="Zoom out">−</button><button type="button" onClick={() => setView({ x: 0, y: 0, width: boundary.widthMeters, height: boundary.heightMeters })}>Fit to Site</button></div></header>
-    <div ref={viewerRef} className="site-map-viewer-window" role={onPlacePoint ? "application" : undefined} tabIndex={onPlacePoint ? 0 : undefined} aria-label={onPlacePoint ? `Site Map. Click or use arrow keys to place ${pointMarker?.label ?? "the point"}.` : undefined} onKeyDown={movePointWithKeyboard} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={() => setCursor(null)}>
+  return <section className={`site-map-viewer ${compact ? "compact" : ""} ${focusPoint ? "focused" : ""} ${drawingZoneId ? "drawing" : editableZoneId ? "editing" : onPlacePoint ? "placing" : "viewing"}`}>
+    <header className="site-map-viewer-toolbar"><div><strong>{modeLabel}</strong><span>{focusPoint ? showPointCoordinates ? `X ${focusPoint.xMeters.toFixed(1)} m · Y ${focusPoint.yMeters.toFixed(1)} m` : "Focused Zone" : `${zoomPercent}%`}</span></div>{!lockedView && <div role="group" aria-label="Map view controls"><button type="button" onClick={() => zoomAt(siteMapButtonZoomFactor("in"))} aria-label="Zoom in">+</button><button type="button" onClick={() => zoomAt(siteMapButtonZoomFactor("out"))} aria-label="Zoom out">−</button><button type="button" onClick={() => setView({ x: 0, y: 0, width: boundary.widthMeters, height: boundary.heightMeters })}>Fit to Site</button></div>}</header>
+    <div ref={viewerRef} className="site-map-viewer-window" style={fitBoundary ? { aspectRatio: `${boundary.widthMeters} / ${boundary.heightMeters}`, height: "auto" } : undefined} role={onPlacePoint ? "application" : undefined} tabIndex={onPlacePoint ? 0 : undefined} aria-label={onPlacePoint ? `Site Map. Click or use arrow keys to place ${pointMarker?.label ?? "the point"}.` : undefined} onKeyDown={movePointWithKeyboard} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onPointerLeave={() => setCursor(null)}>
       <svg viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`} preserveAspectRatio="xMidYMid meet" aria-label={`Site Map, ${boundary.widthMeters} by ${boundary.heightMeters} metres`}>
         <defs><pattern id={patternId} width={gridSizeMeters} height={gridSizeMeters} patternUnits="userSpaceOnUse"><path d={`M ${gridSizeMeters} 0 L 0 0 0 ${gridSizeMeters}`} /></pattern></defs>
         <rect className="site-map-ground" width={boundary.widthMeters} height={boundary.heightMeters} />
@@ -208,12 +246,13 @@ export function SiteMapViewer({ boundary, gridSizeMeters, background, background
         {editableZone?.polygon.map((point, index) => <circle key={`${editableZone.id}-${index}`} cx={point.xMeters} cy={point.yMeters} r={Math.max(view.width / 180, .4)} className="site-map-vertex" role="button" tabIndex={0} aria-label={`Move ${editableZone.name} boundary point ${index + 1}`} onKeyDown={(event) => moveVertexWithKeyboard(event, editableZone.id, index, point)} onPointerDown={(event) => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); draggingVertex.current = { pointerId: event.pointerId, zoneId: editableZone.id, vertexIndex: index }; }} />)}
         {cameras.map((camera) => { const interactive = Boolean(onSelectCamera); return <g key={camera.id} className={`site-map-camera-marker ${interactive ? "interactive" : "static"}`} role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : undefined} aria-label={interactive ? `${camera.cameraNameSnapshot ?? "Camera"}, X ${camera.point.xMeters.toFixed(1)}, Y ${camera.point.yMeters.toFixed(1)} metres` : undefined} transform={`translate(${camera.point.xMeters} ${camera.point.yMeters}) scale(${cameraMarkerScale})`} onPointerDown={interactive ? (event) => event.stopPropagation() : undefined} onPointerUp={interactive ? (event) => event.stopPropagation() : undefined} onClick={interactive ? () => onSelectCamera?.(camera.cameraId) : undefined} onKeyDown={interactive ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectCamera?.(camera.cameraId); } } : undefined}><path className="site-map-camera-pin" d="M 0 1 C -3 -4 -14 -13 -14 -24 A 14 14 0 1 1 14 -24 C 14 -13 3 -4 0 1 Z" /><circle className="site-map-camera-face" cy="-24" r="10" /><g className="site-map-camera-glyph" transform="translate(0 -24)"><rect x="-5.5" y="-3.5" width="11" height="7" rx="1" /><circle r="2.1" /><path d="M -3.5 -3.5 -2 -5.2 H 2 L 3.5 -3.5" /></g></g>; })}
         {stations.map((station) => <g key={station.id} className="site-map-station-marker" transform={`translate(${station.point.xMeters} ${station.point.yMeters})`}><rect x={-view.width / 220} y={-view.width / 220} width={view.width / 110} height={view.width / 110} /><path d={`M 0 ${-view.width / 300} v ${view.width / 150} M ${-view.width / 300} 0 h ${view.width / 150}`} /></g>)}
-        {pointMarker && <g className={`site-map-point-marker ${pointMarker.tone ?? "work"}`} transform={`translate(${pointMarker.point.xMeters} ${pointMarker.point.yMeters})`} aria-label={`${pointMarker.label}, X ${pointMarker.point.xMeters.toFixed(1)}, Y ${pointMarker.point.yMeters.toFixed(1)} metres`}><circle r={Math.max(view.width / 100, .8)} /><circle r={Math.max(view.width / 260, .28)} /><path d={`M 0 ${view.width / 105} v ${view.width / 70}`} /></g>}
+        {pointMarker && pointMarkerPopup && <g className="site-map-point-popup" transform={`translate(${pointMarker.point.xMeters} ${pointMarker.point.yMeters})`}><rect x={-pointPopupWidth / 2} y={-pointPopupOffset - pointPopupHeight} width={pointPopupWidth} height={pointPopupHeight} rx={pointPopupHeight / 10} /><path d={`M ${-pointPopupHeight / 6} ${-pointPopupOffset} L ${pointPopupHeight / 6} ${-pointPopupOffset} L 0 0 Z`} /><text className="site-map-point-popup-title" x="0" y={-pointPopupOffset - pointPopupHeight * .62} style={{ fontSize: Math.max(view.width / 60, 4.8) }}>{pointMarkerPopup.title}</text><text className="site-map-point-popup-detail" x="0" y={-pointPopupOffset - pointPopupHeight * .23} style={{ fontSize: Math.max(view.width / 70, 4.5) }}>{pointMarkerPopup.detail}</text></g>}
+        {pointMarker && <g className={`site-map-point-marker ${pointMarker.tone ?? "work"} ${onPointMarkerClick ? "interactive" : ""}`} role={onPointMarkerClick ? "button" : undefined} tabIndex={onPointMarkerClick ? 0 : undefined} transform={`translate(${pointMarker.point.xMeters} ${pointMarker.point.yMeters})`} aria-label={`${pointMarker.label}, X ${pointMarker.point.xMeters.toFixed(1)}, Y ${pointMarker.point.yMeters.toFixed(1)} metres`} onPointerDown={onPointMarkerClick ? (event) => event.stopPropagation() : undefined} onClick={activatePointMarker} onKeyDown={onPointMarkerClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activatePointMarker(); } } : undefined}><circle r={Math.max(view.width / 100, .8)} /><circle r={Math.max(view.width / 260, .28)} /><path d={`M 0 ${view.width / 105} v ${view.width / 70}`} /></g>}
       </svg>
       {!sourceUrl && <div className="site-map-empty-background"><strong>No Site background</strong><span>Coordinates and Zones still remain operational.</span></div>}
       {sourceUrl && backgroundState === "loading" && <div className="site-map-empty-background"><strong>Loading Site background</strong><span>The coordinate layers remain available.</span></div>}
       {sourceUrl && backgroundState === "error" && <div className="site-map-empty-background error" role="alert"><strong>Site background unavailable</strong><span>The coordinate layers remain available.</span><button type="button" onClick={() => setBackgroundAttempt((attempt) => attempt + 1)}>Retry background</button></div>}
     </div>
-    <footer className="site-map-viewer-status"><span><i style={{ width: `${Math.min(150, Math.max(35, scalePixels))}px` }} />{scaleMeters >= 1000 ? `${Number((scaleMeters / 1000).toFixed(1))} km` : `${Number(scaleMeters.toFixed(2))} m`}</span><span>{cursor ? `X ${cursor.xMeters.toFixed(2)} m · Y ${cursor.yMeters.toFixed(2)} m` : `Boundary ${boundary.widthMeters} × ${boundary.heightMeters} m`}</span></footer>
+    <footer className="site-map-viewer-status"><span><i style={{ width: `${Math.min(150, Math.max(35, scalePixels))}px` }} />{scaleMeters >= 1000 ? `${Number((scaleMeters / 1000).toFixed(1))} km` : `${Number(scaleMeters.toFixed(2))} m`}</span>{showPointCoordinates && <span>{pointMarker ? `Exact point · X ${pointMarker.point.xMeters.toFixed(2)} m · Y ${pointMarker.point.yMeters.toFixed(2)} m` : cursor ? `X ${cursor.xMeters.toFixed(2)} m · Y ${cursor.yMeters.toFixed(2)} m` : `Boundary ${boundary.widthMeters} × ${boundary.heightMeters} m`}</span>}</footer>
   </section>;
 }

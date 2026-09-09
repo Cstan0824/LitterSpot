@@ -45,6 +45,15 @@
 .site-map-station-marker rect { fill: #152b3e; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .site-map-station-marker path { fill: none; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .site-map-point-marker { color: #1769e8; pointer-events: none; }
+.site-map-point-marker.interactive { pointer-events: auto; cursor: pointer; }
+.site-map-point-marker.interactive:focus { outline: none; }
+.site-map-point-marker.interactive:focus circle:first-child { stroke: #061725; stroke-width: 4; }
+.site-map-point-popup { pointer-events: none; }
+.site-map-point-popup rect { fill: #102b55; stroke: #20a6cf; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.site-map-point-popup path { fill: #102b55; stroke: #20a6cf; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.site-map-viewer .site-map-point-popup text { stroke: none; text-anchor: middle; }
+.site-map-viewer .site-map-point-popup .site-map-point-popup-title { fill: #8edff2; font-family: "Field Mono", monospace; font-weight: 700; letter-spacing: .08em; }
+.site-map-viewer .site-map-point-popup .site-map-point-popup-detail { fill: #fff; font-family: "Field Mono", monospace; font-weight: 700; }
 .site-map-point-marker.station { color: #14253b; }
 .site-map-point-marker.camera { color: #ee5e58; }
 .site-map-point-marker circle:first-child { fill: #fff; stroke: currentColor; stroke-width: 3; vector-effect: non-scaling-stroke; }
@@ -62,6 +71,7 @@
 .site-map-viewer-status span:first-child { display: flex; align-items: flex-end; gap: 8px; color: #fff; }
 .site-map-viewer-status i { display: block; max-width: 150px; border-top: 2px solid #fff; }
 .site-map-viewer.compact .site-map-viewer-window { height: clamp(350px, 48vh, 520px); }
+.site-map-viewer.compact.focused .site-map-viewer-window { height: clamp(420px, 55vh, 620px); }
 
 @media (max-width: 620px) {
   .site-map-viewer-toolbar { align-items: flex-start; flex-direction: column; padding: 10px; }
@@ -69,5 +79,6 @@
   .site-map-viewer-toolbar button { flex: 1; }
   .site-map-viewer-window,
   .site-map-viewer.compact .site-map-viewer-window { height: 390px; }
+  .site-map-viewer.compact.focused .site-map-viewer-window { height: 430px; }
   .site-map-viewer-status { align-items: flex-start; flex-direction: column; gap: 8px; padding-block: 10px; }
 }
