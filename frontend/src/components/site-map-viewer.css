@@ -1,7 +1,7 @@
 .site-map-viewer { min-width: 0; border: 1px solid #8ea3b4; background: #0b2338; color: #fff; }
 .site-map-viewer-toolbar { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 16px; padding-inline: 13px 8px; border-bottom: 1px solid rgba(255,255,255,.2); background: #0b2338; }
 .site-map-viewer-toolbar > div:first-child { display: flex; min-width: 0; align-items: baseline; gap: 10px; }
-.site-map-viewer-toolbar strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.site-map-viewer-toolbar strong { overflow: hidden; color: #fff; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .site-map-viewer-toolbar span { color: #91bdca; font: 700 10px/1 "Field Mono", monospace; }
 .site-map-viewer-toolbar > div:last-child { display: flex; }
 .site-map-viewer-toolbar button { min-width: 38px; min-height: 34px; padding-inline: 11px; border: 1px solid rgba(255,255,255,.34); border-inline-end: 0; background: transparent; color: #fff; font-size: 11px; font-weight: 800; cursor: pointer; }

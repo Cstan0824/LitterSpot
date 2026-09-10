@@ -25,6 +25,36 @@
   width: 23px;
   height: 23px;
   stroke: currentColor;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.cleaner-mobile nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: color 180ms ease, background 180ms ease;
+}
+
+.cleaner-mobile nav button.active svg {
+  filter: drop-shadow(0 3px 5px rgba(8, 155, 197, .22));
+  animation: cleaner-nav-icon-settle 260ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.cleaner-mobile nav button:active svg {
+  transform: scale(.88);
+}
+
+.cleaner-mobile nav button span,
+.cleaner-mobile nav button svg {
+  display: block;
+  margin-inline: auto;
+}
+
+@keyframes cleaner-nav-icon-settle {
+  0% { transform: translateY(4px) scale(.82); }
+  65% { transform: translateY(-1px) scale(1.08); }
+  100% { transform: translateY(0) scale(1); }
 }
 
 .cleaner-info-action {
@@ -257,6 +287,83 @@
 .cleaner-notifications i.rework { background: #ef584a; }
 .cleaner-notifications i.resolved { background: #8ecb22; }
 .cleaner-notifications i.dismissed { background: #8999a4; }
+
+.cleaner-notifications > p {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #c4ced6;
+  background: #fff;
+  color: #607789;
+  font: 500 13px/1.4 "Field Text", sans-serif;
+}
+
+.cleaner-month-picker-scrim {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  background: rgba(5, 22, 36, .58);
+}
+
+.cleaner-month-picker {
+  width: min(100%, 460px);
+  overflow: hidden;
+  border: 1px solid #9fb0ba;
+  background: #fff;
+  color: #173650;
+  box-shadow: 0 22px 60px rgba(5, 22, 36, .3);
+}
+
+.cleaner-month-picker > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #d3dce1;
+}
+
+.cleaner-month-picker header span,
+.cleaner-month-picker-wheels label {
+  color: #617988;
+  font: 700 9px/1 "Field Mono", monospace;
+  letter-spacing: .08em;
+}
+
+.cleaner-month-picker h2 { margin: 7px 0 0; font: 700 30px/.92 "Field Display", sans-serif; }
+.cleaner-month-picker > header > button { width: 34px; height: 34px; border: 1px solid #bdc8d2; background: #fff; color: #173650; font: 26px/1 "Field Text", sans-serif; cursor: pointer; }
+.cleaner-month-picker > p { margin: 0; padding: 13px 20px 4px; color: #607789; font: 500 12px/1.4 "Field Text", sans-serif; }
+.cleaner-month-picker-wheels { display: grid; grid-template-columns:1fr .7fr; gap: 14px; padding: 12px 20px 18px; }
+.cleaner-month-picker-wheels label { display: grid; gap: 7px; }
+.cleaner-month-picker-wheels select { height: 142px; border: 1px solid #b9c8d1; background: #f9fbfc; color: #173650; font: 700 15px/1.5 "Field Text", sans-serif; text-align: center; }
+.cleaner-month-picker-wheels option { padding: 6px; }
+.cleaner-month-picker-wheels option:checked { background: #102b55 linear-gradient(#102b55,#102b55); color: #fff; }
+.cleaner-month-picker footer { display: grid; grid-template-columns:1fr 1.2fr; gap: 8px; padding: 14px 20px 20px; border-top: 1px solid #d3dce1; }
+.cleaner-month-picker footer button { min-height: 45px; border: 1px solid #aebdc6; background: #fff; color: #173650; font: 700 13px "Field Text", sans-serif; cursor: pointer; }
+.cleaner-month-picker footer .primary { border-color: #102b55; background: #102b55; color: #fff; }
+
+.cleaner-month-picker.cleaner-month-picker-inline {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  border-color: #c4ced6;
+  box-shadow: none;
+}
+
+.cleaner-month-picker-inline > header,
+.cleaner-month-picker-inline > p,
+.cleaner-month-picker-inline > footer {
+  display: none;
+}
+
+.cleaner-month-picker-inline .cleaner-month-picker-wheels {
+  padding: 12px;
+}
+
+.cleaner-month-picker-inline .cleaner-month-picker-wheels select {
+  height: 150px;
+}
 
 .cleaner-confirmation-scrim {
   position: fixed;
