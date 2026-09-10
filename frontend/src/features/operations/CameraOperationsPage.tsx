@@ -7,7 +7,7 @@ import { getV2CameraDetail, getV2CameraDraft, getV2WorkDetail, type V2Camera, ty
 import { WorkDetailModal, workItemFromV2, type WorkAction, type WorkItem } from "./WorkManagementPage";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
 import { V2CameraMonitor } from "./V2CameraMonitor";
-import { CameraLiveView } from "./CameraLiveView";
+import { CAMERA_VIEW_ASPECT_RATIO, CameraLiveView } from "./CameraLiveView";
 import { useOptionalSiteMonitoring } from "./SiteMonitoringProvider";
 import { RetainedCameraEvidence } from "../../components/RetainedCameraEvidence";
 import { SiteMapViewer } from "../../components/SiteMapViewer";
@@ -173,12 +173,15 @@ export function cameraDetailBackTarget(query: URLSearchParams) {
   return { hash: "/cameras", label: "Back to all cameras" };
 }
 
-function V2CameraWallPreview({ camera, readOnly = false }: { camera: V2Camera; readOnly?: boolean }) {
+export function V2CameraWallPreview({ camera }: { camera: V2Camera; readOnly?: boolean }) {
   const [url, setUrl] = useState<string>();
   useEffect(() => { if (!camera.monitoringEnabled || camera.sourceType !== "looped_video" || !camera.source?.contentUrl) { setUrl(undefined); return; } const key = `camera-wall:${camera.id}`; const controller = new AbortController(); void loadAuthenticatedMedia(key, camera.source.contentUrl, controller.signal).then(setUrl).catch(() => setUrl(undefined)); return () => { controller.abort(); releaseAuthenticatedMedia(key); }; }, [camera]);
-  if (!camera.monitoringEnabled) return <div className="camera-wall-no-signal"><span>MONITORING DISABLED</span><small>{readOnly ? "No current Camera frames are being produced." : "Enable this Camera in its detail view to run a demo."}</small></div>;
-  if (camera.sourceType === "laptop_camera") return <div className="camera-wall-no-signal"><span>LAPTOP CAMERA READY</span><small>{readOnly ? "No retained live frame is available." : "Open detail to start the owner monitoring session."}</small></div>;
-  return url ? <video src={url} autoPlay muted loop playsInline /> : <div className="camera-wall-no-signal"><span>LOADING CAMERA SOURCE</span><small>Waiting for the authenticated video source.</small></div>;
+  const disabled = !camera.monitoringEnabled;
+  const playable = !disabled && camera.sourceType === "looped_video" && Boolean(url);
+  return <div className="camera-live-view compact"><div className="camera-live-stage" style={{ aspectRatio: CAMERA_VIEW_ASPECT_RATIO }}>
+    {playable ? <video src={url} autoPlay muted loop playsInline /> : <div className="camera-live-empty"><strong>{disabled ? "Camera is disabled" : "Waiting for a fresh analyzed frame"}</strong></div>}
+    <span className={`camera-live-badge ${disabled ? "disabled" : playable ? "online" : "offline"}`}>{disabled ? "Disabled" : playable ? "Online" : "Offline"}</span>
+  </div></div>;
 }
 
 function CameraPreview({ record, feed, video, latestAlert, monitoringCamera, mode = "wall", readOnly = false }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert; monitoringCamera?: V2Camera; mode?: "wall" | "detail"; readOnly?: boolean }) {
