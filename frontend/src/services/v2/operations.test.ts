@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("./http", () => ({ v2Request: request }));
 
-import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, getV2AlertsPage, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
+import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, getV2AlertsPage, getV2CameraDraftForCamera, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
 
 const alert = { id: "alert-1", revision: 4 } as any;
 const work = { id: "work-1", revision: 6 } as any;
@@ -66,6 +66,8 @@ describe("V2 Supervisor action client", () => {
   });
 
   it("uses the staged V2 Camera Draft contracts", async () => {
+    await getV2CameraDraftForCamera("camera-1");
+    expect(request).toHaveBeenLastCalledWith("/api/camera-creation/cameras/camera-1/draft", { signal: undefined });
     await startV2CameraDraft({ kind: "create", name: "Entrance Camera", sourceType: "laptop_camera", placement: { point: { xMeters: 12, yMeters: 18 } } });
     expect(request).toHaveBeenLastCalledWith("/api/camera-creation/drafts/start", expect.objectContaining({ method: "POST", json: expect.objectContaining({ sourceType: "laptop_camera" }) }));
     await saveV2CameraDraftRegistration("draft-1", { sourceWidth: 1280, sourceHeight: 720, walkableFloorPolygon: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }], bins: [] });

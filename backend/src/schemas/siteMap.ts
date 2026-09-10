@@ -38,11 +38,20 @@ export const siteMapDraftInputSchema = z.object({
 export const cameraPlacementChangeSchema = z.object({
   point: mapPointSchema,
   mode: z.enum(["map_position_correction", "physical_camera_move"]),
+  provisionalZone: z.object({
+    zoneId: z.string().trim().min(1).max(160),
+    zoneNameSnapshot: z.string().trim().min(1).max(120),
+    polygon: mapPolygonSchema,
+  }).strict().nullable().optional(),
   reason: z.string().trim().min(3).max(500),
   expectedCameraRevision: z.number().int().nonnegative(),
   expectedMapRevisionId: z.string().trim().min(1).max(160),
   confirmation: z.literal(true),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.provisionalZone && value.mode !== "physical_camera_move") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["provisionalZone"], message: "A provisional Zone is only supported for a Physical Camera Move." });
+  }
+});
 
 export type SiteBackgroundTransform = z.infer<typeof siteBackgroundTransformSchema>;
 export type SiteMapDraftInput = z.infer<typeof siteMapDraftInputSchema>;

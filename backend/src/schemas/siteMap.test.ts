@@ -15,6 +15,13 @@ describe("Site Map API contracts", () => {
     expect(cameraPlacementChangeSchema.safeParse({ point: { xMeters: 10, yMeters: 10 }, mode: "physical_camera_move", reason: "Camera moved", expectedCameraRevision: 1, expectedMapRevisionId: "map-1", confirmation: true }).success).toBe(true);
   });
 
+  it("allows a provisional Zone only during a Physical Camera Move", () => {
+    const provisionalZone = { zoneId: "new-zone", zoneNameSnapshot: "New Zone", polygon: [{ xMeters: 50, yMeters: 50 }, { xMeters: 80, yMeters: 50 }, { xMeters: 80, yMeters: 80 }] };
+    const common = { point: { xMeters: 60, yMeters: 60 }, reason: "Camera moved", expectedCameraRevision: 1, expectedMapRevisionId: "map-1", confirmation: true, provisionalZone };
+    expect(cameraPlacementChangeSchema.safeParse({ ...common, mode: "physical_camera_move" }).success).toBe(true);
+    expect(cameraPlacementChangeSchema.safeParse({ ...common, mode: "map_position_correction" }).success).toBe(false);
+  });
+
   it("does not let a Site Map draft bypass the Physical Camera Move workflow", () => {
     const input = { ...base, cameraPlacementChanges: [{ cameraId: "camera-1", mode: "physical_camera_move", reason: "Moved", confirmation: true }] };
     expect(siteMapDraftInputSchema.safeParse(input).success).toBe(false);

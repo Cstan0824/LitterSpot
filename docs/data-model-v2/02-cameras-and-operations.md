@@ -424,7 +424,7 @@ Camera target:
 }
 ```
 
-Coordinate target uses the same map and point fields without Camera fields. `zoneId` is the containing active Zone when one exists, otherwise null with `zoneNameSnapshot` set to `Unzoned area`. Work retains this snapshot even after the Site Map changes.
+Coordinate target uses the same map and point fields without Camera fields. `zoneId` is the containing active Zone when one exists, otherwise null with `zoneNameSnapshot` set to `Unzoned area`. Terminal Work retains this snapshot after the Site Map changes. Active Camera-targeted Work is retargeted, with an append-only before/after event, when Root publishes a same-Zone Map Position Correction.
 
 ## `workOrders/{workOrderId}/events/{eventId}`
 

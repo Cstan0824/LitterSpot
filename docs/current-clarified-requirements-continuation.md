@@ -392,3 +392,17 @@ The frontend must run the same geometry rule while plotting and editing, identif
 **Confirmed** Site Map coordinates use the existing image-aligned convention: `(0, 0)` is the top-left corner, X increases to the right, and Y increases downward. Background alignment, grid rendering, pointer conversion, geometry validation, and every point-placement workflow use this same convention.
 
 **Confirmed** A Root choosing Map Position Correction must confirm that the physical Camera and its view did not move, provide a short reason, and receive a warning that Physical Camera Move requires fresh Camera Registration. The audit event records the reason and both old and new coordinates. A Physical Camera Move cannot use the correction path to retain stale Registration.
+
+## 16. 2026-09-10 — Camera movement and active operations
+
+**Confirmed** Map Position Correction is limited to another point inside the Camera's current active Zone. The frontend prevents placement in another Zone, and the backend independently rejects a correction whose derived Zone differs from the current Camera Placement.
+
+**Confirmed** Publishing a Map Position Correction retains the active Camera source and Registration. Unresolved Camera Alerts and active Camera-targeted Work remain active. Their current point, Zone snapshot and `mapRevisionId` move to the corrected placement, while append-only events retain the old and new targets. An assigned Cleaner receives an immediate durable location-update notification. Waiting Alerts remain eligible for Orchestrator assignment on the replacement Active Map Revision.
+
+**Confirmed** A Physical Camera Move may target another point in the current Zone, a different active Zone, or a valid provisional new Zone. A provisional Zone follows the same strict geometry rules as Camera Creation and remains non-operational until the Physical Camera Move publishes. Cancelling the draft discards the provisional Zone.
+
+**Confirmed** Starting a Physical Camera Move creates a Root-only Camera Draft and continues directly into Camera Registration. The existing source may remain selected, but the old reference, walkable-floor polygon and bin regions cannot satisfy the draft. Root must capture a fresh reference and plot fresh floor/bin geometry before validation.
+
+**Confirmed** Final Physical Camera Move publication atomically activates any provisional Zone, the new Camera Placement, source revision and Camera Registration. It dismisses every unresolved Alert and active Work Order tied to that Camera with system reason `camera_physically_moved`, releases affected Cleaners, removes active workflow locks, stops stale automated assignment or review through normal revision checks, notifies affected Cleaners, and preserves evidence and event history. Cancelling an unfinished move changes none of the active operations.
+
+**Confirmed** If a Root encounters an existing unfinished Physical Camera Move while reopening Move Camera or Camera View reconfiguration, the product recovers that draft and returns to its fresh-reference step instead of leaving the Camera behind an unrecoverable draft-lock error.

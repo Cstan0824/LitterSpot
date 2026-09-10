@@ -3,17 +3,17 @@ import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Site, Zone } from "../../services/locationAPI";
 import type { LiveVideo } from "../pipeline/liveVideoStore";
 import type { Alert, Camera } from "./types";
-import { getV2CameraDetail, getV2WorkDetail, type V2Camera, type V2CameraDetail, type V2OperationsReadModel, type V2WorkOrder } from "../../services/v2/operations";
+import { getV2CameraDetail, getV2CameraDraft, getV2WorkDetail, type V2Camera, type V2CameraDetail, type V2OperationsReadModel, type V2WorkOrder } from "../../services/v2/operations";
 import { WorkDetailModal, workItemFromV2, type WorkAction, type WorkItem } from "./WorkManagementPage";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
 import { V2CameraMonitor } from "./V2CameraMonitor";
-import { CameraLiveView } from "./CameraLiveView";
+import { CAMERA_VIEW_ASPECT_RATIO, CameraLiveView } from "./CameraLiveView";
 import { useOptionalSiteMonitoring } from "./SiteMonitoringProvider";
 import { RetainedCameraEvidence } from "../../components/RetainedCameraEvidence";
 import { SiteMapViewer } from "../../components/SiteMapViewer";
-import { V2CameraCreationPage } from "../../pages/V2CameraCreationPage";
+import { recoverableCameraDraftId, V2CameraCreationPage } from "../../pages/V2CameraCreationPage";
 import { changeSiteMapCameraPlacement, getActiveSiteMap, type ActiveSiteMap } from "../../services/v2/siteMap";
-import { containingZoneId } from "../../services/v2/mapGeometry";
+import { containingZoneId, validateZoneCandidate, type SiteMapPoint } from "../../services/v2/mapGeometry";
 import type { V2CameraDraft } from "../../services/v2/operations";
 import "./camera-list-header.css";
 import "./camera-detail-monitoring.css";
@@ -73,30 +73,65 @@ class ZonePlannerBoundary extends Component<{ children: ReactNode }, { failed: b
   }
 }
 
+export function cameraMovePointAllowed(mode: "map_position_correction" | "physical_camera_move", currentZoneId: string | null | undefined, candidateZoneId: string | null) {
+  return Boolean(candidateZoneId && (mode === "physical_camera_move" || candidateZoneId === currentZoneId));
+}
+
 function CameraMoveModal({ camera, cameraName, monitoringEnabled, onClose, onPublished, onPhysicalMove }: { camera: V2CameraDetail["camera"]; cameraName: string; monitoringEnabled: boolean; onClose: () => void; onPublished: () => Promise<void>; onPhysicalMove: (draft: V2CameraDraft) => void }) {
   const [siteMap, setSiteMap] = useState<ActiveSiteMap>();
   const [point, setPoint] = useState(camera.placement?.point ?? null);
   const [mode, setMode] = useState<"map_position_correction" | "physical_camera_move">("map_position_correction");
+  const [destinationMode, setDestinationMode] = useState<"existing" | "new">("existing");
+  const [newZoneName, setNewZoneName] = useState("");
+  const [newZoneBoundary, setNewZoneBoundary] = useState<SiteMapPoint[]>([]);
+  const [newZoneStage, setNewZoneStage] = useState<"boundary" | "placement">("boundary");
+  const [provisionalZoneId] = useState(() => `zone-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`);
   const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { const controller = new AbortController(); void getActiveSiteMap(controller.signal).then(setSiteMap).catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "The active Site Map could not be loaded."); }); return () => controller.abort(); }, []);
-  const zoneId = point && siteMap ? containingZoneId(point, siteMap.zones.map((zone) => ({ id: zone.zoneId, polygon: zone.polygon }))) : null;
-  const zone = siteMap?.zones.find((item) => item.zoneId === zoneId);
+  const activeZones = siteMap?.zones.map((zone) => ({ id: zone.zoneId, name: zone.zoneNameSnapshot, polygon: zone.polygon })) ?? [];
+  const provisionalZone = destinationMode === "new" ? { id: provisionalZoneId, name: newZoneName.trim() || "New Zone", polygon: newZoneBoundary } : null;
+  const newZoneIssues = siteMap && provisionalZone ? validateZoneCandidate(provisionalZone, activeZones, siteMap.revision) : [];
+  const displayedZones = provisionalZone ? [...activeZones, provisionalZone] : activeZones;
+  const zoneId = point ? containingZoneId(point, displayedZones) : null;
+  const zone = zoneId === provisionalZoneId ? { zoneNameSnapshot: newZoneName.trim() || "New Zone" } : siteMap?.zones.find((item) => item.zoneId === zoneId);
+  const currentZoneId = camera.placement?.zoneId;
   const unchanged = Boolean(point && camera.placement && point.xMeters === camera.placement.point.xMeters && point.yMeters === camera.placement.point.yMeters);
+  const provisionalReady = Boolean(provisionalZone && newZoneName.trim().length >= 2 && newZoneBoundary.length >= 3 && newZoneIssues.length === 0);
+  const destinationValid = cameraMovePointAllowed(mode, currentZoneId, zoneId) && (destinationMode !== "new" || provisionalReady && zoneId === provisionalZoneId);
+  const choosePoint = (candidate: SiteMapPoint) => {
+    const candidateZoneId = containingZoneId(candidate, displayedZones);
+    if (!cameraMovePointAllowed(mode, currentZoneId, candidateZoneId)) {
+      setError(mode === "map_position_correction" ? "Map Position Correction must remain inside the Camera's current Zone." : "Place the Camera inside one valid destination Zone.");
+      return;
+    }
+    if (destinationMode === "new" && candidateZoneId !== provisionalZoneId) { setError("Place the Camera inside the new Zone."); return; }
+    setPoint(candidate); setError("");
+  };
+  const changeMoveMode = (next: "map_position_correction" | "physical_camera_move") => {
+    setMode(next); setDestinationMode("existing"); setNewZoneStage("boundary"); setPoint(camera.placement?.point ?? null); setError("");
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!point || !zoneId || unchanged || reason.trim().length < 3 || !confirmed) return;
+    if (!point || !zoneId || !destinationValid || unchanged || reason.trim().length < 3 || !confirmed) return;
     setBusy(true); setError("");
     try {
-      const result = await changeSiteMapCameraPlacement({ cameraId: camera.id, point, mode, reason: reason.trim(), expectedCameraRevision: camera.revision, expectedMapRevisionId: camera.activeMapRevisionId });
+      const result = await changeSiteMapCameraPlacement({ cameraId: camera.id, point, mode, reason: reason.trim(), expectedCameraRevision: camera.revision, expectedMapRevisionId: camera.activeMapRevisionId, provisionalZone: provisionalZone && destinationMode === "new" ? { zoneId: provisionalZone.id, zoneNameSnapshot: provisionalZone.name, polygon: provisionalZone.polygon } : null });
       if (result.status === "registration_required" && result.draft) { onPhysicalMove(result.draft); return; }
       await onPublished(); onClose();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "The Camera position could not be changed."); }
-    finally { setBusy(false); }
+    } catch (reason) {
+      const existingDraftId = recoverableCameraDraftId(reason);
+      if (existingDraftId) {
+        try { const existing = (await getV2CameraDraft(existingDraftId)).draft; if (existing.kind === "physical_move") { onPhysicalMove(existing); return; } }
+        catch (recoveryError) { setError(recoveryError instanceof Error ? recoveryError.message : "The unfinished Physical Camera Move could not be recovered."); return; }
+      }
+      setError(reason instanceof Error ? reason.message : "The Camera position could not be changed.");
+    } finally { setBusy(false); }
   };
-  return <div className="camera-modal-scrim camera-move-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><form className="camera-move-modal" onSubmit={(event) => void submit(event)}><header><div><span>ROOT STRUCTURAL CONTROL</span><h2>Move {cameraName}.</h2><p>Choose whether this is a map correction or a real physical move.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close Camera move">×</button></header><main><section className="camera-move-map"><header><div><span>NEW CAMERA POINT</span><strong>{zone?.zoneNameSnapshot ?? "Place the Camera inside one Zone"}</strong></div>{point && <b>X {point.xMeters.toFixed(2)} · Y {point.yMeters.toFixed(2)} m</b>}</header>{siteMap ? <SiteMapViewer boundary={{ widthMeters: siteMap.revision.widthMeters, heightMeters: siteMap.revision.heightMeters }} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background} backgroundTransform={siteMap.revision.backgroundTransform} zones={siteMap.zones.map((item) => ({ id: item.zoneId, name: item.zoneNameSnapshot, polygon: item.polygon }))} cameras={siteMap.cameraPlacements.filter((item) => item.cameraId !== camera.id)} pointMarker={point ? { point, label: cameraName, tone: "camera" } : null} onPlacePoint={setPoint} /> : <div className="camera-map-loading">Loading the active Site Map…</div>}</section><aside><fieldset><legend>Move type</legend><label><input type="radio" name="move-mode" checked={mode === "map_position_correction"} onChange={() => setMode("map_position_correction")} /><span><b>Map position correction</b><small>The physical Camera did not move. Its source and Registration remain valid.</small></span></label><label><input type="radio" name="move-mode" checked={mode === "physical_camera_move"} onChange={() => setMode("physical_camera_move")} /><span><b>Physical Camera move</b><small>The Camera moved in real life. Fresh reference, floor, and bin plotting are required.</small></span></label></fieldset>{mode === "physical_camera_move" && monitoringEnabled && <p className="camera-move-warning">Disable monitoring before starting a Physical Camera Move.</p>}<label className="camera-move-reason">Reason<textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Explain why the Camera point is changing" /></label><label className="camera-move-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I confirm this point matches the Camera's real position.</span></label>{error && <p className="camera-modal-error" role="alert">{error}</p>}<dl><div><dt>Current</dt><dd>{camera.placement ? `X ${camera.placement.point.xMeters.toFixed(2)} · Y ${camera.placement.point.yMeters.toFixed(2)} m` : "Not recorded"}</dd></div><div><dt>New Zone</dt><dd>{zone?.zoneNameSnapshot ?? "Invalid placement"}</dd></div></dl></aside></main><footer><p>{mode === "map_position_correction" ? "Publishing creates a new Site Map revision immediately." : "Continue into fresh Camera Registration before the moved point becomes active."}</p><div><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary" disabled={busy || !zoneId || unchanged || reason.trim().length < 3 || !confirmed || mode === "physical_camera_move" && monitoringEnabled}>{busy ? "Saving…" : mode === "map_position_correction" ? "Publish correction" : "Continue to Registration"}</button></div></footer></form></div>;
+  const drawingNewZone = mode === "physical_camera_move" && destinationMode === "new" && newZoneStage === "boundary";
+  return <div className="camera-modal-scrim camera-move-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><form className="camera-move-modal" onSubmit={(event) => void submit(event)}><header><div><span>ROOT STRUCTURAL CONTROL</span><h2>Move {cameraName}.</h2><p>Choose whether this is a map correction or a real physical move.</p></div><button type="button" onClick={onClose} disabled={busy} aria-label="Close Camera move">×</button></header><main><section className="camera-move-map"><header><div><span>{drawingNewZone ? "NEW ZONE BOUNDARY" : "NEW CAMERA POINT"}</span><strong>{drawingNewZone ? newZoneIssues[0]?.message ?? "Plot the new Zone boundary" : zone?.zoneNameSnapshot ?? "Place the Camera inside one Zone"}</strong></div>{point && !drawingNewZone && <b>X {point.xMeters.toFixed(2)} · Y {point.yMeters.toFixed(2)} m</b>}</header>{siteMap ? <SiteMapViewer boundary={{ widthMeters: siteMap.revision.widthMeters, heightMeters: siteMap.revision.heightMeters }} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background} backgroundTransform={siteMap.revision.backgroundTransform} zones={displayedZones} cameras={siteMap.cameraPlacements.filter((item) => item.cameraId !== camera.id)} selectedZoneId={mode === "map_position_correction" ? currentZoneId : zoneId ?? undefined} drawingZoneId={drawingNewZone ? provisionalZoneId : undefined} conflictingZoneIds={drawingNewZone && newZoneIssues.length ? new Set([provisionalZoneId]) : undefined} pointMarker={!drawingNewZone && point ? { point, label: cameraName, tone: "camera" } : null} onAddZonePoint={drawingNewZone ? (candidate) => { setNewZoneBoundary((current) => [...current, candidate]); setError(""); } : undefined} onPlacePoint={!drawingNewZone ? choosePoint : undefined} /> : <div className="camera-map-loading">Loading the active Site Map…</div>}</section><aside><fieldset><legend>Move type</legend><label><input type="radio" name="move-mode" checked={mode === "map_position_correction"} onChange={() => changeMoveMode("map_position_correction")} /><span><b>Map position correction</b><small>The physical Camera did not move. Its source and Registration remain valid.</small></span></label><label><input type="radio" name="move-mode" checked={mode === "physical_camera_move"} onChange={() => changeMoveMode("physical_camera_move")} /><span><b>Physical Camera move</b><small>The Camera moved in real life. Fresh reference, floor, and bin plotting are required.</small></span></label></fieldset>{mode === "physical_camera_move" && <section className="camera-move-zone-choice"><span>DESTINATION ZONE</span><div role="group" aria-label="Choose destination Zone type"><button type="button" className={destinationMode === "existing" ? "active" : ""} onClick={() => { setDestinationMode("existing"); setPoint(camera.placement?.point ?? null); setError(""); }}>Existing Zone</button><button type="button" className={destinationMode === "new" ? "active" : ""} onClick={() => { setDestinationMode("new"); setPoint(null); setNewZoneStage("boundary"); setError(""); }}>New Zone</button></div>{destinationMode === "new" && <><label>Zone name<input value={newZoneName} maxLength={120} onChange={(event) => { setNewZoneName(event.target.value); setError(""); }} placeholder="New Zone name" /></label><div className="camera-move-zone-tools"><button type="button" onClick={() => setNewZoneBoundary((current) => current.slice(0, -1))} disabled={!newZoneBoundary.length || newZoneStage !== "boundary"}>Undo point</button><button type="button" onClick={() => { setNewZoneBoundary([]); setPoint(null); setNewZoneStage("boundary"); }} disabled={!newZoneBoundary.length}>Redraw Zone</button>{newZoneStage === "boundary" ? <button type="button" className="primary" disabled={!provisionalReady} onClick={() => { setNewZoneStage("placement"); setPoint(null); setError(""); }}>Place Camera</button> : <button type="button" onClick={() => { setNewZoneStage("boundary"); setPoint(null); }}>Edit boundary</button>}</div></>}</section>}{mode === "physical_camera_move" && monitoringEnabled && <p className="camera-move-warning">Disable monitoring before starting a Physical Camera Move.</p>}<label className="camera-move-reason">Reason<textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Explain why the Camera point is changing" /></label><label className="camera-move-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I confirm this point matches the Camera's real position.</span></label>{error && <p className="camera-modal-error" role="alert">{error}</p>}<dl><div><dt>Current</dt><dd>{camera.placement ? `X ${camera.placement.point.xMeters.toFixed(2)} · Y ${camera.placement.point.yMeters.toFixed(2)} m` : "Not recorded"}</dd></div><div><dt>New Zone</dt><dd>{zone?.zoneNameSnapshot ?? "Not selected"}</dd></div></dl></aside></main><footer><p>{mode === "map_position_correction" ? "Publishing retargets active Camera work to this corrected point." : "Continue into fresh Camera Registration before the moved point becomes active."}</p><div><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary" disabled={busy || !destinationValid || unchanged || reason.trim().length < 3 || !confirmed || mode === "physical_camera_move" && monitoringEnabled}>{busy ? "Saving…" : mode === "map_position_correction" ? "Publish correction" : "Continue to Registration"}</button></div></footer></form></div>;
 }
 
 const alertLabel = (kind: string) => ({ bin_overflow: "Bin overflow", floor_litter: "Floor litter", floor_spill: "Floor spill" }[kind] ?? kind.replaceAll("_", " "));
@@ -138,12 +173,15 @@ export function cameraDetailBackTarget(query: URLSearchParams) {
   return { hash: "/cameras", label: "Back to all cameras" };
 }
 
-function V2CameraWallPreview({ camera, readOnly = false }: { camera: V2Camera; readOnly?: boolean }) {
+export function V2CameraWallPreview({ camera }: { camera: V2Camera; readOnly?: boolean }) {
   const [url, setUrl] = useState<string>();
   useEffect(() => { if (!camera.monitoringEnabled || camera.sourceType !== "looped_video" || !camera.source?.contentUrl) { setUrl(undefined); return; } const key = `camera-wall:${camera.id}`; const controller = new AbortController(); void loadAuthenticatedMedia(key, camera.source.contentUrl, controller.signal).then(setUrl).catch(() => setUrl(undefined)); return () => { controller.abort(); releaseAuthenticatedMedia(key); }; }, [camera]);
-  if (!camera.monitoringEnabled) return <div className="camera-wall-no-signal"><span>MONITORING DISABLED</span><small>{readOnly ? "No current Camera frames are being produced." : "Enable this Camera in its detail view to run a demo."}</small></div>;
-  if (camera.sourceType === "laptop_camera") return <div className="camera-wall-no-signal"><span>LAPTOP CAMERA READY</span><small>{readOnly ? "No retained live frame is available." : "Open detail to start the owner monitoring session."}</small></div>;
-  return url ? <video src={url} autoPlay muted loop playsInline /> : <div className="camera-wall-no-signal"><span>LOADING CAMERA SOURCE</span><small>Waiting for the authenticated video source.</small></div>;
+  const disabled = !camera.monitoringEnabled;
+  const playable = !disabled && camera.sourceType === "looped_video" && Boolean(url);
+  return <div className="camera-live-view compact"><div className="camera-live-stage" style={{ aspectRatio: CAMERA_VIEW_ASPECT_RATIO }}>
+    {playable ? <video src={url} autoPlay muted loop playsInline /> : <div className="camera-live-empty"><strong>{disabled ? "Camera is disabled" : "Waiting for a fresh analyzed frame"}</strong></div>}
+    <span className={`camera-live-badge ${disabled ? "disabled" : playable ? "online" : "offline"}`}>{disabled ? "Disabled" : playable ? "Online" : "Offline"}</span>
+  </div></div>;
 }
 
 function CameraPreview({ record, feed, video, latestAlert, monitoringCamera, mode = "wall", readOnly = false }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert; monitoringCamera?: V2Camera; mode?: "wall" | "detail"; readOnly?: boolean }) {
