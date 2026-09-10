@@ -9,6 +9,7 @@
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-window { height: clamp(360px, 55vh, 560px); }
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-status { display: none; }
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-toolbar span { display: none; }
+.cleaner-map.shared > .site-map-viewer .site-map-viewer-toolbar strong { color: #fff !important; }
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-status span { display: flex; align-items: flex-end; gap: 8px; color: #fff; font: 700 9px/1 "Field Mono", monospace; letter-spacing: normal; }
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-status span:last-child { display: block; color: #a9bdca; }
 .cleaner-map.shared > .site-map-viewer .site-map-viewer-status i { display: block; max-width: 150px; margin: 0; border-top: 2px solid #fff; }
