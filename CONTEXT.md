@@ -75,11 +75,11 @@ The Camera's physical point inside exactly one active Zone on the Site Map.
 _Avoid_: Camera registration, camera ROI
 
 **Map Position Correction**:
-A correction to a Camera's recorded Site Map coordinate when the physical Camera and its view did not move; the existing Camera Registration remains valid.
+A correction to a Camera's recorded Site Map coordinate inside its current active Zone when the physical Camera and its view did not move. The existing Camera Registration remains valid. Active Camera-linked Alerts and Work move to the corrected point and map revision, retain their status, and notify an assigned Cleaner.
 _Avoid_: Physical Camera Move, Camera reconfiguration
 
 **Physical Camera Move**:
-A change to the Camera's real installation position or view. It changes Camera Placement and requires a new reference and Camera Registration before the replacement configuration becomes operational.
+A change to the Camera's real installation position or view, whether it remains in the same Zone, enters another active Zone, or enters a provisional new Zone. It requires a new reference and Camera Registration. Final publication dismisses active operations tied to the old Camera view before the replacement becomes operational.
 _Avoid_: Map Position Correction, source-only replacement
 
 **Camera Creation**:

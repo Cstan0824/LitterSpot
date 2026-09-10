@@ -55,8 +55,9 @@ describe("Site Map API client", () => {
   });
 
   it("sends a confirmed Root Camera placement change with concurrency guards", async () => {
-    request.mockResolvedValueOnce({ mode: "map_position_correction", status: "published" });
-    await changeSiteMapCameraPlacement({ cameraId: "camera-1", point: { xMeters: 12, yMeters: 18 }, mode: "map_position_correction", reason: "Corrected after measuring the installed mount.", expectedCameraRevision: 4, expectedMapRevisionId: "map-3" });
+    request.mockResolvedValueOnce({ placement: { mode: "map_position_correction", status: "published" } });
+    const result = await changeSiteMapCameraPlacement({ cameraId: "camera-1", point: { xMeters: 12, yMeters: 18 }, mode: "map_position_correction", reason: "Corrected after measuring the installed mount.", expectedCameraRevision: 4, expectedMapRevisionId: "map-3" });
     expect(request).toHaveBeenLastCalledWith("/api/site-map/camera-placements/camera-1", { method: "POST", json: { point: { xMeters: 12, yMeters: 18 }, mode: "map_position_correction", reason: "Corrected after measuring the installed mount.", expectedCameraRevision: 4, expectedMapRevisionId: "map-3", confirmation: true } });
+    expect(result).toEqual({ mode: "map_position_correction", status: "published" });
   });
 });

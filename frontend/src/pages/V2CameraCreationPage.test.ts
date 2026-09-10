@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cameraPlacementsForRegistration, cameraWorkflowSteps, laptopCameraControlLabel, laptopCaptureEnabled, zoneAtPoint } from "./V2CameraCreationPage";
+import { cameraPlacementsForRegistration, cameraWorkflowSteps, laptopCameraControlLabel, laptopCaptureEnabled, recoverableCameraDraftId, zoneAtPoint } from "./V2CameraCreationPage";
+import { V2ApiError } from "../services/v2/errors";
 
 const size = { widthMeters: 100, heightMeters: 100 };
 const zones = [
@@ -35,5 +36,11 @@ describe("camera existing-zone map selection", () => {
     expect(laptopCameraControlLabel("open")).toBe("Close laptop Camera");
     expect(laptopCaptureEnabled({ state: "open", frameReady: true, busy: false })).toBe(true);
     expect(laptopCaptureEnabled({ state: "open", frameReady: false, busy: false })).toBe(false);
+  });
+
+  it("recognizes an unfinished Camera Draft as recoverable", () => {
+    const error = new V2ApiError({ message: "This Camera already has an unfinished configuration draft.", status: 409, details: { code: "camera_draft_exists", draftId: "draft-physical-move" } });
+    expect(recoverableCameraDraftId(error)).toBe("draft-physical-move");
+    expect(recoverableCameraDraftId(new Error("network failed"))).toBeNull();
   });
 });

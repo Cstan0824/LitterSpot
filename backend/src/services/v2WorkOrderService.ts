@@ -73,6 +73,10 @@ function removeCameraVerificationCollector(cameraId: string, workOrderId: string
   if (byWork.size === 0) cameraVerificationCollectors.delete(cameraId);
 }
 
+export function clearV2CameraVerificationCollectors(cameraId: string) {
+  cameraVerificationCollectors.delete(cameraId);
+}
+
 export function resetV2CameraVerificationCollectors() {
   cameraVerificationCollectors.clear();
 }

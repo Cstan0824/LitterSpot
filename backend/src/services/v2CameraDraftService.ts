@@ -13,17 +13,28 @@ import { detectSupportedVideo, probeVideoFile, validateDeclaredVideoType } from 
 import { deleteStoredMedia, writeMedia } from "./localMediaStorage.js";
 import { env } from "../config/env.js";
 import { publishCameraControl } from "./cameraLiveEvents.js";
+import { dismissActiveCameraOperations } from "./v2CameraMovementOperations.js";
+import { clearV2CameraVerificationCollectors } from "./v2WorkOrderService.js";
+import { enqueueV2ImmediateAssignmentTrigger } from "./v2OrchestratorTriggers.js";
 
 function timestamp(value: unknown) { return value instanceof Timestamp ? value.toDate().toISOString() : null; }
-function present(id: string, data: Record<string, unknown>) { return { id, ...data, createdAt: timestamp(data.createdAt), updatedAt: timestamp(data.updatedAt) }; }
+function present(id: string, data: Record<string, unknown>): Record<string, any> { return { id, ...data, createdAt: timestamp(data.createdAt), updatedAt: timestamp(data.updatedAt) }; }
 
 async function draftForSite(draftId: string, siteId: string) { const draft = await firestore.collection("cameraDrafts").doc(draftId).get(); if (!draft.exists || draft.data()?.siteId !== siteId || draft.data()?.status === "published") throw new HttpError(404, "Camera Draft not found."); return draft; }
+
+export async function getV2CameraDraftForCamera(siteId: string, cameraId: string) {
+  const lock = await firestore.collection("cameraDraftLocks").doc(cameraId).get();
+  if (!lock.exists || lock.data()?.siteId !== siteId || !lock.data()?.draftId) return null;
+  const draft = await firestore.collection("cameraDrafts").doc(String(lock.data()?.draftId)).get();
+  if (!draft.exists || draft.data()?.siteId !== siteId || draft.data()?.cameraId !== cameraId || draft.data()?.status === "published") return null;
+  return present(draft.id, draft.data()!);
+}
 
 export async function startV2CameraDraft(input: { siteId: string; kind: "create" | "reconfigure" | "physical_move"; cameraId?: string; name: string; description?: string | null; sourceType: CameraSourceType; placement?: { point: { xMeters: number; yMeters: number } } | null; provisionalZone?: { zoneId: string; zoneNameSnapshot: string; polygon: Polygon } | null; moveReason?: string | null; actorUid: string }) {
   const site = await firestore.collection("sites").doc(input.siteId).get(); if (!site.exists || site.data()?.status !== "active") throw new HttpError(404, "Active Site not found.");
   if ((input.kind === "create" || input.kind === "physical_move") && site.data()?.mapDraftExists) throw new HttpError(409, "Finish or discard the current Site Map draft before changing Camera placement.", { code: "site_map_draft_exists" });
   const cameraId = input.cameraId ?? firestore.collection("cameras").doc().id; const existing = input.kind !== "create" ? await firestore.collection("cameras").doc(cameraId).get() : null; if (input.kind !== "create" && (!existing?.exists || existing.data()?.siteId !== input.siteId)) throw new HttpError(404, "Camera not found."); if ((input.kind === "create" || input.kind === "physical_move") && !input.placement) throw new HttpError(400, "Camera Placement is required.");
-  if (input.kind !== "create" && input.provisionalZone) throw new HttpError(400, "A provisional Zone is only supported while creating a Camera.");
+  if (input.kind === "reconfigure" && input.provisionalZone) throw new HttpError(400, "A provisional Zone is only supported while creating or physically moving a Camera.");
   if (input.kind === "reconfigure" && input.placement) throw new HttpError(400, "Camera Placement cannot change during Camera View reconfiguration.", { code: "camera_placement_root_move_only" });
   if (input.kind === "physical_move" && (!input.moveReason || input.moveReason.trim().length < 3)) throw new HttpError(400, "A reason is required for a Physical Camera Move.");
   const activeRevision = firestore.collection("siteMapRevisions").doc(String(site.data()?.activeMapRevisionId));
@@ -130,13 +141,14 @@ export async function publishV2CameraDraft(draftId: string, actor: AuditActor, r
   const mapRevisionRef = changesMap ? firestore.collection("siteMapRevisions").doc() : null;
   if (changesMap) {
     if (!sourceMapRevision.exists || !mapZones || !draftData.placement) throw new HttpError(409, "The Camera Draft is missing valid Site Map context.");
-    const provisionalZone = draftData.kind === "create" ? draftData.provisionalZone as { zoneId: string; polygon: Polygon } | null | undefined : null;
+    const provisionalZone = draftData.kind === "create" || draftData.kind === "physical_move" ? draftData.provisionalZone as { zoneId: string; polygon: Polygon } | null | undefined : null;
     const zoneGeometry = [...mapZones.docs.map((document) => ({ id: document.id, polygon: document.data()?.polygon as Polygon })), ...(provisionalZone ? [{ id: provisionalZone.zoneId, polygon: provisionalZone.polygon }] : [])];
     const placementValidation = validateMapGeometry({ widthMeters: Number(sourceMapRevision.data()?.widthMeters), heightMeters: Number(sourceMapRevision.data()?.heightMeters), zones: zoneGeometry, points: [{ point: draftData.placement.point, label: `camera_${String(draftData.cameraId)}`, requiresZone: true }] });
     const resolvedZoneId = containingPolygon(draftData.placement.point, zoneGeometry);
     if (!placementValidation.valid || resolvedZoneId !== draftData.placement.zoneId) throw new HttpError(409, "Camera Placement or provisional Zone geometry is no longer valid.", { code: "camera_map_geometry_invalid", errors: placementValidation.errors, issues: placementValidation.issues, zoneConflicts: placementValidation.zoneConflicts });
   }
   const auditRef = firestore.collection("auditEvents").doc();
+  let dismissedWorkCount = 0;
   await firestore.runTransaction(async (transaction) => {
     const [draft, draftLock] = await Promise.all([transaction.get(draftRef), transaction.get(draftLockRef)]);
     if (!draft.exists) throw new HttpError(404, "Camera Draft not found.");
@@ -157,6 +169,7 @@ export async function publishV2CameraDraft(draftId: string, actor: AuditActor, r
     if (data.kind === "physical_move" && existing.data()?.monitoringEnabled) throw new HttpError(409, "Disable Camera monitoring before publishing a Physical Camera Move.", { code: "camera_monitoring_must_be_disabled" });
     const state = publishCameraState({ sourceType: data.source.type as CameraSourceType, previousMonitoringEnabled: existing.data()?.monitoringEnabled, replacement: existing.exists });
     const targetCameraRef = existing.exists ? existingCameraRef : firestore.collection("cameras").doc(cameraId);
+    if (data.kind === "physical_move" && mapRevisionRef) dismissedWorkCount = (await dismissActiveCameraOperations(transaction, { siteId: String(data.siteId), cameraId, publicationKey: mapRevisionRef.id, requestId })).workCount;
     transaction.set(sourceRef, { schemaVersion: V2_SCHEMA_VERSION, sourceRevisionId: sourceRef.id, siteId: data.siteId, cameraId, revisionNumber: Number(existing.data()?.sourceRevisionNumber ?? 0) + 1, type: data.source.type, sourceMediaId: data.source.sourceMediaId ?? null, browserDeviceHint: data.source.browserDeviceHint ?? null, sampleIntervalSeconds: data.source.sampleIntervalSeconds, isSimulation: Boolean(data.source.isSimulation), publishedAt: FieldValue.serverTimestamp(), publishedByUid: actorUid, contentHash: `${cameraId}:${sourceRef.id}` });
     transaction.set(registrationRef, { schemaVersion: V2_SCHEMA_VERSION, registrationRevisionId: registrationRef.id, siteId: data.siteId, cameraId, sourceRevisionId: sourceRef.id, revisionNumber: Number(existing.data()?.registrationRevisionNumber ?? 0) + 1, referenceMediaId: data.registration.referenceMediaId, referenceSource: {}, sourceWidth: data.registration.sourceWidth, sourceHeight: data.registration.sourceHeight, walkableFloorPolygon: data.registration.walkableFloorPolygon, bins: data.registration.bins ?? [], quality: data.registration.quality ?? {}, validation: { status: "valid" }, contentHash: `${cameraId}:${registrationRef.id}`, publishedAt: FieldValue.serverTimestamp(), publishedByUid: actorUid });
     transaction.set(firestore.collection("cameraRegistrations").doc(cameraId), { schemaVersion: V2_SCHEMA_VERSION, siteId: data.siteId, cameraId, activeRegistrationRevisionId: registrationRef.id, revisionNumber: Number(existing.data()?.registrationRevisionNumber ?? 0) + 1, status: "ready", referenceMediaId: data.registration.referenceMediaId, binCount: (data.registration.bins ?? []).length, updatedAt: FieldValue.serverTimestamp(), updatedByUid: actorUid });
@@ -185,6 +198,10 @@ export async function publishV2CameraDraft(draftId: string, actor: AuditActor, r
     if (draftLock.exists && draftLock.data()?.draftId === draftId) transaction.delete(draftLockRef);
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor, siteId: String(data.siteId), siteNameSnapshot: String(site.data()?.name), action: data.kind === "create" ? "camera_created" : data.kind === "physical_move" ? "camera_physically_moved" : "camera_reconfigured", resourceType: "Camera", resourceId: cameraId, outcome: "succeeded", reason: data.kind === "physical_move" ? String(data.moveReason) : null, before: data.kind === "physical_move" ? { placement: data.previousPlacement, mapRevisionId: data.baseMapRevisionId, registrationRevisionId: existing.data()?.activeRegistrationRevisionId } : null, after: { placement: data.kind === "physical_move" ? data.placement : null, sourceType: data.source.type, monitoringEnabled: state.monitoringEnabled, registrationRevisionId: registrationRef.id, mapRevisionId: mapRevisionRef?.id ?? data.baseMapRevisionId }, requestId }));
   });
+  if (draftData.kind === "physical_move") {
+    clearV2CameraVerificationCollectors(String(draftData.cameraId));
+    if (dismissedWorkCount > 0) await enqueueV2ImmediateAssignmentTrigger(String(draftData.siteId), "cleaner_released_by_camera_move", `camera-move:${draftId}`);
+  }
   publishCameraControl(String(draftData.siteId), String(draftData.cameraId));
   return { cameraId: draftData.cameraId, draftId };
 }

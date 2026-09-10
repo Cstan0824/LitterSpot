@@ -1,7 +1,7 @@
 import { Router, type Request, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { cancelV2CameraDraft, createV2CameraDraft, publishV2CameraDraft, saveV2DraftRegistration, startV2CameraDraft, uploadV2DraftReference, uploadV2DraftSourceVideo, validateV2CameraDraft } from "../services/v2CameraDraftService.js";
+import { cancelV2CameraDraft, createV2CameraDraft, getV2CameraDraftForCamera, publishV2CameraDraft, saveV2DraftRegistration, startV2CameraDraft, uploadV2DraftReference, uploadV2DraftSourceVideo, validateV2CameraDraft } from "../services/v2CameraDraftService.js";
 import { firestore } from "../config/firebase.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { HttpError } from "../shared/httpError.js";
@@ -24,6 +24,11 @@ async function assertDraftAccess(req: Request) {
 }
 const requireDraftAccess: RequestHandler = async (req, _res, next) => { try { await assertDraftAccess(req); next(); } catch (error) { next(error); } };
 v2CameraRoutes.get("/cameras", async (req, res) => res.json(v2Json(await getCameraListConfiguration(String(req.authUser.siteId)))));
+v2CameraRoutes.get("/cameras/:cameraId/draft", async (req, res) => {
+  const draft = await getV2CameraDraftForCamera(String(req.authUser.siteId), req.params.cameraId);
+  if (draft?.kind === "physical_move" && req.authUser.authority !== "root") throw new HttpError(403, "Root Supervisor access is required.");
+  return res.json({ draft });
+});
 v2CameraRoutes.get("/cameras/:cameraId/detail", async (req, res) => res.json(await getV2CameraDetail(String(req.authUser.siteId), req.params.cameraId)));
 v2CameraRoutes.post("/drafts/start", async (req, res) => { const input = z.object({ kind: z.enum(["create", "reconfigure"]), cameraId: z.string().trim().min(1).optional(), name: z.string().trim().min(1).max(120), description: z.string().trim().max(500).nullable().optional(), sourceType: z.enum(["laptop_camera", "looped_video"]), placement: z.object({ point }).nullable().optional(), provisionalZone: z.object({ zoneId: z.string().trim().min(1).max(160), zoneNameSnapshot: z.string().trim().min(1).max(120), polygon: z.array(point).min(3).max(64) }).nullable().optional() }).strict().parse(req.body); if (input.kind === "create" && req.authUser.authority !== "root") return res.status(403).json({ error: "Root Supervisor access is required.", requestId: req.requestId }); return res.status(201).json({ draft: await startV2CameraDraft({ ...input, siteId: String(req.authUser.siteId), actorUid: req.authUser.uid }) }); });
 v2CameraRoutes.post("/drafts/:draftId/reference", requireDraftAccess, imageUpload.single("image"), async (req, res) => { if (!req.file) throw new HttpError(400, "A reference image is required."); return res.status(201).json({ reference: await uploadV2DraftReference({ siteId: String(req.authUser.siteId), draftId: String(req.params.draftId), file: req.file, actorUid: req.authUser.uid }) }); });

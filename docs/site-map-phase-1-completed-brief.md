@@ -32,7 +32,7 @@ The supplied `Sunway Lagoon.png` was verified as 1536 by 1024 pixels, exactly 3:
 
 A general Site Map draft cannot silently move a Camera. Every changed point requires confirmed `map_position_correction` metadata and a reason. Physical movement cannot use that path.
 
-Map Position Correction publishes a map-only replacement revision, retains Camera Registration, and audits the old and new points and Zones. Physical Camera Move requires disabled monitoring, preserves the existing source unless replaced later, creates a Root-only Camera Draft, and cannot publish until a fresh reference and floor/bin Registration validate. Publication changes placement and Registration atomically.
+Map Position Correction remains inside the current active Zone, publishes a map-only replacement revision, retains Camera Registration, retargets active Camera operations with history and Cleaner notification, and audits the old and new points. Physical Camera Move requires disabled monitoring, preserves the existing source unless replaced later, supports an existing or provisional new destination Zone, creates a Root-only Camera Draft, and cannot publish until a fresh reference and floor/bin Registration validate. Publication changes placement and Registration atomically and dismisses operations tied to the old Camera view.
 
 One unfinished reconfiguration or Physical Camera Move draft is locked per Camera. Publication and cancellation release the lock. Cancelling a Physical Camera Move never deletes the active Camera source media.
 

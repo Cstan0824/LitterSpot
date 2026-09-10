@@ -5,8 +5,10 @@ import { HttpError } from "../shared/httpError.js";
 import { V2_SCHEMA_VERSION } from "../shared/v2Contracts.js";
 import { publishSiteCameraControl } from "./cameraLiveEvents.js";
 import { startV2CameraDraft } from "./v2CameraDraftService.js";
-import { containingPolygon, pointInMapBounds, type Polygon } from "./v2MapGeometry.js";
+import { containingPolygon, pointInMapBounds, validateMapGeometry, type Polygon } from "./v2MapGeometry.js";
 import { v2AuditEventData, writeV2AuditEvent, type AuditActor } from "./v2AuditService.js";
+import { enqueueV2ImmediateAssignmentTrigger } from "./v2OrchestratorTriggers.js";
+import { retargetActiveCameraOperations } from "./v2CameraMovementOperations.js";
 
 type PlacementInput = CameraPlacementChange & { siteId: string; cameraId: string; actor: AuditActor; requestId: string };
 
@@ -32,12 +34,21 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
   ]);
   if (!revision.exists || revision.data()?.siteId !== input.siteId) throw new HttpError(409, "Active Site Map revision is missing.");
   if (!pointInMapBounds(input.point, Number(revision.data()?.widthMeters), Number(revision.data()?.heightMeters))) throw new HttpError(422, "Camera Placement must remain inside the Site Map boundary.", { code: "camera_placement_outside_bounds" });
-  const zoneId = containingPolygon(input.point, zones.docs.map((document) => ({ id: document.id, polygon: document.data()?.polygon as Polygon })));
+  const activeZones = zones.docs.map((document) => ({ id: document.id, polygon: document.data()?.polygon as Polygon }));
+  const provisionalZone = input.mode === "physical_camera_move" ? input.provisionalZone : null;
+  if (provisionalZone) {
+    if (zones.docs.some((document) => document.id === provisionalZone.zoneId)) throw new HttpError(409, "The provisional Zone ID is already in use.");
+    const validation = validateMapGeometry({ widthMeters: Number(revision.data()?.widthMeters), heightMeters: Number(revision.data()?.heightMeters), zones: [...activeZones, { id: provisionalZone.zoneId, polygon: provisionalZone.polygon }], points: [{ label: "camera_placement", point: input.point, requiresZone: true }] });
+    if (!validation.valid) throw new HttpError(422, "Provisional Zone geometry is invalid.", { code: "provisional_zone_geometry_invalid", errors: validation.errors, issues: validation.issues, zoneConflicts: validation.zoneConflicts });
+  }
+  const zoneCandidates = provisionalZone ? [...activeZones, { id: provisionalZone.zoneId, polygon: provisionalZone.polygon }] : activeZones;
+  const zoneId = containingPolygon(input.point, zoneCandidates);
   if (!zoneId) throw new HttpError(422, "Camera Placement must be inside exactly one active Zone.", { code: "camera_placement_not_in_exactly_one_zone" });
-  const zoneNameSnapshot = String(zones.docs.find((document) => document.id === zoneId)?.data()?.zoneNameSnapshot ?? zoneId);
+  const zoneNameSnapshot = String(provisionalZone?.zoneId === zoneId ? provisionalZone.zoneNameSnapshot : zones.docs.find((document) => document.id === zoneId)?.data()?.zoneNameSnapshot ?? zoneId);
   const previous = cameraPlacements.docs.find((document) => document.id === input.cameraId);
   if (!previous) throw new HttpError(409, "The active Camera Placement is missing.");
   if (samePoint(previous.data()?.point, input.point)) throw new HttpError(400, "Choose a different Camera position.");
+  if (input.mode === "map_position_correction" && previous.data()?.zoneId !== zoneId) throw new HttpError(422, "Map Position Correction must remain inside the Camera's current Zone.", { code: "camera_position_correction_zone_change", currentZoneId: previous.data()?.zoneId, attemptedZoneId: zoneId });
   if (cameraPlacements.size + cleanerStations.size + zones.size > 100) throw new HttpError(413, "This Site Map has more than 100 structural records and cannot be replaced in one Camera move operation.");
 
   if (input.mode === "physical_camera_move") {
@@ -50,6 +61,7 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
       description: typeof camera.data()?.description === "string" ? camera.data()!.description : null,
       sourceType,
       placement: { point: input.point },
+      provisionalZone: provisionalZone ?? null,
       moveReason: input.reason,
       actorUid: input.actor.uid,
     });
@@ -64,6 +76,11 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
     if (!latestSite.exists || latestSite.data()?.activeMapRevisionId !== revision.id) throw new HttpError(409, "The Site Map changed. Refresh and retry.");
     if (!latestCamera.exists || latestCamera.data()?.revision !== input.expectedCameraRevision) throw new HttpError(409, "The Camera changed. Refresh and retry.");
     const revisionNumber = Number(latestSite.data()?.mapRevisionNumber ?? revision.data()?.revisionNumber ?? 0) + 1;
+    await retargetActiveCameraOperations(transaction, {
+      siteId: input.siteId, cameraId: input.cameraId, cameraName: String(camera.data()?.name ?? input.cameraId),
+      mapRevisionId: replacementRevision.id, zoneId, zoneName: zoneNameSnapshot, point: input.point,
+      reason: input.reason, actor: input.actor, requestId: input.requestId,
+    });
     transaction.create(replacementRevision, {
       ...revision.data(),
       schemaVersion: V2_SCHEMA_VERSION,
@@ -85,6 +102,7 @@ export async function changeV2CameraPlacement(input: PlacementInput) {
     transaction.update(cameraRef, { placementMapRevisionId: replacementRevision.id, updatedAt: FieldValue.serverTimestamp(), updatedByUid: input.actor.uid, revision: FieldValue.increment(1) });
     transaction.create(auditRef, v2AuditEventData({ auditEventId: auditRef.id, actor: input.actor, siteId: input.siteId, siteNameSnapshot: String(latestSite.data()?.name ?? input.siteId), action: "camera_map_position_corrected", resourceType: "Camera", resourceId: input.cameraId, outcome: "succeeded", reason: input.reason, before: { point: previous.data()?.point, zoneId: previous.data()?.zoneId, mapRevisionId: revision.id }, after: { point: input.point, zoneId, mapRevisionId: replacementRevision.id }, requestId: input.requestId }));
   });
+  await enqueueV2ImmediateAssignmentTrigger(input.siteId, "camera_position_corrected", `camera-position-corrected:${replacementRevision.id}`);
   publishSiteCameraControl(input.siteId);
   return { mode: input.mode, status: "published" as const, cameraId: input.cameraId, zoneId, point: input.point, mapRevisionId: replacementRevision.id, cameraRevision: input.expectedCameraRevision + 1 };
 }

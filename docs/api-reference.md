@@ -1672,7 +1672,7 @@ All routes require an active Site Supervisor. Mutations are Root-only except the
 | POST | `/api/site-map/draft/publish` | Root only. Revalidates and atomically publishes the immutable replacement revision. |
 | DELETE | `/api/site-map/draft` | Root only. Discards the draft without changing the active revision. |
 | POST | `/api/site-map/background` | Root-only multipart `image`. Stores one Site-owned configuration image and returns its media ID, content URL, MIME type, width, and height. |
-| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Publishes a confirmed `map_position_correction`, or starts a `physical_camera_move` draft that must continue through fresh Camera Registration. |
+| POST | `/api/site-map/camera-placements/{cameraId}` | Root only. Publishes a confirmed same-Zone `map_position_correction`, or starts a `physical_camera_move` draft for an active or provisional destination Zone that must continue through fresh Camera Registration. The response is `{ placement }`. |
 | PUT | `/api/site-map/station-points/{cleanerId}` | Root or Regular. Publishes one in-boundary Station Point; `zoneId` may be null. |
 
 Site Map draft body:
@@ -1725,6 +1725,7 @@ Camera placement change body:
 | Method | Route | Response |
 | --- | --- | --- |
 | GET | `/api/camera-creation/cameras/{cameraId}/detail` | `{ camera, currentAssignments, recentHistory, orchestratorTrace, auditEvents }` |
+| GET | `/api/camera-creation/cameras/{cameraId}/draft` | `{ draft }`; returns the Camera's unfinished draft or `null`. A Physical Camera Move draft remains Root-only. |
 
 The caller must be an active Supervisor for the Camera's Site. `camera` includes the active placement, runtime state, source, Registration, and active map revision. `currentAssignments` contains active Camera-targeted Work Orders. `recentHistory` combines Camera Alerts and Work Orders with status, Cleaner snapshot, time, and evidence media reference when one exists.
 
@@ -1732,7 +1733,7 @@ The caller must be an active Supervisor for the Camera's Site. `camera` includes
 
 ### V2 Camera registration lifecycle
 
-`POST /api/camera-creation/drafts/start` may include a `provisionalZone` alongside the Camera placement. The backend validates that Zone against the active Site Map, stores it only in the Camera Draft, and accepts the Camera point only when it falls inside exactly that active or provisional Zone.
+Camera Creation and `POST /api/site-map/camera-placements/{cameraId}` for a Physical Camera Move may include a `provisionalZone` alongside the Camera placement. The backend validates that Zone against the active Site Map, stores it only in the Camera Draft, and accepts the Camera point only when it falls inside exactly that active or provisional Zone.
 
 `POST /api/camera-creation/drafts/{draftId}/publish` publishes a provisional Zone, Camera placement, source and Registration in one transaction. The active Site Map does not change before this call.
 
