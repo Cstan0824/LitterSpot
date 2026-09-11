@@ -21,6 +21,10 @@
 .team-review-map .team-station-map.shared > p { display: none; }
 .team-review-map .team-station-map.shared > .site-map-viewer .site-map-viewer-window { height: 112px; }
 
+/* The wizard map is a location picker, so it stays compact enough to keep the next action visible. */
+.team-wizard-location .team-station-map.shared > .site-map-viewer .site-map-viewer-window { height: 250px; }
+
 @media(max-width:780px){.team-station-map.shared > .site-map-viewer .site-map-viewer-window{height:300px}.team-review-map .team-station-map.shared > .site-map-viewer .site-map-viewer-window{height:150px}}
+@media(max-width:780px){.team-wizard-location .team-station-map.shared > .site-map-viewer .site-map-viewer-window{height:230px}}
 
 .team-view-map-wrap{position:relative}.team-view-map-readout{position:absolute;z-index:7;right:14px;bottom:14px;width:min(300px,calc(100% - 28px))!important;background:rgba(255,255,255,.96);box-shadow:0 3px 12px rgba(7,27,46,.14)}
