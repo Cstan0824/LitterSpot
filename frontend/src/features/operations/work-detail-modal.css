@@ -148,3 +148,113 @@
   .work-review-outcomes { grid-template-columns: 1fr; }
   .work-action-confirmation > div { display: grid; }
 }
+
+/* Review actions form one short decision sequence: choose, then save. */
+.work-detail-modal .work-review-outcomes {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.work-detail-modal .work-review-outcomes > span {
+  color: #647b8b;
+  font: 700 10px/1 "Field Mono", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.work-detail-modal .work-review-outcomes > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.work-detail-modal .work-review-outcomes button {
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1px solid #bdc8d2;
+  border-radius: 0;
+  background: #fff;
+  color: #405d70;
+  font: 700 11px/1.1 "Field Text", sans-serif;
+}
+
+.work-detail-modal .work-review-outcomes button.selected {
+  border-color: #20a6cf;
+  background: #eaf8fc;
+  color: #075d7c;
+  box-shadow: inset 0 -3px #20a6cf;
+}
+
+.work-detail-modal .work-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.work-detail-modal .work-action-buttons > button {
+  min-height: 46px;
+  margin: 0;
+}
+
+.work-detail-modal .work-action-buttons > .primary-action {
+  grid-column: 1 / -1;
+  border-color: #102b55;
+  background: #102b55;
+  color: #fff;
+}
+
+.work-detail-modal .work-action-buttons > .danger {
+  grid-column: 2;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #ad4038;
+  font-size: 11px;
+  justify-self: end;
+}
+
+.work-detail-modal .work-action-buttons > .danger:hover {
+  background: transparent;
+  color: #8f2c27;
+  text-decoration: underline;
+}
+
+@media (max-width: 520px) {
+  .work-detail-modal .work-review-outcomes > div { grid-template-columns: 1fr; }
+}
+
+/* Keep every review action button on one visual rhythm. */
+.work-detail-modal .work-action-buttons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.work-detail-modal .work-action-buttons > button,
+.work-detail-modal .work-action-buttons > .danger {
+  box-sizing: border-box;
+  grid-column: auto;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid #102b55;
+  background: #102b55;
+  color: #fff;
+  font: 700 13px/1 "Field Text", sans-serif;
+  text-decoration: none;
+}
+
+.work-detail-modal .work-action-buttons > .danger {
+  border-color: #d76d65;
+  background: #fff5f3;
+  color: #ae3e36;
+  justify-self: stretch;
+}
+
+.work-detail-modal .work-action-buttons > .danger:hover {
+  border-color: #c4534b;
+  background: #fff0ed;
+  color: #96342d;
+  text-decoration: none;
+}
