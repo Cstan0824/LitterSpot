@@ -12,7 +12,7 @@ export function alertResponseJourney(alert: Pick<Alert, "status" | "evidenceAvai
   const cleaner = work?.cleanerNameSnapshot || "Cleaner assigned";
   const base: AlertJourneyStage[] = [
     { id: "evidence", label: alert.evidenceAvailable ? "Evidence retained" : "Evidence unavailable", detail: alert.evidenceAvailable ? "Camera frame stored" : "No retained frame", state: alert.evidenceAvailable ? "done" : "pending" },
-    { id: "confirmed", label: "Alert confirmed", detail: "System qualification", state: "done" },
+    { id: "confirmed", label: "Alert confirmed", detail: "Confirmed", state: "done" },
     { id: "assignment", label: "Cleaner assignment", detail: "Pending", state: "pending" },
     { id: "cleaning", label: "Cleaning", detail: "Not started", state: "pending" },
     { id: "outcome", label: "Verification", detail: "Pending", state: "pending" },

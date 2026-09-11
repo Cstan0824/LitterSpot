@@ -95,7 +95,7 @@ export function GeographicOperationsDashboard({ zones, cameras, alerts, workOrde
   const backgroundContentUrl = siteMap.background?.contentUrl ?? (siteMap.revision.backgroundMediaId ? `/api/media/${encodeURIComponent(siteMap.revision.backgroundMediaId)}/content` : null);
 
   return <section className="atlas-dashboard">
-    <header className="atlas-page-title"><div><span>{siteName} · LIVE SYSTEM STATUS</span><h1>{zoneViews.some((zone) => zone.tone === "action") ? "One zone needs action." : "Operations across every zone."}</h1><p>Monitor site conditions, current responsibility, camera evidence, and active response from one live view.</p></div><div className="atlas-live"><i />{statusLabel}<small>{statusDetail}</small></div></header>
+    <header className="atlas-page-title"><div><span>{siteName} · LIVE OPERATIONS</span><h1>{zoneViews.some((zone) => zone.tone === "action") ? "One zone needs action." : "Operations across every zone."}</h1><p>Conditions, assignments, and active responses.</p></div><div className="atlas-live"><i />{statusLabel}<small>{statusDetail}</small></div></header>
 
     <div className="atlas-map-layout">
       <section className="atlas-map shared" aria-label={`${siteName} monitored zones`}>
