@@ -72,7 +72,7 @@ cleanerSelfRoutes.get("/work-orders", async (req, res) => {
     if (status !== "active" && status !== "all") return res.json({ workOrders: await listV2WorkOrders(String(req.authUser.siteId), { status, cleanerId: req.cleaner!.cleanerId, limit: status === "resolved" || status === "dismissed" ? Math.min(limit, 5) : limit }) });
     const all = await listV2WorkOrders(String(req.authUser.siteId), { status: "all", cleanerId: req.cleaner!.cleanerId, limit: 100 });
     const active = all.filter((work) => ACTIVE.includes(work.status));
-    const recentTerminal = all.filter((work) => ["resolved", "dismissed"].includes(work.status)).slice(0, 5);
+    const recentTerminal = all.filter((work) => ["resolved", "dismissed"].includes(work.status));
     return res.json({ workOrders: status === "active" ? active : [...active, ...recentTerminal] });
   }
   const query = workOrderListQuerySchema.parse(req.query);

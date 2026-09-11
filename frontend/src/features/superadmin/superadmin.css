@@ -190,6 +190,116 @@
 .sa-form-stack { display: grid; gap: 14px; }
 .sa-form-stack + .sa-form-error { margin-top: 14px; }
 
+/* Platform administration shares the same operational type and control system as Site accounts. */
+.sa-shell { background: #edf2f5; color: #173650; }
+.sa-nav { min-height: 68px; border-bottom-color: #244766; background: #102b55; }
+.sa-brand { padding-inline: 22px; border-right-color: #244766; }
+.sa-brand strong { font-weight: 700; }
+.sa-nav nav button { font: 700 13px/1 "Field Text", sans-serif; }
+.sa-nav nav button.active { border-bottom-color: #20a6cf; }
+.sa-page { width: min(1600px, calc(100% - 56px)); padding: 28px 0 54px; }
+.sa-page-head, .sa-site-detail-head { margin-bottom: 22px; }
+.sa-page-head h1, .sa-site-detail-head h1 { color: #102b55; font-weight: 700; }
+.sa-page-head p, .sa-site-detail-head p { color: #50697a; font: 16px/1.5 "Field Text", sans-serif; }
+.sa-page-head > button, .sa-site-detail-head button, .sa-operation-banner button, .sa-dialog-actions button { font: 700 13px/1 "Field Text", sans-serif; }
+.sa-page-head > button, .sa-site-detail-head button, .sa-operation-banner button { border-color: #102b55; color: #102b55; }
+.sa-page-head > button.sa-primary, .sa-primary, .sa-site-detail-head .sa-primary { border-color: #102b55; background: #102b55; color: #fff; }
+.sa-register-strip, .sa-ledger, .sa-site-workbench, .sa-resource-register, .sa-site-audit { border-color: #aebbc6; }
+.sa-site-row.labels, .sa-register-strip, .sa-resource-register > div span { font-family: "Field Mono", monospace; }
+.sa-site-row > span > b, .sa-site-workbench h2, .sa-resource-register h2, .sa-site-audit h2, .sa-dialog > header h2, .sa-create-section > header b { font-family: "Field Display", sans-serif; font-weight: 700; }
+.sa-dialog > header h2 { color: #102b55; }
+.sa-dialog-actions button.primary { border-color: #102b55; background: #102b55; color: #fff; }
+
+/* Keep platform navigation and account controls in the same family as the Site workspace. */
+.sa-nav {
+  min-height: 66px;
+  border-bottom-color: rgba(125, 227, 210, .28);
+  background: radial-gradient(circle at 0 0, rgba(53, 183, 161, .18), transparent 22rem), #102b55;
+}
+.sa-brand { border-right: 0; }
+.sa-brand > b { border-color: #35b7a1; color: #7de3d2; }
+.sa-brand strong { font: 700 25px/.86 "Field Display", sans-serif; letter-spacing: .01em; }
+.sa-brand small { color: #87a399; font-weight: 400; }
+.sa-nav nav button { color: #b9cbc4; }
+.sa-nav nav button:hover, .sa-nav nav button.active { color: #fff; }
+.sa-nav nav button.active { border-bottom-color: #35b7a1; }
+.sa-user { border-color: rgba(125, 227, 210, .46); background: #113a52; color: #7de3d2; }
+.sa-user:hover { border-color: #35b7a1; background: #35b7a1; color: #102b55; }
+
+.sa-dialog-scrim:has(.sa-account-drawer) {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  background: rgba(4, 15, 24, .64);
+  animation: sa-account-scrim-in .2s ease-out both;
+}
+.sa-account-drawer {
+  width: min(460px, 100%);
+  min-height: 100dvh;
+  max-height: 100dvh;
+  margin-left: auto;
+  overflow-y: auto;
+  border: 0;
+  border-left: 1px solid #9babb9;
+  box-shadow: -24px 0 70px rgba(0, 0, 0, .3);
+  animation: sa-account-drawer-in .26s cubic-bezier(.2, .8, .2, 1) both;
+}
+.sa-account-drawer > header { padding: 19px 20px; }
+.sa-account-drawer > header h2 { font: 700 30px/1 "Field Display", sans-serif; }
+.sa-account-drawer .sa-account-person { padding: 20px; border-bottom: 1px solid #dbe3e9; background: #fff; }
+.sa-account-drawer .sa-account-person > i { width: 48px; height: 48px; flex-basis: 48px; border: 1px solid #238fa6; background: #113a52; color: #86deef; font-size: 12px; }
+.sa-account-drawer .sa-account-person strong { font: 700 15px/1.2 "Field Text", sans-serif; }
+.sa-account-drawer .sa-account-person span { margin-top: 5px; font: 11px/1.25 "Field Text", sans-serif; }
+.sa-account-drawer .sa-detail-list { padding: 5px 20px 16px; }
+.sa-account-drawer .sa-detail-list div { grid-template-columns: 125px minmax(0, 1fr); gap: 14px; padding: 13px 0; }
+.sa-account-drawer .sa-detail-list dt { font: 11px/1.25 "Field Text", sans-serif; }
+.sa-account-drawer .sa-detail-list dd { font: 700 11px/1.25 "Field Text", sans-serif; }
+.sa-account-drawer .sa-dialog-actions { padding: 14px 20px 20px; border: 0; }
+.sa-account-drawer .sa-dialog-actions button { width: 100%; min-height: 44px; font: 700 12px/1 "Field Text", sans-serif; }
+@keyframes sa-account-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sa-account-drawer-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sa-dialog-scrim:has(.sa-account-drawer), .sa-account-drawer { animation: none; }
+}
+
+/* Superadmin keeps its smaller navigation set, using the exact Site-account header structure. */
+.sa-platform-nav .field-nav-logo {
+  min-width: 300px;
+  font: 900 30px/.82 "Prototype Display", "Field Display", sans-serif;
+  letter-spacing: -.045em;
+}
+.sa-platform-nav .field-primary-nav { justify-content: center; }
+.sa-platform-nav .field-primary-nav > button:not(.field-nav-mobile-site) { min-width: 170px; flex: 0 1 220px; }
+
+@media (max-width: 1180px) {
+  .sa-platform-nav .field-primary-nav {
+    position: static;
+    width: auto;
+    height: 100%;
+    padding: 0;
+    flex: 1;
+    flex-direction: row;
+    align-items: stretch;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+  .sa-platform-nav .field-primary-nav > button:not(.field-nav-mobile-site) { min-height: 0; flex: 0 1 180px; justify-content: center; padding: 0 7px; border: 0; font-size: 14px; }
+  .sa-platform-nav .field-primary-nav > button:not(.field-nav-mobile-site)::after { inset: auto 8px 0; width: auto; height: 4px; transform: scaleX(0); }
+  .sa-platform-nav .field-primary-nav > button.active::after { transform: scaleX(1); }
+}
+
+@media (max-width: 650px) {
+  .sa-platform-nav { padding: 0 14px; }
+  .sa-platform-nav .field-nav-logo { min-width: 0; font-size: 30px; }
+  .sa-platform-nav .field-primary-nav > button:not(.field-nav-mobile-site) { min-width: 0; flex: 1; font-size: 12px; }
+  .sa-platform-nav .field-nav-icon { display: none; }
+  .sa-platform-nav .field-nav-user { width: 36px; height: 36px; flex: 0 0 36px; margin-left: 8px; }
+}
+
 @media (max-width: 900px) {
   .sa-nav { grid-template-columns: 210px minmax(0, 1fr) 58px; }
   .sa-nav nav button { min-width: 120px; }

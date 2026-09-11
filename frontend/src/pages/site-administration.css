@@ -57,6 +57,7 @@
 .site-audit button,
 .site-dialog button { min-height: 40px; padding-inline: 15px; border: 1px solid #91a7b8; background: #fff; color: var(--site-ink); font-size: 12px; font-weight: 800; }
 .site-admin-mode button { border-color: rgba(255,255,255,.38); background: transparent; color: #fff; }
+.site-admin-map-panel > header > button { display: none; }
 .site-admin-page button.primary { border-color: var(--site-blue); background: var(--site-blue); color: #fff; }
 .site-admin-page button:not(:disabled):hover { border-color: var(--site-blue); }
 
@@ -113,9 +114,11 @@
 .site-admin-next h2 { font-size: 34px; }
 .site-admin-next p { margin: 10px 0 20px; color: #abc0cc; font-size: 12px; line-height: 1.5; }
 .site-admin-next button { width: 100%; border-color: rgba(255,255,255,.34); background: transparent; color: #fff; }
+.site-admin-next { display: none; }
 
 .site-admin-workspace { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 18px; align-items: start; }
-.site-zone-list { max-height: calc(100vh - 125px); overflow: auto; }
+.site-zone-list { max-height: calc(100vh - 125px); overflow: auto; -ms-overflow-style: none; scrollbar-width: none; }
+.site-zone-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .site-zone-list > header { position: sticky; z-index: 3; top: 0; display: flex; min-height: 88px; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--site-line); background: #fff; }
 .site-zone-list > header button { min-height: 36px; padding-inline: 11px; border: 1px solid #90a7b8; background: #fff; color: var(--site-blue); font-size: 11px; font-weight: 800; }
 .site-zone-list > button { display: grid; width: 100%; min-height: 76px; grid-template-columns: 8px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 13px 15px; border: 0; border-bottom: 1px solid #dde4eb; background: transparent; color: var(--site-ink); text-align: start; }

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CategoryScale, Chart as ChartJS, Filler, Legend, LineElement, LinearScale, PointElement, Tooltip, type ChartData, type ChartOptions } from "chart.js";
+import annotationPlugin from "chartjs-plugin-annotation";
+import { Line } from "react-chartjs-2";
 import {
   getBinPlacementComparison,
   getBinPlacementInterventions,
@@ -12,6 +15,8 @@ import {
   type BinPlacementZoneRanking,
 } from "../../services/v2/binPlacement";
 import { initialBinPlacementLookback, lookbackFromSnapshot } from "./binPlacementLookback";
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend, annotationPlugin);
 
 type Metric = "cleaningFrequency" | "binOverflowFrequency";
 
@@ -32,54 +37,24 @@ function seriesSlots(side: BinPlacementComparisonSide, metric: Metric) {
     .map((localDate) => ({ localDate, value: rowByDate.get(localDate)?.[metric] ?? null }));
 }
 
-function plot(values: Array<number | null>, startX: number, endX: number, ceiling: number) {
-  const coordinate = (value: number, index: number) => {
-    const x = values.length <= 1 ? (startX + endX) / 2 : startX + index / (values.length - 1) * (endX - startX);
-    const y = 95 - value / ceiling * 88;
-    return { x, y };
-  };
-  const segments: string[] = [];
-  const points: Array<{ x: number; y: number }> = [];
-  let active: string[] = [];
-  values.forEach((value, index) => {
-    if (value == null) {
-      if (active.length > 1) segments.push(active.join(" "));
-      active = [];
-      return;
-    }
-    const point = coordinate(value, index);
-    points.push(point);
-    active.push(`${point.x},${point.y}`);
-  });
-  if (active.length > 1) segments.push(active.join(" "));
-  return { segments, points };
-}
-
-function TrendChart({ title, comparison, metric }: { title: string; comparison: BinPlacementComparison; metric: Metric }) {
-  const beforeSlots = seriesSlots(comparison.before, metric);
-  const afterSlots = seriesSlots(comparison.after, metric);
-  const observed = [...beforeSlots, ...afterSlots].flatMap((slot) => slot.value == null ? [] : [slot.value]);
-  const ceiling = Math.max(1, ...observed);
-  const before = plot(beforeSlots.map((slot) => slot.value), 0, 47, ceiling);
-  const after = plot(afterSlots.map((slot) => slot.value), 53, 100, ceiling);
+function TrendChart({ comparison, metric, title, accent }: { comparison: BinPlacementComparison; metric: Metric; title: string; accent: "cleaning" | "overflow" }) {
+  const before = seriesSlots(comparison.before, metric);
+  const after = seriesSlots(comparison.after, metric);
+  const placementLabel = `Bin placed · ${date(comparison.implementedAt)}`;
+  const labels = [...before.map((slot) => date(slot.localDate)), placementLabel, ...after.map((slot) => date(slot.localDate))];
+  const beforeSeries = [...before.map((slot) => slot.value), null, ...after.map(() => null)];
+  const afterSeries = [...before.map(() => null), null, ...after.map((slot) => slot.value)];
+  const observed = [...beforeSeries, ...afterSeries].some((value) => value != null);
   const missing = comparison.before.missingDates.length + comparison.after.missingDates.length;
+  const data: ChartData<"line", Array<number | null>, string> = { labels, datasets: [
+    { label: "Before placement", data: beforeSeries, borderColor: "#ef584a", backgroundColor: "#ef584a", borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: "#ef584a", tension: .22, spanGaps: false },
+    { label: "After placement", data: afterSeries, borderColor: "#20a6cf", backgroundColor: "#20a6cf", borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: "#20a6cf", tension: .22, spanGaps: false },
+  ] };
+  const options: ChartOptions<"line"> = { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, plugins: { legend: { display: false }, tooltip: { backgroundColor: "#102b55", titleFont: { family: "Field Text, sans-serif", weight: "bold" }, bodyFont: { family: "Field Text, sans-serif" }, padding: 11, displayColors: true }, annotation: { annotations: { placement: { type: "line", xMin: placementLabel, xMax: placementLabel, borderColor: "#173650", borderWidth: 1, borderDash: [6, 5], label: { display: true, content: "Bin placed", position: "start", backgroundColor: "rgba(255,255,255,.96)", color: "#173650", font: { family: "Field Text, sans-serif", weight: "bold", size: 11 }, padding: 6 } } } } }, scales: { x: { grid: { color: "rgba(176,194,204,.28)" }, ticks: { color: "#607888", font: { family: "Field Text, sans-serif", size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } }, y: { beginAtZero: true, title: { display: true, text: "Frequency", color: "#173650", font: { family: "Field Text, sans-serif", weight: "bold", size: 11 } }, grid: { color: "rgba(176,194,204,.42)" }, ticks: { color: "#607888", font: { family: "Field Text, sans-serif", size: 10 }, precision: 0 } } } };
 
-  return <section className="bin-trend-chart">
-    <header><h2>{title}</h2><div><span className="before">Before placement</span><span className="after">After placement</span></div></header>
-    <div className="bin-chart-body">
-      <span className="bin-chart-axis">Frequency</span>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${title} before and after bin placement`}>
-        <g className="bin-chart-grid"><line x1="0" y1="7" x2="100" y2="7" /><line x1="0" y1="29" x2="100" y2="29" /><line x1="0" y1="51" x2="100" y2="51" /><line x1="0" y1="73" x2="100" y2="73" /><line x1="0" y1="95" x2="100" y2="95" /></g>
-        <line className="bin-chart-marker" x1="50" y1="0" x2="50" y2="100" />
-        {before.segments.map((points, index) => <polyline className="bin-chart-before" points={points} key={`before-${index}`} />)}
-        {after.segments.map((points, index) => <polyline className="bin-chart-after" points={points} key={`after-${index}`} />)}
-        {before.points.map((point, index) => <circle className="bin-chart-before-point" cx={point.x} cy={point.y} r="1.25" key={`before-point-${index}`} />)}
-        {after.points.map((point, index) => <circle className="bin-chart-after-point" cx={point.x} cy={point.y} r="1.25" key={`after-point-${index}`} />)}
-      </svg>
-      <span className="bin-chart-marker-label">Bin placed</span>
-      <div className="bin-chart-range-labels"><span>{date(comparison.before.requestedStart)}</span><strong>{date(comparison.implementedAt)}</strong><span>{date(comparison.after.requestedEnd)}</span></div>
-      {!observed.length && <div className="bin-chart-empty">No observed data in this comparison window.</div>}
-    </div>
+  return <section className={`bin-trend-chart bin-trend-chart-${accent}`}>
+    <header><div><span>PLACEMENT IMPACT</span><h2>{title}</h2></div><div className="bin-chart-metric-legend"><span className="before">Before placement</span><span className={accent}>After placement</span></div></header>
+    <div className="bin-chart-canvas">{observed ? <Line data={data} options={options} /> : <div className="bin-chart-empty">No observed data in this comparison window.</div>}</div>
     <p>{number(comparison.before.availableDays, 2)} of {comparison.requestedDays} before-days and {number(comparison.after.availableDays, 2)} of {comparison.requestedDays} after-days available{missing ? `; ${missing} calendar date${missing === 1 ? " is" : "s are"} missing.` : "."}</p>
   </section>;
 }
@@ -209,6 +184,6 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
       <div><label>Intervention<select value={selectedInterventionId} onChange={(event) => setSelectedInterventionId(event.target.value)} disabled={!interventions.length}>{interventions.length ? interventions.map((item) => <option value={item.id} key={item.id}>{item.zoneNameSnapshot} · {dateTime(item.implementedAt)}</option>) : <option value="">No Intervention history</option>}</select></label><label>Comparison days<input type="number" min="2" max="3660" step="1" value={comparisonInput} onChange={(event) => setComparisonInput(event.target.value)} /></label><button type="button" onClick={applyComparisonDays} disabled={!selectedInterventionId || comparisonLoading}>{comparisonLoading ? "Loading…" : "Update comparison"}</button></div>
     </section>
 
-    {comparison ? <section className="bin-trend-grid"><TrendChart title="Cleaning frequency" comparison={comparison} metric="cleaningFrequency" /><TrendChart title="Bin-overflow frequency" comparison={comparison} metric="binOverflowFrequency" /></section> : <section className="bin-comparison-empty"><strong>{comparisonLoading ? "Loading comparison…" : "No before-and-after comparison yet."}</strong><p>{interventions.length ? "Choose an Intervention and comparison range." : "Press Implement after a physical bin placement. The comparison will build as daily data becomes available."}</p></section>}
+    {comparison ? <section className="bin-trend-grid"><TrendChart comparison={comparison} metric="cleaningFrequency" title="Cleaning frequency" accent="cleaning" /><TrendChart comparison={comparison} metric="binOverflowFrequency" title="Bin-overflow frequency" accent="overflow" /></section> : <section className="bin-comparison-empty"><strong>{comparisonLoading ? "Loading comparison…" : "No before-and-after comparison yet."}</strong><p>{interventions.length ? "Choose an Intervention and comparison range." : "Press Implement after a physical bin placement. The comparison will build as daily data becomes available."}</p></section>}
   </section>;
 }

@@ -22,11 +22,11 @@ type OperationsPage = "dashboard" | "alerts" | "history" | "placement" | "camera
 
 function SessionFailure({ error, onRetry, onLogout }: { error: unknown; onRetry: () => void; onLogout: () => void }) {
   const copy = sessionErrorCopy(error);
-  return <main className="role-pending-page"><section className="role-pending-panel error">
-    <div className="login-brand"><b>LS</b><div><strong>LitterSpot</strong><span>Application session</span></div></div>
-    <h1>{copy.title}</h1><p>{copy.message}</p>
-    <div className="role-pending-actions"><button className="primary" type="button" onClick={onRetry}>Try again</button><button className="outline-button" type="button" onClick={onLogout}>Sign out</button></div>
-  </section></main>;
+  return <SessionRecovery title={copy.title} message={copy.message} onRetry={onRetry} onLogout={onLogout} />;
+}
+
+function SessionRecovery({ title, message, onRetry, onLogout, loading = false }: { title: string; message: string; onRetry?: () => void; onLogout?: () => void; loading?: boolean }) {
+  return <main className="session-recovery-page"><header className="session-recovery-brand"><b>LS</b><div><strong>LitterSpot</strong><span>Application session</span></div></header><section className={`session-recovery-card ${loading ? "loading" : ""}`} aria-live="polite"><span>{loading ? "CONNECTING" : "SESSION STATUS"}</span><h1>{title}</h1><p>{message}</p>{loading ? <i aria-label="Loading" /> : <div className="session-recovery-actions"><button className="primary" type="button" onClick={onRetry}>Try again <span aria-hidden="true">→</span></button><button type="button" onClick={onLogout}>Sign out</button></div>}</section></main>;
 }
 
 function App() {
@@ -38,7 +38,7 @@ function App() {
     return () => removeEventListener("hashchange", syncRoute);
   }, []);
 
-  if (sessionState.status === "checking") return <main className="ops-loading">Checking application session…</main>;
+  if (sessionState.status === "checking") return <SessionRecovery loading title="Checking your session" message="Confirming your LitterSpot account and workspace access." />;
   if (sessionState.status === "anonymous") return <LoginPage onLogin={sessionState.signIn} />;
   if (sessionState.status === "error") return <SessionFailure error={sessionState.error} onRetry={() => { void sessionState.retry(); }} onLogout={() => { void sessionState.signOut(); }} />;
 

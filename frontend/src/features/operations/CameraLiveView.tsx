@@ -35,7 +35,7 @@ export function cameraMonitoringStatus(input: { available: boolean; enabled: boo
   return { tone: "online", title: "Live monitoring", detail: input.analysisUpdating ? `${freshness} · Analysis is catching up` : `${freshness} · ${input.peopleCount ?? 0} people · ${Math.round(input.processingTimeMs ?? 0)} ms` };
 }
 
-export function CameraLiveView({ cameraId, compact = false }: { cameraId: string; compact?: boolean }) {
+export function CameraLiveView({ cameraId, compact = false, onReconfigure, onMove }: { cameraId: string; compact?: boolean; onReconfigure?: () => void; onMove?: () => void }) {
   const { state, monitor } = useSiteMonitoring(); const view = state.cameras[cameraId];
   const [original, setOriginal] = useState(false); const [canvasNode, setCanvasNode] = useState<HTMLCanvasElement | null>(null); const root = useRef<HTMLDivElement>(null); const [visible, setVisible] = useState(true); const [now, setNow] = useState(Date.now()); const [displayObservation, setDisplayObservation] = useState<CameraObservation>();
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
@@ -78,7 +78,7 @@ export function CameraLiveView({ cameraId, compact = false }: { cameraId: string
     </div>
     {!compact && <div className="camera-live-controls">
       <div className={`camera-monitoring-state ${operationalStatus.tone}`}><i aria-hidden="true" /><div><strong>{operationalStatus.title}</strong><p role="status">{operationalStatus.detail}</p></div></div>
-      <div>{(delayedCanvas || !state.owner && view?.frameDataUrl) && <button type="button" aria-pressed={original} onClick={() => setOriginal(!original)}>{original ? "Show analysis" : "Original video"}</button>}<button type="button" disabled={!view || view.controlBusy} onClick={() => void monitor.toggle(cameraId)}>{view?.controlBusy ? "Updating…" : enabled ? "Disable" : "Enable"}</button></div>
+      <div>{(delayedCanvas || !state.owner && view?.frameDataUrl) && <button type="button" aria-pressed={original} onClick={() => setOriginal(!original)}>{original ? "Show analysis" : "Original video"}</button>}{onMove && <button type="button" onClick={onMove}>Move Camera</button>}{onReconfigure && <button type="button" onClick={onReconfigure}>Reconfigure Camera</button>}<button type="button" disabled={!view || view.controlBusy} onClick={() => void monitor.toggle(cameraId)}>{view?.controlBusy ? "Updating…" : enabled ? "Disable" : "Enable"}</button></div>
     </div>}
   </div>;
 }
