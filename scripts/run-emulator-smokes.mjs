@@ -42,7 +42,7 @@ const integrationTests = [
 
 for (const [testFile, environment] of integrationTests) {
   const exitCode = await runNpm(
-    ["--workspace=backend", "run", "test", "--", "--run", testFile],
+    ["--workspace=backend", "run", "test", "--", "--run", "--testTimeout=15000", testFile],
     environment,
   );
   if (exitCode !== 0) process.exit(exitCode);

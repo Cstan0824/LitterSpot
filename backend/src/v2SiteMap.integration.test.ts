@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
 
@@ -54,6 +54,10 @@ run("V2 Site Map workflow", () => {
   });
 
   afterAll(async () => { await firebaseAuth.deleteUser(uid).catch(() => undefined); await firebaseAuth.deleteUser(regularUid).catch(() => undefined); });
+  afterEach(async () => {
+    await firestore.recursiveDelete(firestore.collection("siteMapDrafts").doc(siteId));
+    await firestore.collection("sites").doc(siteId).set({ mapDraftExists: false }, { merge: true });
+  });
 
   it("validates, publishes, and reads immutable map geometry", async () => {
     await startDraft();
