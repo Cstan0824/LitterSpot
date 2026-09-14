@@ -8,7 +8,7 @@ import { detectSupportedVideo, probeVideoFile, validateDeclaredVideoType } from 
 import { publishCameraControl } from "./cameraLiveEvents.js";
 
 export function assertDemoScenesEnabled() {
-  if (!["local-emulator", "development-cloud"].includes(env.appEnvironment) || process.env.CAMERA_DEMO_SCENES_ENABLED !== "true") throw new HttpError(404, "Route not found.");
+  if (!["local-emulator", "development-cloud", "production-cloud"].includes(env.appEnvironment) || process.env.CAMERA_DEMO_SCENES_ENABLED !== "true") throw new HttpError(404, "Route not found.");
 }
 export async function sceneCamera(siteId: string, cameraId: string) {
   const camera = await firestore.collection("cameras").doc(cameraId).get();

@@ -1,5 +1,37 @@
 # LitterSpot
 
+## Final cloud configuration
+
+The final application uses Firebase project `litterspot`, Firestore `(default)`,
+and cloud Email/Password Authentication. Node and FastAPI remain local. Media
+bytes stay in `data/media-store`, or the explicit `MEDIA_STORAGE_ROOT`; Firebase
+Storage is not used and the project remains on Spark.
+
+```bash
+npm start
+npm stop
+```
+
+`npm start` is the default final-app command. It starts the frontend, Node API,
+and FastAPI against the production Firebase configuration. `npm run
+start:cloud` is retained as an explicit alias for the same launcher.
+
+Set backend `APP_ENV=production-cloud`, both project settings to `litterspot`,
+and `FIREBASE_DATABASE_ID=(default)`. Keep the Admin credential outside the
+repository. Frontend web settings must use the same project, with no emulator
+connection variables. Existing emulator login sessions do not transfer; sign
+in again with the preserved account credentials.
+
+`npm run start:emulator` remains an independent local development option and
+is the only complete-app command that starts Firebase emulators.
+The clean/dirty scene shortcuts use cloud Auth when the Auth emulator is not
+running. Set `LITTERSPOT_AUTH_MODE=cloud` or `emulator` explicitly if both stacks
+are present. Cloud scene access requires Root authority and the explicit
+`CAMERA_DEMO_SCENES_ENABLED=true` prototype setting.
+
+The sections below still contain older implementation history. Legacy cleanup
+is a separate follow-up after cloud cutover verification.
+
 LitterSpot is a cleanliness-monitoring prototype for tourist attractions. Its
 public application path is React -> authenticated Node/Express API -> cloud
 Firestore, with a private FastAPI service used only for computer-vision

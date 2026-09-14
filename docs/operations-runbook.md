@@ -1,6 +1,49 @@
 # LitterSpot operations, backup, retention, and recovery runbook
 
-Last updated: 2026-08-17
+Last updated: 2026-09-14
+
+## Final cloud cutover and local recovery
+
+The current cloud target is `litterspot/(default)` in `asia-southeast1`.
+Authentication is cloud-backed; media is local under the configured
+`MEDIA_STORAGE_ROOT`. Start the complete local-hosted cloud app using `npm
+start` and stop it using `npm stop`. `npm run start:cloud` is an equivalent
+explicit alias. Use `npm run start:emulator` only for isolated future
+development.
+
+The 2026-09-14 migration archive is stored in ignored local directory
+`.local/firebase-migrations/litterspot-2026-09-14-001`. It contains typed source
+and destination Firestore archives, Auth exports and hash configuration,
+source media, previous local configuration and media, checkpoints, and
+verification reports. The archive directory is private and sensitive. Emulator
+Auth exports contain emulator-only password representations that must never
+be published or committed.
+
+`npm run migrate:firebase -- capture|inspect|backup|apply|verify` is a dedicated
+cutover tool. It requires an explicit run directory. Cloud modes are locked to
+the selected `litterspot` project and a matching external Admin credential.
+Apply requires `--confirm=litterspot/litterspot-to-default`, verified backups,
+and a matching destination fingerprint. Database administration may use the
+already-authorized Firebase CLI account with `--database-admin=cli`; no IAM
+roles are changed by the tool. Historical development reset scripts continue
+to reject `production-cloud`.
+
+Restore a failed cutover using the preserved destination document archive and
+Auth records with the backed-up original scrypt configuration. Do not import
+emulator fake password hashes directly into cloud Auth. Reverting only
+frontend configuration is not a data rollback.
+
+Before restoring or resetting, stop all application writers and inspect the
+exact project/database targets. Retain the source emulator and media until
+functional cloud acceptance is complete. Local backups provide recovery from
+this cutover but are not an automated off-host disaster-recovery service.
+
+Cutover acceptance completed on 2026-09-14. The verified baseline contains
+10,716 Firestore documents, 9 Auth accounts, 2 Sites, 13 Cameras and 13 current
+Camera Registrations. All 108 local media files matched the captured source by
+checksum. The deployed rules and 86 composite indexes are ready, and 89 cloud
+API, role, map, media, scene-switching, and notification-isolation checks
+passed. The Orchestrator worker was enabled again after acceptance.
 
 ## 1. Scope
 

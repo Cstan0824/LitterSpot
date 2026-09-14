@@ -18,6 +18,7 @@
     "migrate:cleaner-accounts": "tsx src/scripts/migrateCleanerAccounts.ts",
     "location:retention": "tsx src/scripts/locationRetention.ts",
     "v2:inspect-target": "tsx src/scripts/v2/inspectTarget.ts",
+    "migrate:firebase": "tsx src/scripts/firebaseMigration.ts",
     "v2:validate-schema": "tsx src/scripts/v2/validateSchema.ts",
     "v2:reset-application-data": "tsx src/scripts/v2/resetApplicationData.ts",
     "v2:clear-emulator-operations": "tsx src/scripts/v2/clearEmulatorOperationalData.ts",
