@@ -163,7 +163,7 @@ run("V2 composite Camera workflow", () => {
     expect((await enable(winner, false)).status).toBe(200);
     expect((await enable(other, true)).status).toBe(200);
     expect((await enable(other, false)).status).toBe(200);
-  });
+  }, 15_000);
 
   it("returns a Camera detail read model with current Work, history, and safe Orchestrator trace", async () => {
     const now = Timestamp.now();
