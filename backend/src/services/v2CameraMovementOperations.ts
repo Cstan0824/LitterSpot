@@ -94,27 +94,30 @@ export async function dismissActiveCameraOperations(transaction: Transaction, in
   cameraId: string;
   publicationKey: string;
   requestId: string;
+  reasonCode?: "camera_physically_moved" | "camera_removed";
+  notificationBody?: string;
 }) {
+  const reasonCode = input.reasonCode ?? "camera_physically_moved";
   const current = await readCurrentOperations(transaction, input.siteId, input.cameraId);
   for (const alert of current.alerts) {
     const data = alert.data()!;
-    transaction.update(alert.ref, { status: "dismissed", activeWorkOrderId: null, dismissedAt: FieldValue.serverTimestamp(), dismissedBy: systemActor, dismissReason: "camera_physically_moved", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    transaction.update(alert.ref, { status: "dismissed", activeWorkOrderId: null, dismissedAt: FieldValue.serverTimestamp(), dismissedBy: systemActor, dismissReason: reasonCode, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
     transaction.delete(firestore.collection("activeAlertKeys").doc(canonicalHash("v2-active-alert", input.siteId, input.cameraId, data.issueType)));
-    transaction.create(alert.ref.collection("events").doc(canonicalHash("camera-physically-moved", input.publicationKey, alert.id)), {
+    transaction.create(alert.ref.collection("events").doc(canonicalHash(reasonCode, input.publicationKey, alert.id)), {
       schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, alertId: alert.id, type: "dismissed",
       fromStatus: data.status, toStatus: "dismissed", fromSeverity: data.severity ?? null, toSeverity: data.severity ?? null,
-      workOrderId: data.activeWorkOrderId ?? null, actor: systemActor, reasonCode: "camera_physically_moved", note: null,
+      workOrderId: data.activeWorkOrderId ?? null, actor: systemActor, reasonCode, note: null,
       requestId: input.requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null,
     });
   }
   for (const work of current.work) {
     const data = work.data()!;
-    transaction.update(work.ref, { status: "dismissed", dismissedAt: FieldValue.serverTimestamp(), dismissedBy: systemActor, dismissReason: "camera_physically_moved", updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
-    const eventId = canonicalHash("camera-physically-moved", input.publicationKey, work.id);
+    transaction.update(work.ref, { status: "dismissed", dismissedAt: FieldValue.serverTimestamp(), dismissedBy: systemActor, dismissReason: reasonCode, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
+    const eventId = canonicalHash(reasonCode, input.publicationKey, work.id);
     transaction.create(work.ref.collection("events").doc(eventId), {
       schemaVersion: V2_SCHEMA_VERSION, siteId: input.siteId, workOrderId: work.id, type: "dismissed",
       fromStatus: data.status, toStatus: "dismissed", cleanerId: data.assignedCleanerId, previousCleanerId: null,
-      actor: systemActor, reasonCode: "camera_physically_moved", note: null, evidenceMediaIds: [], requestId: input.requestId,
+      actor: systemActor, reasonCode, note: null, evidenceMediaIds: [], requestId: input.requestId,
       occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null,
     });
     transaction.delete(firestore.collection("activeWorkOrderKeys").doc(canonicalHash("v2-active-work", input.siteId, data.alertId ?? work.id)));
@@ -124,7 +127,7 @@ export async function dismissActiveCameraOperations(transaction: Transaction, in
     const recipientUid = cleaner?.data()?.authUid;
     if (typeof recipientUid === "string" && recipientUid) createV2NotificationInTransaction(transaction, {
       siteId: input.siteId, recipientUid, recipientRole: "cleaner", type: "work_dismissed", eventKey: eventId,
-      title: "Cleaning task dismissed", body: "This task was dismissed because its Camera was physically moved.",
+      title: "Cleaning task dismissed", body: input.notificationBody ?? "This task was dismissed because its Camera was physically moved.",
       entityType: "work_order", entityId: work.id, cameraId: input.cameraId, alertId: data.alertId ?? null, workOrderId: work.id,
       severity: data.severity ?? null, isSimulation: Boolean(data.isSimulation),
     });

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("./http", () => ({ v2Request: request }));
 
-import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, getV2AlertsPage, getV2CameraDraftForCamera, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
+import { assignV2Alert, claimV2MonitoringSession, createV2Cleaner, createV2ManualWork, deleteV2SiteMapDraft, dismissV2Alert, dismissV2Work, getV2AlertsPage, getV2CameraDraftForCamera, heartbeatV2MonitoringSession, overrideV2Verification, publishV2CameraDraft, publishV2SiteMapDraft, reassignV2Work, releaseV2MonitoringSession, removeV2CameraFromSite, saveV2CameraDraftRegistration, saveV2SiteMapDraft, startV2CameraDraft, startV2MonitoringEpisode, submitV2MonitoringSample, takeOverV2Work, updateV2Cleaner, updateV2CleanerStation, validateV2CameraDraft, validateV2SiteMapDraft, verifyV2Work } from "./operations";
 
 const alert = { id: "alert-1", revision: 4 } as any;
 const work = { id: "work-1", revision: 6 } as any;
@@ -76,6 +76,14 @@ describe("V2 Supervisor action client", () => {
     expect(request).toHaveBeenLastCalledWith("/api/camera-creation/drafts/draft-1/validate", expect.objectContaining({ method: "POST" }));
     await publishV2CameraDraft("draft-1");
     expect(request).toHaveBeenLastCalledWith("/api/camera-creation/drafts/draft-1/publish", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("sends the guarded Camera removal contract", async () => {
+    await removeV2CameraFromSite({ id: "camera/1", revision: 7, activeMapRevisionId: "map-3" } as any, "Camera removed after venue renovation.", "remove-key-1");
+    expect(request).toHaveBeenLastCalledWith("/api/camera-creation/cameras/camera%2F1/remove", {
+      method: "POST",
+      json: { reason: "Camera removed after venue renovation.", confirmation: true, expectedCameraRevision: 7, expectedMapRevisionId: "map-3", idempotencyKey: "remove-key-1" },
+    });
   });
 
   it("uses the guarded Site Map Draft lifecycle for adding a Zone", async () => {

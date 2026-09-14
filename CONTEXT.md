@@ -82,6 +82,10 @@ _Avoid_: Physical Camera Move, Camera reconfiguration
 A change to the Camera's real installation position or view, whether it remains in the same Zone, enters another active Zone, or enters a provisional new Zone. It requires a new reference and Camera Registration. Final publication dismisses active operations tied to the old Camera view before the replacement becomes operational.
 _Avoid_: Map Position Correction, source-only replacement
 
+**Camera Removal**:
+A Root Supervisor's terminal removal of a published Camera from active Site operations and the current Site Map. The Camera's published Registration, source revisions, evidence, and operational history remain available, while returning the device requires a new Camera identity and Registration.
+_Avoid_: Monitoring disablement, hard deletion, Physical Camera Move
+
 **Camera Creation**:
 One Root Supervisor workflow that combines Camera identity, Site Map placement, source configuration, reference capture, floor/bin plotting, validation, and initial Camera Registration publication.
 _Avoid_: Bare camera record, create-then-register

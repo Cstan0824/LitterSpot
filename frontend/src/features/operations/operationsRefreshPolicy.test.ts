@@ -16,6 +16,7 @@ describe("Supervisor operations refresh policy", () => {
     expect(resourcesAfterMutation("alert_assignment")).toEqual(["alerts", "workOrders", "cleaners", "dashboard"]);
     expect(resourcesAfterMutation("work_decision")).toEqual(["workOrders", "alerts", "cleaners", "dashboard"]);
     expect(resourcesAfterMutation("camera_publish")).toEqual(["cameras", "siteMap", "dashboard"]);
+    expect(resourcesAfterMutation("camera_remove")).toEqual(["cameras", "siteMap", "alerts", "workOrders", "cleaners", "dashboard"]);
     expect(resourcesAfterMutation("site_map_publish")).toEqual(["siteMap", "cameras", "cleaners", "dashboard"]);
   });
 

@@ -1,5 +1,5 @@
 export type OperationsResource = "dashboard" | "siteMap" | "alerts" | "cleaners" | "workOrders" | "cameras" | "supervisors";
-export type OperationsMutation = "alert_assignment" | "alert_dismissal" | "manual_work" | "work_decision" | "cleaner_update" | "cleaner_station" | "camera_publish" | "site_map_publish" | "camera_workflow";
+export type OperationsMutation = "alert_assignment" | "alert_dismissal" | "manual_work" | "work_decision" | "cleaner_update" | "cleaner_station" | "camera_publish" | "camera_remove" | "site_map_publish" | "camera_workflow";
 
 const pageResources: Record<string, readonly OperationsResource[]> = {
   dashboard: ["dashboard"],
@@ -20,6 +20,7 @@ const mutationResources: Record<OperationsMutation, readonly OperationsResource[
   cleaner_update: ["cleaners", "dashboard"],
   cleaner_station: ["cleaners", "siteMap", "dashboard"],
   camera_publish: ["cameras", "siteMap", "dashboard"],
+  camera_remove: ["cameras", "siteMap", "alerts", "workOrders", "cleaners", "dashboard"],
   site_map_publish: ["siteMap", "cameras", "cleaners", "dashboard"],
   camera_workflow: ["alerts", "workOrders", "cameras", "dashboard"],
 };

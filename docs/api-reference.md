@@ -1784,6 +1784,7 @@ These V2 additions require a Supervisor Bearer token. Cleaner accounts cannot ow
 | GET | `/api/monitoring/live/events` | Authenticated SSE with `control`, `workflow`, and `observation` events. Observation and exact frame data URL are paired. Reconnect after the 50-second connection lifetime. |
 | PATCH | `/api/camera-creation/cameras/:cameraId/monitoring` | `{monitoringEnabled, expectedRevision}`; returns the new revision. Laptop conflicts return 409 with the conflicting Camera ID/name. |
 | POST | `/api/camera-creation/cameras/:cameraId/deactivate` | Root only; `{expectedRevision}`; disables and structurally deactivates the Camera. |
+| POST | `/api/camera-creation/cameras/:cameraId/remove` | Root only; `{reason, confirmation:true, expectedCameraRevision, expectedMapRevisionId, idempotencyKey}`; removes the Camera from active Site operations and the replacement Active Map Revision while preserving published history. |
 | POST | `/api/monitoring/sessions/:sessionId/cameras/:cameraId/stop` | Owner token in `x-monitoring-token`; body `{episodeId, reason}`. Stops only this episode. |
 | GET | `/api/media/:mediaId/overlay` | Same-Site retained `observation`, or null for older/non-evidence media. |
 | GET | `/api/cleaner/work-orders/:workOrderId/camera-evidence` | Assigned Cleaner only; linked Alert Evidence. Add `?content=true` for the image bytes. |

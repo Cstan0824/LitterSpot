@@ -67,7 +67,7 @@ This is stable Camera identity and active revision pointers.
 | `name` | string | yes | Current display name. |
 | `nameNormalized` | string | yes | Site-scoped duplicate detection and sorting. |
 | `description` | string or null | yes | Optional metadata. |
-| `status` | enum | yes | `active` or `inactive`. Structural lifecycle controlled by Root/Superadmin. |
+| `status` | enum | yes | `active`, `inactive`, or terminal `removed`. Structural lifecycle is Root-controlled. |
 | `monitoringEnabled` | boolean | yes | Reversible operational sampling control. |
 | `activeSourceRevisionId` | string | yes | Current source configuration. |
 | `activeRegistrationRevisionId` | string | yes | Current image-space geometry. |
@@ -79,9 +79,16 @@ This is stable Camera identity and active revision pointers.
 | `updatedByUid` | string | yes | Latest actor. |
 | `deactivatedAt` | timestamp or null | yes | Structural deactivation time. |
 | `deactivatedByUid` | string or null | yes | Deactivating actor. |
+| `removedAt` | timestamp or null | no | Time the Camera left active Site operations. |
+| `removedByUid` | string or null | no | Root Supervisor who removed it. |
+| `removalReason` | string or null | no | Required operational reason. |
+| `removedFromMapRevisionId` | string or null | no | Last Active Map Revision containing the Camera Placement. |
+| `removalMapRevisionId` | string or null | no | Replacement Active Map Revision that omits the Camera Placement. |
 | `revision` | integer | yes | Optimistic concurrency counter. |
 
 Camera Zone, map point and map revision are resolved from the Active Map Revision. API read models return them as derived fields.
+
+A removed Camera is omitted from current Camera lists and monitoring configuration. Its stable Camera document, published source revisions, Camera Registration, evidence, Alerts, Work, and audit events remain available for historical lookup.
 
 ### Development playback fields
 
