@@ -49,7 +49,7 @@ async function load(siteId: string): Promise<SiteCameraConfiguration> {
     firestore.collection("cameras").where("siteId", "==", siteId).limit(100).get(),
   ]);
   const activeMapRevisionId = String(site.data()?.activeMapRevisionId ?? "");
-  const records = await Promise.all(cameras.docs.filter((document) => document.data().schemaVersion === 2).map(async (document) => {
+  const records = await Promise.all(cameras.docs.filter((document) => document.data().schemaVersion === 2 && document.data().status !== "removed").map(async (document) => {
     const data = document.data();
     const [placement, source, registration, durableRuntime] = await Promise.all([
       firestore.collection("siteMapRevisions").doc(activeMapRevisionId).collection("cameraPlacements").doc(document.id).get(),

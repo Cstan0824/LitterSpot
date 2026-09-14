@@ -3,7 +3,7 @@ import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Site, Zone } from "../../services/locationAPI";
 import type { LiveVideo } from "../pipeline/liveVideoStore";
 import type { Alert, Camera } from "./types";
-import { getV2CameraDetail, getV2CameraDraft, getV2WorkDetail, type V2Camera, type V2CameraDetail, type V2OperationsReadModel, type V2WorkOrder } from "../../services/v2/operations";
+import { getV2CameraDetail, getV2CameraDraft, getV2WorkDetail, removeV2CameraFromSite, type V2Camera, type V2CameraDetail, type V2OperationsReadModel, type V2WorkOrder } from "../../services/v2/operations";
 import { WorkDetailModal, workItemFromV2, type WorkAction, type WorkItem } from "./WorkManagementPage";
 import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
 import { V2CameraMonitor } from "./V2CameraMonitor";
@@ -15,6 +15,7 @@ import { recoverableCameraDraftId, V2CameraCreationPage } from "../../pages/V2Ca
 import { changeSiteMapCameraPlacement, getActiveSiteMap, type ActiveSiteMap } from "../../services/v2/siteMap";
 import { containingZoneId, validateZoneCandidate, type SiteMapPoint } from "../../services/v2/mapGeometry";
 import type { V2CameraDraft } from "../../services/v2/operations";
+import { createIdempotencyKey } from "../../services/v2/idempotency";
 import "./camera-list-header.css";
 import "./camera-detail-monitoring.css";
 
@@ -40,6 +41,7 @@ type Props = {
   onCreateZone: (siteId: string, name: string) => Promise<Zone>;
   onCreateCamera: (zoneId: string, code: string, name: string, sourceMode: "upload" | "stream") => Promise<CameraRecord>;
   onCameraPublished?: (cameraId: string) => void | Promise<void>;
+  onCameraRemoved?: (cameraId: string) => void | Promise<void>;
   v2Cameras?: V2Camera[];
   onDismissCameraWork?: (workId: string, reason: string) => Promise<void>;
   onWorkAction?: (workId: string, action: WorkAction, options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) => Promise<void>;
@@ -184,16 +186,49 @@ export function V2CameraWallPreview({ camera }: { camera: V2Camera; readOnly?: b
   </div></div>;
 }
 
-function CameraPreview({ record, feed, video, latestAlert, monitoringCamera, mode = "wall", readOnly = false, onReconfigure, onMove }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert; monitoringCamera?: V2Camera; mode?: "wall" | "detail"; readOnly?: boolean; onReconfigure?: () => void; onMove?: () => void }) {
+function CameraPreview({ record, feed, video, latestAlert, monitoringCamera, mode = "wall", readOnly = false, onReconfigure, onMove, onRemoveFromSite }: { record: CameraRecord; feed?: Camera; video?: LiveVideo; latestAlert?: Alert; monitoringCamera?: V2Camera; mode?: "wall" | "detail"; readOnly?: boolean; onReconfigure?: () => void; onMove?: () => void; onRemoveFromSite?: () => void }) {
   const analyzed = video?.analysis ?? feed?.latest;
   const capturedAt = video?.uploadedAt ?? feed?.latest?.createdAt;
-  if (monitoringCamera) return readOnly ? <V2CameraWallPreview camera={monitoringCamera} readOnly /> : <CameraLiveView cameraId={monitoringCamera.id} compact={mode === "wall"} onReconfigure={onReconfigure} onMove={onMove} />;
+  if (monitoringCamera) return readOnly ? <V2CameraWallPreview camera={monitoringCamera} readOnly /> : <CameraLiveView cameraId={monitoringCamera.id} compact={mode === "wall"} onReconfigure={onReconfigure} onMove={onMove} onRemoveFromSite={onRemoveFromSite} />;
   return <div className="camera-wall-preview">
     {video ? <video src={video.url} autoPlay muted loop playsInline /> : feed?.latest?.evidenceAvailable || latestAlert?.evidenceAvailable ? <img src="/mock/spill.jpg" alt={`Latest view from ${record.name}`} /> : <div className="camera-wall-no-signal"><span>NO CURRENT FRAME</span><small>Waiting for the next camera signal</small></div>}
     <span className={`camera-wall-live ${video ? "live" : record.availability === "unavailable" ? "offline" : "latest"}`}><i />{video ? "Live" : record.availability === "unavailable" ? "Offline" : "Latest view"}</span>
     {latestAlert && <span className={`camera-wall-alert ${latestAlert.severity}`}>{alertLabel(latestAlert.kind)}</span>}
     {analyzed && <span className="camera-wall-timecode">{analyzed.peopleCount} people · {when(capturedAt)}</span>}
   </div>;
+}
+
+function CameraRemovalModal({ camera, cameraName, siteName, onClose, onRemoved }: { camera: V2CameraDetail["camera"]; cameraName: string; siteName: string; onClose: () => void; onRemoved: () => Promise<void> }) {
+  const [reason, setReason] = useState(""); const [confirmed, setConfirmed] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const modal = useRef<HTMLFormElement>(null); const reasonField = useRef<HTMLTextAreaElement>(null);
+  const [idempotencyKey] = useState(() => createIdempotencyKey("remove-camera"));
+  useEffect(() => { reasonField.current?.focus(); }, []);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onClose();
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(modal.current?.querySelectorAll<HTMLElement>("button:not(:disabled), textarea:not(:disabled), input:not(:disabled)") ?? []);
+      if (!focusable.length) return;
+      const first = focusable[0]; const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", closeOnEscape); return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [busy, onClose]);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); if (reason.trim().length < 3 || !confirmed || busy) return;
+    setBusy(true); setError("");
+    try { await removeV2CameraFromSite(camera, reason.trim(), idempotencyKey); await onRemoved(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The Camera could not be removed from this Site."); setBusy(false); }
+  };
+  return <div className="camera-modal-scrim camera-removal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><form ref={modal} className="camera-removal-modal" role="dialog" aria-modal="true" aria-labelledby="camera-removal-title" aria-describedby="camera-removal-description" onSubmit={(event) => void submit(event)}>
+    <header><div><h2 id="camera-removal-title">Remove {cameraName} from {siteName}?</h2><p id="camera-removal-description">The Camera will leave active Site operations. Its published history will remain available for audit.</p></div><button type="button" onClick={onClose} disabled={busy}>Close</button></header>
+    <main><section className="camera-removal-impact"><strong>What happens immediately</strong><ul><li>Monitoring stops and the Camera disappears from the current map and Camera list.</li><li>Any active Alerts and Work Orders linked to this Camera are dismissed. Assigned Cleaners are released and notified.</li><li>Any unfinished Camera configuration is discarded.</li><li>Published Registrations, source revisions, evidence, and operational history are retained.</li></ul></section>
+      <label className="camera-removal-reason">Reason<textarea ref={reasonField} value={reason} maxLength={500} onChange={(event) => { setReason(event.target.value); setError(""); }} placeholder="Explain why this Camera is leaving the Site" /></label>
+      <label className="camera-removal-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I understand this Camera must be added and registered again before it can return to the Site.</span></label>
+      {error && <p className="camera-removal-error" role="alert">{error}</p>}
+    </main>
+    <footer><button type="button" onClick={onClose} disabled={busy}>Keep Camera</button><button className="danger" type="submit" disabled={busy || reason.trim().length < 3 || !confirmed}>{busy ? "Removing…" : "Remove from Site"}</button></footer>
+  </form></div>;
 }
 
 function ProtectedSnapshot({ snapshot, alt }: { snapshot: { mediaId: string; contentUrl: string } | null; alt: string }) {
@@ -328,7 +363,7 @@ function AddCameraModal({ sites, zones, nextNumber, onClose, onCreated, onCreate
   </div>;
 }
 
-export function CameraOperationsPage({ readOnly = false, showPermissionNotice = true, onNavigate, getCameraDetail = getV2CameraDetail, getWorkDetail = getV2WorkDetail, allowWorkActions = false, canManageCameraPlacement, sites, zones, cameras, feeds, liveVideos, alerts, cleaners, siteMap, workOrders = [], availableCleanerIds = [], error, onCreateZone, onCreateCamera, onCameraPublished, onDismissCameraWork, onWorkAction, v2Cameras = [] }: Props) {
+export function CameraOperationsPage({ readOnly = false, showPermissionNotice = true, onNavigate, getCameraDetail = getV2CameraDetail, getWorkDetail = getV2WorkDetail, allowWorkActions = false, canManageCameraPlacement, sites, zones, cameras, feeds, liveVideos, alerts, cleaners, siteMap, workOrders = [], availableCleanerIds = [], error, onCreateZone, onCreateCamera, onCameraPublished, onCameraRemoved, onDismissCameraWork, onWorkAction, v2Cameras = [] }: Props) {
   const activeCameras = cameras.filter((camera) => camera.status === "active");
   const initialQuery = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const [zoneId, setZoneId] = useState(initialQuery.get("zoneId") ?? "all");
@@ -343,6 +378,8 @@ export function CameraOperationsPage({ readOnly = false, showPermissionNotice = 
   const monitoringCameras = monitoring?.state.cameras ?? {};
   const [showReconfigure, setShowReconfigure] = useState(false);
   const [showMove, setShowMove] = useState(false);
+  const [showRemove, setShowRemove] = useState(false);
+  const [notice, setNotice] = useState("");
   const [physicalMoveDraft, setPhysicalMoveDraft] = useState<V2CameraDraft>();
   const [detail, setDetail] = useState<V2CameraDetail>();
   const [detailError, setDetailError] = useState("");
@@ -415,8 +452,9 @@ export function CameraOperationsPage({ readOnly = false, showPermissionNotice = 
     <header className="camera-reference-heading"><button type="button" onClick={() => { setSelectedId(undefined); if (onNavigate) { const [path, query] = back.hash.split("?"); onNavigate(path, Object.fromEntries(new URLSearchParams(query ?? ""))); } else location.hash = back.hash; }}>← {back.label}</button></header>
     {showReconfigure && <V2CameraCreationPage cameraId={selected.id} canCreateCamera={canManageCameraPlacement} onClose={() => setShowReconfigure(false)} onPublished={async cameraId => { setShowReconfigure(false); await monitor?.refresh(); await onCameraPublished?.(cameraId); }} />}
     {showMove && detail?.camera && <CameraMoveModal camera={detail.camera} cameraName={selected.name} monitoringEnabled={Boolean(selectedV2Camera?.monitoringEnabled)} onClose={() => setShowMove(false)} onPublished={async () => { await monitor?.refresh(); await onCameraPublished?.(selected.id); }} onPhysicalMove={(draft) => { setShowMove(false); setPhysicalMoveDraft(draft); }} />}
+    {showRemove && detail?.camera && <CameraRemovalModal camera={detail.camera} cameraName={selected.name} siteName={selected.siteName} onClose={() => setShowRemove(false)} onRemoved={async () => { const removedName = selected.name; setShowRemove(false); setSelectedId(undefined); setNotice(`${removedName} was removed from ${selected.siteName}.`); showCameraList(zoneId, cameraStateFilter); await Promise.allSettled([monitor?.refresh(), onCameraRemoved?.(selected.id)]); }} />}
     {physicalMoveDraft && <V2CameraCreationPage initialDraft={physicalMoveDraft} cameraId={selected.id} canCreateCamera onClose={() => setPhysicalMoveDraft(undefined)} onPublished={async cameraId => { setPhysicalMoveDraft(undefined); await monitor?.refresh(); await onCameraPublished?.(cameraId); }} />}
-    <div className="camera-reference-layout"><div className="camera-reference-main"><section className="camera-reference-visual"><CameraPreview readOnly={readOnly} record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} monitoringCamera={selectedV2Camera} mode="detail" onReconfigure={!readOnly && selectedV2Camera ? () => setShowReconfigure(true) : undefined} onMove={canManageCameraPlacement && detail?.camera ? () => setShowMove(true) : undefined} /><footer className="camera-reference-identity"><div><span>CAMERA</span><h1>{selected.name}</h1><p>{sourceLabel}</p></div><div><span>ZONE</span><h2>{selected.zoneName}</h2></div></footer></section><section className="camera-reference-history camera-orchestrator-trace"><header><span>SYSTEM LOG</span><button type="button" onClick={() => go("/status")}>Open System →</button></header>{detail?.orchestratorTrace.length ? <ol>{detail.orchestratorTrace.slice(0, 3).map((run) => <li key={run.id}><time>{run.completedAt ? new Date(run.completedAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Running"}</time><p><strong>{run.type === "assignment" ? "Assignment decision" : "Review decision"}</strong><span>{run.decisionSummary ?? run.resultCode ?? run.status}</span></p></li>)}</ol> : <p className="camera-reference-empty">No system decision is linked to this Camera history.</p>}{detailError && <p className="camera-reference-empty">{detailError}</p>}</section></div>
+    <div className="camera-reference-layout"><div className="camera-reference-main"><section className="camera-reference-visual"><CameraPreview readOnly={readOnly} record={selected} feed={selectedFeed} video={selectedVideo} latestAlert={selectedAlerts[0]} monitoringCamera={selectedV2Camera} mode="detail" onReconfigure={!readOnly && selectedV2Camera ? () => setShowReconfigure(true) : undefined} onMove={canManageCameraPlacement && detail?.camera ? () => setShowMove(true) : undefined} onRemoveFromSite={canManageCameraPlacement && detail?.camera ? () => setShowRemove(true) : undefined} /><footer className="camera-reference-identity"><div><span>CAMERA</span><h1>{selected.name}</h1><p>{sourceLabel}</p></div><div><span>ZONE</span><h2>{selected.zoneName}</h2></div></footer></section><section className="camera-reference-history camera-orchestrator-trace"><header><span>SYSTEM LOG</span><button type="button" onClick={() => go("/status")}>Open System →</button></header>{detail?.orchestratorTrace.length ? <ol>{detail.orchestratorTrace.slice(0, 3).map((run) => <li key={run.id}><time>{run.completedAt ? new Date(run.completedAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Running"}</time><p><strong>{run.type === "assignment" ? "Assignment decision" : "Review decision"}</strong><span>{run.decisionSummary ?? run.resultCode ?? run.status}</span></p></li>)}</ol> : <p className="camera-reference-empty">No system decision is linked to this Camera history.</p>}{detailError && <p className="camera-reference-empty">{detailError}</p>}</section></div>
       <aside className="camera-reference-sidebar"><section className="camera-reference-assignment"><header><span>CURRENT ASSIGNMENT</span><h2>{currentAssignment ? currentAssignment.title : "No active Work Order"}</h2></header>{currentAssignment ? <><div className="camera-supervision-meta"><span className={`work-priority ${currentAssignment.severity}`}>{currentAssignment.severity}</span><div className="camera-assignment-owner"><strong>Assigned to {currentAssignment.cleanerNameSnapshot}</strong><small>{currentAssignment.managementMode === "orchestrated" ? "System-selected" : "Supervisor assigned"}</small></div></div><button className="camera-assignment-open" type="button" onClick={() => go("/cameras", { cameraId: selected.id, zoneId, cameraState: cameraStateFilter, workId: currentAssignment.id })}>Open Work detail <b>→</b></button>{allowWorkActions && <CameraWorkCancel workId={currentAssignment.id} disabled={false} onDismiss={onDismissCameraWork} />}</> : <p className="camera-reference-empty">No active cleaning assignment.</p>}</section><section className="camera-reference-history"><header><span>RECENT HISTORY</span><button type="button" onClick={() => go("/history", { camera: selected.id })}>View all →</button></header><div className="camera-history-thumbnails" aria-label="Recent evidence thumbnails">{detail?.recentHistory.filter((entry) => entry.snapshot).slice(0, 3).map((entry) => <button type="button" key={entry.id} onClick={() => { if (entry.type === "alert") go("/alerts", { alert: entry.id }); }}><ProtectedSnapshot snapshot={entry.snapshot} alt={`${entry.issueType} snapshot`} /><i className={entry.severity} /></button>)}</div><ol>{detail?.recentHistory.slice(0, 3).map((entry) => <li key={`${entry.type}-${entry.id}`}><time>{entry.occurredAt ? new Date(entry.occurredAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Not recorded"}</time><p><strong>{alertLabel(entry.issueType)}</strong><span>{entry.type === "work" && entry.assignedCleanerName ? `${entry.status} · ${entry.assignedCleanerName}` : entry.status}</span></p></li>)}{!detail?.recentHistory.length && <li className="empty"><p><strong>No recent history</strong><span>Camera events will appear here.</span></p></li>}</ol></section></aside>
     </div>{selectedWorkId && selectedWork && siteMap && <WorkDetailModal readOnly={readOnly} work={selectedWork} siteMap={siteMap} cleaners={cleaners} availableCleanerIds={new Set(availableCleanerIds)} onClose={() => go("/cameras", { cameraId: selected.id, zoneId, cameraState: cameraStateFilter })} onAction={onWorkAction ? (action, options) => onWorkAction(selectedWork.id, action, options) : undefined} onNavigate={onNavigate} />}
   </section>; }
@@ -424,6 +462,7 @@ export function CameraOperationsPage({ readOnly = false, showPermissionNotice = 
   return <section className="ops-page camera-operations-page">
     <header className="camera-wall-header"><div><span>CAMERAS · LIVE OPERATIONS</span><h1>See every zone. Open the evidence.</h1><p>{readOnly ? "Inspect registered Camera views, Alerts, assigned Cleaners, and recent history." : "Monitor registered camera views, then select one to inspect its alerts, assigned Cleaner, and recent history."}</p></div>{canManageCameraPlacement && <button className="camera-add-button" type="button" onClick={() => setShowAdd(true)}><span>+</span>Add camera</button>}</header>{readOnly && showPermissionNotice && <p className="profile-feedback">Camera controls are unavailable for this account.</p>}
     {error && <p className="profile-feedback" role="alert">{error}</p>}
+    {notice && <p className="profile-feedback" role="status">{notice}</p>}
     <div className="camera-zone-slider">
       <div className="camera-zone-rail">
         <button type="button" aria-label="Previous zones" onClick={() => filterRail.current?.scrollBy({ left: -320, behavior: "smooth" })}>←</button>

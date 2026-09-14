@@ -35,10 +35,18 @@ export function cameraMonitoringStatus(input: { available: boolean; enabled: boo
   return { tone: "online", title: "Live monitoring", detail: input.analysisUpdating ? `${freshness} · Analysis is catching up` : `${freshness} · ${input.peopleCount ?? 0} people · ${Math.round(input.processingTimeMs ?? 0)} ms` };
 }
 
-export function CameraLiveView({ cameraId, compact = false, onReconfigure, onMove }: { cameraId: string; compact?: boolean; onReconfigure?: () => void; onMove?: () => void }) {
+export function CameraLiveView({ cameraId, compact = false, onReconfigure, onMove, onRemoveFromSite }: { cameraId: string; compact?: boolean; onReconfigure?: () => void; onMove?: () => void; onRemoveFromSite?: () => void }) {
   const { state, monitor } = useSiteMonitoring(); const view = state.cameras[cameraId];
   const [original, setOriginal] = useState(false); const [canvasNode, setCanvasNode] = useState<HTMLCanvasElement | null>(null); const root = useRef<HTMLDivElement>(null); const [visible, setVisible] = useState(true); const [now, setNow] = useState(Date.now()); const [displayObservation, setDisplayObservation] = useState<CameraObservation>();
+  const [manageOpen, setManageOpen] = useState(false); const manageRoot = useRef<HTMLDivElement>(null); const manageTrigger = useRef<HTMLButtonElement>(null);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  useEffect(() => {
+    if (!manageOpen) return;
+    const closeOutside = (event: PointerEvent) => { if (!manageRoot.current?.contains(event.target as Node)) setManageOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { setManageOpen(false); manageTrigger.current?.focus(); } };
+    document.addEventListener("pointerdown", closeOutside); document.addEventListener("keydown", closeOnEscape);
+    return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeOnEscape); };
+  }, [manageOpen]);
   useEffect(() => {
     if (!compact || !root.current || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { rootMargin: "160px" }); observer.observe(root.current); return () => observer.disconnect();
@@ -71,6 +79,19 @@ export function CameraLiveView({ cameraId, compact = false, onReconfigure, onMov
   const stale = detailPlayback ? false : !snapshotAvailable || !view?.lastReceivedAt || now - view.lastReceivedAt > 10_000;
   const operationalStatus = cameraMonitoringStatus({ available: Boolean(view), enabled: Boolean(enabled), busy: Boolean(view?.controlBusy), stale, error: state.error, message: detailPlayback?.error ?? view?.message, playbackState: detailPlayback?.state, lastReceivedAt: view?.lastReceivedAt, peopleCount: view?.observation?.peopleCount, processingTimeMs: view?.observation?.processingTimeMs, now });
   const delayedCanvas = Boolean(detailPlayback?.video && ["playing", "rebuffering"].includes(detailPlayback.state));
+  const canShowOriginal = delayedCanvas || !state.owner && Boolean(view?.frameDataUrl);
+  const canManage = Boolean(onMove || onReconfigure || onRemoveFromSite);
+  const focusMenuItem = (edge: "first" | "last") => requestAnimationFrame(() => {
+    const items = manageRoot.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']");
+    items?.[edge === "first" ? 0 : items.length - 1]?.focus();
+  });
+  const moveMenuFocus = (direction: "next" | "previous" | "first" | "last") => {
+    const items = Array.from(manageRoot.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? []);
+    if (!items.length) return;
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const index = direction === "first" ? 0 : direction === "last" ? items.length - 1 : direction === "next" ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+    items[index]?.focus();
+  };
   return <div ref={root} className={`camera-live-view ${compact ? "compact" : "detail"}`}>
     <div className="camera-live-stage" style={{ aspectRatio: CAMERA_VIEW_ASPECT_RATIO }}>
       {delayedCanvas ? <><canvas ref={setCanvasNode} aria-label={`${view?.camera.name ?? "Camera"} delayed analyzed video`} />{!original && displayObservation && <ObservationOverlay observation={displayObservation} />}{detailPlayback?.state === "rebuffering" && <div className="camera-live-buffering" role="status"><i aria-hidden="true" /><strong>Rebuffering analysis</strong><span>Building enough analyzed coverage to continue.</span></div>}</> : detailPlayback?.state === "unavailable" ? <div className="camera-live-empty error"><strong>Camera analysis unavailable</strong><span>{detailPlayback.error ?? "Analyzed playback could not be prepared."}</span><button type="button" onClick={() => monitor.retryDetailPlayback(cameraId)}>Retry</button></div> : detailPlayback?.state === "buffering" ? <div className="camera-live-empty buffering" role="status"><i aria-hidden="true" /><strong>Connecting to Camera...</strong><span>Preparing smooth analyzed playback.</span></div> : snapshotAvailable ? <><img src={view!.frameDataUrl} alt={`${view!.camera.name} analyzed frame`} />{!original && <ObservationOverlay observation={view!.observation!} compact={compact} />}</> : <div className="camera-live-empty"><strong>{enabled ? "Waiting for a fresh analyzed frame" : "Camera is disabled"}</strong>{!compact && <span>{enabled ? view?.message || "Capture and analysis are starting." : "Enable it to resume monitoring and detection."}</span>}</div>}
@@ -78,7 +99,18 @@ export function CameraLiveView({ cameraId, compact = false, onReconfigure, onMov
     </div>
     {!compact && <div className="camera-live-controls">
       <div className={`camera-monitoring-state ${operationalStatus.tone}`}><i aria-hidden="true" /><div><strong>{operationalStatus.title}</strong><p role="status">{operationalStatus.detail}</p></div></div>
-      <div>{(delayedCanvas || !state.owner && view?.frameDataUrl) && <button type="button" aria-pressed={original} onClick={() => setOriginal(!original)}>{original ? "Show analysis" : "Original video"}</button>}{onMove && <button type="button" onClick={onMove}>Move Camera</button>}{onReconfigure && <button type="button" onClick={onReconfigure}>Reconfigure Camera</button>}<button type="button" disabled={!view || view.controlBusy} onClick={() => void monitor.toggle(cameraId)}>{view?.controlBusy ? "Updating…" : enabled ? "Disable" : "Enable"}</button></div>
+      <div className="camera-live-actions">
+        <div className="camera-original-slot">{canShowOriginal && <button type="button" aria-pressed={original} onClick={() => setOriginal(!original)}>{original ? "Show analysis" : "Original video"}</button>}</div>
+        {canManage && <div className="camera-manage" ref={manageRoot}>
+          <button ref={manageTrigger} className="camera-manage-trigger" type="button" aria-haspopup="menu" aria-expanded={manageOpen} onClick={() => setManageOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setManageOpen(true); focusMenuItem(event.key === "ArrowDown" ? "first" : "last"); } }}>Manage Camera<i aria-hidden="true" /></button>
+          {manageOpen && <div className="camera-manage-menu" role="menu" aria-label="Manage Camera" onKeyDown={(event) => { if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") { event.preventDefault(); moveMenuFocus(event.key === "ArrowDown" ? "next" : event.key === "ArrowUp" ? "previous" : event.key === "Home" ? "first" : "last"); } }}>
+            {onMove && <button type="button" role="menuitem" onClick={() => { setManageOpen(false); onMove(); }}><span>Move Camera</span><small>Correct its point or record a physical move</small></button>}
+            {onReconfigure && <button type="button" role="menuitem" onClick={() => { setManageOpen(false); onReconfigure(); }}><span>Reconfigure Camera</span><small>Replace its source or Registration</small></button>}
+            {onRemoveFromSite && <button className="danger" type="button" role="menuitem" onClick={() => { setManageOpen(false); onRemoveFromSite(); }}><span>Remove from Site</span><small>Stop using this Camera at this Site</small></button>}
+          </div>}
+        </div>}
+        <button className="camera-monitoring-toggle" type="button" disabled={!view || view.controlBusy} onClick={() => void monitor.toggle(cameraId)}>{view?.controlBusy ? "Updating…" : enabled ? "Disable" : "Enable"}</button>
+      </div>
     </div>}
   </div>;
 }

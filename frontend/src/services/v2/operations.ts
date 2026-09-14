@@ -8,7 +8,7 @@ export type V2Point = { xMeters: number; yMeters: number };
 export type V2Zone = { id: string; zoneId: string; zoneNameSnapshot: string; polygon: V2Point[] };
 export type V2Camera = {
   description?: string | null;
-  id: string; name: string; status: "active" | "inactive"; monitoringEnabled: boolean; sourceType: "laptop_camera" | "looped_video";
+  id: string; name: string; status: "active" | "inactive" | "removed"; monitoringEnabled: boolean; sourceType: "laptop_camera" | "looped_video";
   isSimulation: boolean; placement: { zoneId: string; point: V2Point } | null;
   runtime: { connectionStatus?: string; cleanlinessState?: string; lastPeopleCount?: number; lastSampleAcceptedAt?: string | null } | null;
   source: { contentUrl: string | null; sourceMediaId?: string | null; type?: "laptop_camera" | "looped_video"; durationSeconds?: number; width?: number; height?: number } | null;
@@ -52,6 +52,7 @@ export type V2CameraDetail = {
   orchestratorTrace: Array<{ id: string; type: "assignment" | "review"; status: string; resultCode: string | null; alertId: string | null; workOrderId: string | null; selectedCleanerId: string | null; decisionSummary: string | null; decisionFactors: Record<string, unknown>; provider: string | null; model: string | null; errorCode: string | null; startedAt: string | null; completedAt: string | null; createdAt: string | null }>;
   auditEvents: Array<{ id: string; action?: string; outcome?: string; reason?: string | null; occurredAt: string | null }>;
 };
+export type V2CameraRemoval = { cameraId: string; status: "removed"; mapRevisionId: string; cameraRevision: number; dismissedAlertCount: number; dismissedWorkCount: number; discardedDraftCount: number; replayed: boolean };
 
 export type V2OperationsReadModel = {
   dashboard: V2Dashboard;
@@ -101,6 +102,7 @@ export async function getV2WorkDetail(workOrderId: string, signal?: AbortSignal)
 }
 
 export const getV2CameraDetail = (cameraId: string, signal?: AbortSignal) => v2Request<V2CameraDetail>(`/api/camera-creation/cameras/${encodeURIComponent(cameraId)}/detail`, { signal });
+export const removeV2CameraFromSite = (camera: V2Camera & { activeMapRevisionId: string }, reason: string, idempotencyKey = createIdempotencyKey("remove-camera")) => v2Request<{ removal: V2CameraRemoval }>(`/api/camera-creation/cameras/${encodeURIComponent(camera.id)}/remove`, { method: "POST", json: { reason, confirmation: true, expectedCameraRevision: camera.revision, expectedMapRevisionId: camera.activeMapRevisionId, idempotencyKey } });
 
 export const assignV2Alert = (alertId: string, assignedCleanerId: string) => v2Request<{ workOrder: V2WorkOrder }>(`/api/alerts/${encodeURIComponent(alertId)}/manual-assignment`, { method: "POST", json: { assignedCleanerId, idempotencyKey: createIdempotencyKey("assign-alert") } });
 export const dismissV2Alert = (alert: V2Alert, reason: string) => v2Request<{ alertId: string; status: string }>(`/api/alerts/${encodeURIComponent(alert.id)}/dismiss`, { method: "POST", json: { reason, expectedRevision: alert.revision } });

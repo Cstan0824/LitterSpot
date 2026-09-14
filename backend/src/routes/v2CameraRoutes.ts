@@ -10,6 +10,8 @@ import { getV2CameraDetail } from "../services/v2CameraDetailService.js";
 import { controlCamera } from "../services/v2CameraControl.js";
 import { getCameraListConfiguration } from "../services/cameraConfigurationCache.js";
 import { v2Json } from "../services/v2Presentation.js";
+import { requireRootSupervisor } from "../middleware/requireRole.js";
+import { removeV2CameraFromSite } from "../services/v2CameraRemovalService.js";
 
 export const v2CameraRoutes = Router();
 const auditActor = (req: Express.Request) => ({ uid: req.authUser.uid, role: "supervisor" as const, authority: req.authUser.authority, displayName: req.authUser.displayName });
@@ -63,4 +65,13 @@ v2CameraRoutes.patch("/cameras/:cameraId/monitoring", async (req, res) => {
 v2CameraRoutes.post("/cameras/:cameraId/deactivate", async (req, res) => {
   const input = z.object({ expectedRevision: z.number().int().nonnegative() }).strict().parse(req.body);
   res.json(await controlCamera({ ...input, monitoringEnabled: false, deactivate: true, cameraId: req.params.cameraId, siteId: String(req.authUser.siteId), actor: auditActor(req), requestId: req.requestId }));
+});
+
+v2CameraRoutes.post("/cameras/:cameraId/remove", requireRootSupervisor, async (req, res) => {
+  const input = z.object({
+    reason: z.string().trim().min(3).max(500), confirmation: z.literal(true),
+    expectedCameraRevision: z.number().int().nonnegative(), expectedMapRevisionId: z.string().trim().min(1),
+    idempotencyKey: z.string().trim().min(8).max(160),
+  }).strict().parse(req.body);
+  return res.json({ removal: await removeV2CameraFromSite({ ...input, siteId: String(req.authUser.siteId), cameraId: String(req.params.cameraId), actor: auditActor(req), requestId: req.requestId }) });
 });

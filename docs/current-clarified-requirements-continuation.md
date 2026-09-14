@@ -406,3 +406,13 @@ The frontend must run the same geometry rule while plotting and editing, identif
 **Confirmed** Final Physical Camera Move publication atomically activates any provisional Zone, the new Camera Placement, source revision and Camera Registration. It dismisses every unresolved Alert and active Work Order tied to that Camera with system reason `camera_physically_moved`, releases affected Cleaners, removes active workflow locks, stops stale automated assignment or review through normal revision checks, notifies affected Cleaners, and preserves evidence and event history. Cancelling an unfinished move changes none of the active operations.
 
 **Confirmed** If a Root encounters an existing unfinished Physical Camera Move while reopening Move Camera or Camera View reconfiguration, the product recovers that draft and returns to its fresh-reference step instead of leaving the Camera behind an unrecoverable draft-lock error.
+
+## 17. 2026-09-12 — Camera removal
+
+**Confirmed** Remove from Site is a Root-only terminal Camera lifecycle action. It is distinct from reversible monitoring disablement and does not hard-delete published Camera history.
+
+**Confirmed** Camera removal stops monitoring, publishes a replacement Active Map Revision without the Camera Placement, dismisses unresolved Camera Alerts and active Camera Work with system reason `camera_removed`, releases and notifies affected Cleaners, removes active workflow locks, and requests a fresh Orchestrator assignment cycle when Work was dismissed.
+
+**Confirmed** Removal automatically discards unfinished configuration or Physical Camera Move drafts and their draft-owned media. A separate Site Map draft blocks removal until Root publishes or discards that draft.
+
+**Confirmed** The Camera record enters terminal status `removed`. Published source revisions, Camera Registration revisions, retained evidence, Alerts, Work, and audit history remain available. Returning the physical device to operations requires Camera Creation with a new Camera identity and Registration.
