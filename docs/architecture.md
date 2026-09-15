@@ -9,7 +9,7 @@ The detailed functional scope is maintained in
 [the clarified requirements](./current-clarified-requirements.md) and
 [their continuation](./current-clarified-requirements-continuation.md). Database
 topology and integrity rules are documented in
-[the Firestore data-model package](./data-model-v2/README.md) and the
+[the Firestore data-model package](./data-model/README.md) and the
 [architecture decisions](./adr/).
 
 **Architecture status:** the Supervisor detection platform, Phase 10-11

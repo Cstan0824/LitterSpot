@@ -106,7 +106,7 @@ No admitted public source labels trash crossing the rim/opening, objects resting
 
 - Localizer checkpoint: `runs/bin-localizer/bin_localizer_openimages_loop2_838/weights/best.pt`
 - Public localizer test: `artifacts/loop2/bin-localizer-public-test.json`
-- Expanded locked regression: `artifacts/loop2/bin-localizer-regression-v2-val-selected.json`
+- Expanded locked regression: `artifacts/loop2/bin-localizer-regression-production-val-selected.json`
 - Threshold record: `artifacts/loop2/bin-localizer-threshold-calibration.json`
 - Fill checkpoint/report: `runs/state_classifier/waste_bin_fill_loop2_v1/`
 - Source research: `docs/research/THEMEPARK_BIN_LOOP2_DATA_SOURCES_2026-08-24.md`

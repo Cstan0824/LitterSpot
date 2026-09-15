@@ -16,7 +16,7 @@ Restore their original layout in a separate checkout before resuming a study.
 | Root `scripts/*.py` | `scripts/` | Research acquisition, evaluation, and data auditing tools |
 | `scripts/floor_rubbish_script/` | `scripts/floor_rubbish_script/` | Floor-dataset conversion and validation |
 | `mock-data/bin-localizer-regression-v1/` | `mock-data/bin-localizer-regression-v1/` | Earlier localizer regression manifest |
-| `mock-data/bin-localizer-regression-v2/` | `mock-data/bin-localizer-regression-v2/` | Later localizer regression manifest |
+| `mock-data/bin-localizer-regression-production/` | `mock-data/bin-localizer-regression-production/` | Later localizer regression manifest |
 | `mock-data/coverage/` | `mock-data/coverage/` | Evaluation coverage planning |
 | `mock-data/edge-cases/` | `mock-data/edge-cases/` | Derived edge-case benchmark metadata |
 | `mock-data/internvl-evaluation/` | `mock-data/internvl-evaluation/` | VLM comparison and replay expectations |

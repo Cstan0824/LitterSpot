@@ -172,8 +172,8 @@ def read_crops(crops_path: Path) -> list[dict[str, Any]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--train-crops", type=Path, default=ROOT / "ml-training/data/malaysia-bin-node-crops-v2/crops.json")
-    parser.add_argument("--test-crops", type=Path, default=ROOT / "ml-training/data/malaysia-bin-node-test-crops-v2/crops.json")
+    parser.add_argument("--train-crops", type=Path, default=ROOT / "ml-training/data/malaysia-bin-node-crops-revision-2/crops.json")
+    parser.add_argument("--test-crops", type=Path, default=ROOT / "ml-training/data/malaysia-bin-node-test-crops-revision-2/crops.json")
     parser.add_argument("--output", type=Path, default=ROOT / "ml-training/data/specialists/multi-angle-prototype")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()

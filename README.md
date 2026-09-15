@@ -41,7 +41,7 @@ analytics.
 
 The repository implements Supervisor and Cleaner applications with role
 isolation, current Work, durable in-app notifications, and automatic assignment
-and review. Current orchestration uses the Site-scoped V2 services and local
+and review. Current orchestration uses the Site-scoped services and local
 provider runtime.
 The current product rules are documented in
 [the clarified requirements](./docs/current-clarified-requirements.md) and

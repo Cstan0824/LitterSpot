@@ -1,6 +1,6 @@
 # LitterSpot database field dictionary
 
-> This dictionary describes the implemented V1 fields. The planned V2 dictionary starts at [`data-model-v2/README.md`](data-model-v2/README.md).
+> This dictionary records legacy fields alongside the implemented production model. The authoritative production topology starts at [`data-model/README.md`](data-model/README.md).
 
 Last checked: 2026-08-28. Code baseline: `2191394`.
 
@@ -58,7 +58,7 @@ validates, not database-enforced foreign keys.
 
 Use this alongside the [API reference](./api-reference.md),
 [architecture](./architecture.md), and
-[Firestore data-model package](./data-model-v2/README.md). Where planning prose
+[Firestore data-model package](./data-model/README.md). Where planning prose
 disagrees with this dictionary, check the linked runtime writer before making a
 change. This document records implementation, not a new schema proposal.
 

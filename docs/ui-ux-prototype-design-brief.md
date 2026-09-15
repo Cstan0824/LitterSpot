@@ -2,7 +2,7 @@
 
 Status: current implementation reference for frontend integration.
 
-Source audited: `/Users/jeremychin/CodingProjects/LitterSpot-Melissa/frontend` on 2026-09-02. This directory is the current main-branch frontend before V2 integration work. Its code and assets are the visual authority for LitterSpot until the frontend team supplies a newer design.
+Source audited: `/Users/jeremychin/CodingProjects/LitterSpot-Melissa/frontend` on 2026-09-02. This directory is the main-branch frontend before production integration work. Its code and assets are the visual authority for LitterSpot until the frontend team supplies a newer design.
 
 This replaces the former first-version product brief. It is a frontend styling and interaction reference, not a product requirements document.
 
@@ -30,7 +30,7 @@ Use these in priority order when extending or integrating the frontend.
 5. `/Users/jeremychin/CodingProjects/LitterSpot-Melissa/frontend/public/fonts/`
 6. `/Users/jeremychin/CodingProjects/LitterSpot-Melissa/frontend/public/maps/batu-caves-site-plan.png`
 
-`frontend/src/styles.css` contains older standalone analysis-tool styling and earlier visual experiments. It is not the authority for authenticated Supervisor pages. Do not use its dark `Space Grotesk` card system as the source for V2 operational pages.
+`frontend/src/styles.css` contains older standalone analysis-tool styling and earlier visual experiments. It is not the authority for authenticated Supervisor pages. Do not use its dark `Space Grotesk` card system as the source for production operational pages.
 
 The CSS contains older styles followed by later Prototype 6 overrides. Where they conflict, the later source-order rules are the intended current appearance. In particular, the horizontal Field Station navigation overrides the former sidebar shell.
 
@@ -102,7 +102,7 @@ The content workspace is wide, light, map-oriented, and uses thin structural lin
 - Selected Zone opens a deep blue inspector panel, not a floating generic modal.
 - Pins encode action, review, watch, steady, and stale state.
 - Lower overview panels show top Alerts, available Cleaners, busy Zones, evidence exceptions, and responsibility.
-- The map becomes the true V2 Site Map when that renderer exists. Until then it is an explicitly visual overview, not a claim of physical geometry.
+- The map becomes the production Site Map when that renderer exists. Until then it is an explicitly visual overview, not a claim of physical geometry.
 
 ### Camera Operations: blue/cyan inspection wall
 
@@ -110,7 +110,7 @@ The content workspace is wide, light, map-oriented, and uses thin structural lin
 - Strong Bricolage/Host Grotesk headings.
 - Filter rail, Camera-wall grid, live-state summary, selected Camera inspector, and Camera history.
 - Camera cards are rectangular evidence tiles with a restrained hover lift.
-- Add Camera is a high-contrast navy action, used only when the V2 Draft workflow exists.
+- Add Camera is a high-contrast navy action, used only when the Camera Draft workflow exists.
 
 ### Alert Management: evidence case file
 
@@ -160,21 +160,21 @@ The content workspace is wide, light, map-oriented, and uses thin structural lin
 - Keep visible focus outlines, sufficient contrast, keyboard access, and touch-sized controls.
 - Mobile layouts collapse map/detail and table surfaces into one column without removing the core operational decision.
 
-## V2 integration rules
+## Production integration rules
 
 1. Keep Melissa’s frontend component tree and visual classes as the presentation baseline.
 2. Add data adapters and bindings before changing layout or copy.
 3. Reuse an existing page’s modal, drawer, row, badge, filter, and error treatment before creating a new component.
 4. If the backend needs data that the UI cannot collect accurately, do not fake it. Record the gap and wait for matching UI work.
-5. Treat V2 state names, availability, coordinates, evidence, and revisions as backend truth.
+5. Treat production state names, availability, coordinates, evidence, and revisions as backend truth.
 6. Do not use the obsolete first-version brief or legacy dark tool CSS to make visual decisions for authenticated operational pages.
 
 ## Known design gaps
 
 These require dedicated UI work rather than quiet integration substitutions.
 
-- A true V2 Site Map renderer for real Zone polygons, metre coordinates, Camera placement, Cleaner stations, and optional plan imagery.
-- Bin Analysis is now wired to V2 daily recommendations, factor coverage, interventions, and comparisons while retaining the delivered Insights layout.
+- A production Site Map renderer for real Zone polygons, metre coordinates, Camera placement, Cleaner stations, and optional plan imagery.
+- Bin Analysis is now wired to production daily recommendations, factor coverage, interventions, and comparisons while retaining the delivered Insights layout.
 - System page design for Orchestrator state, pause/resume, structured runs, and safe system events.
 - Superadmin product area and Root Supervisor account-management surfaces.
 

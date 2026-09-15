@@ -616,7 +616,7 @@ The System response separates process state from Site configuration:
 
 `GET /api/cleaner/map` deliberately excludes map drafts, Camera placements, and every other Cleaner's Station Point. A returned Station Point may have `zoneId: null` when it is in an unzoned but in-boundary part of the Site Map. Coordinate Work already carries its own target point; Camera-targeted Work is represented by its Camera reference until the live-monitoring integration is available.
 
-### V2 Site Map administration API
+### Site Map administration API
 
 All routes require an active Site Supervisor. Mutations are Root-only except the narrow Cleaner Station Point route.
 
@@ -679,7 +679,7 @@ Camera placement change body:
 
 `map_position_correction` publishes a map-only replacement revision and retains Camera Registration. `physical_camera_move` requires monitoring to be disabled and returns `status=registration_required` with a protected Root-only Camera Draft. That draft cannot publish until a new reference and floor/bin Registration validate. Publication changes placement, source, and Registration atomically.
 
-### V2 Camera detail API
+### Camera detail API
 
 | Method | Route | Response |
 | --- | --- | --- |
@@ -728,7 +728,7 @@ The current React application uses the Site-scoped dashboard, analytics, and
 bin-placement contracts documented in section 16.
 # Camera monitoring redesign endpoints, 2026-09-05
 
-These V2 additions require a Supervisor Bearer token. Cleaner accounts cannot own monitoring.
+These endpoints require a Supervisor Bearer token. Cleaner accounts cannot own monitoring.
 
 | Method | Path | Behavior |
 | --- | --- | --- |

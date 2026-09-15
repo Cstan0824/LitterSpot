@@ -230,7 +230,7 @@ System Events aggregate recurring dependency/runtime faults without flooding Fir
 
 Optional `occurrences` and `recoveries` subcollections retain bounded recent transitions for support. No stack traces, raw headers, tokens, credentials or paths are stored.
 
-The V2 System page currently uses these persisted codes:
+The production System page currently uses these persisted codes:
 
 - `orchestrator_no_available_cleaner` when Alerts remain waiting because Node found no assignable Cleaner;
 - `orchestrator_provider_unavailable` when provider requests fail through the retry limit;
@@ -255,7 +255,7 @@ This singleton lets startup and migration tools reject an incompatible database 
 | `firebaseProjectId` | string | yes | Target identity written at bootstrap. |
 | `firestoreDatabaseId` | string | yes | Expected database, `(default)` in isolated dev. |
 | `environment` | string | yes | `emulator`, `development-cloud`, or approved deployment environment. |
-| `initializedAt` | timestamp | yes | First V2 bootstrap time. |
+| `initializedAt` | timestamp | yes | First production bootstrap time. |
 | `initializedBy` | string | yes | Migration/bootstrap run ID. |
 | `updatedAt` | timestamp | yes | Latest schema-state change. |
 

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc",
     "start": "node dist/server.js",
     "bootstrap:supervisor": "tsx src/scripts/bootstrapSupervisor.ts",
     "smoke:system-events": "tsx src/scripts/smokeSystemEvents.ts",

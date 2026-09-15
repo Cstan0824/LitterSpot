@@ -35,7 +35,7 @@ Sampling is adaptive. Camera Detail requests a two-frame-per-second target, visi
 
 Record both videos from the same fixed view, with identical pixel dimensions, orientation and bin positions. Register the Camera with that view first.
 
-Set the terminal environment variable `LITTERSPOT_DEMO_TOKEN` to a current Supervisor Firebase ID token. Do not commit the token or paste it into project files. You can alternatively use the Postman folder with `v2RootToken`.
+Set the terminal environment variable `LITTERSPOT_DEMO_TOKEN` to a current Supervisor Firebase ID token. Do not commit the token or paste it into project files.
 
 Register each clip once:
 

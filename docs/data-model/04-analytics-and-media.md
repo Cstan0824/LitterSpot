@@ -33,7 +33,7 @@ Allowed uploads use signature validation, not filename extension alone. Metadata
 
 ## Replay collections
 
-`processingJobs`, `analysisRuns`, `detections`, and `processingJobs/{jobId}/frameFailures` keep their current role for isolated image/video tests. V2 adds tenant, schema, registration, model and simulation metadata consistently.
+`processingJobs`, `analysisRuns`, `detections`, and `processingJobs/{jobId}/frameFailures` keep their current role for isolated image/video tests. The production model adds tenant, schema, registration, model and simulation metadata consistently.
 
 They are not the live monitoring data model. Operational live frames do not become Processing Jobs.
 
@@ -49,7 +49,7 @@ They are not the live monitoring data model. Operational live frames do not beco
 | `type` | enum | yes | `image` or `video`. |
 | `sourceMediaId` | string | yes | Original uploaded media. |
 | `status` | enum | yes | `queued`, `processing`, `completed`, or `failed`. |
-| `workflowMode` | enum | yes | `trace_only` or `operational_replay`. Operational replay may exercise V2 Flag/Alert logic. |
+| `workflowMode` | enum | yes | `trace_only` or `operational_replay`. Operational replay may exercise production Flag/Alert logic. |
 | `isTest` | boolean | yes | True excludes operational workflow and analytics regardless of mode. |
 | `isSimulation` | boolean | yes | Inherited Camera traceability. |
 | `analyticsEligible` | boolean | yes | Explicit operational analytics gate. |
@@ -118,9 +118,9 @@ They are not the live monitoring data model. Operational live frames do not beco
 | `binState` | enum or null | yes | `normal`, `full`, `overflow`, `review`, or `unknown`. |
 | `capturedAt` / `createdAt` | timestamp | yes | Source and persistence times. |
 | `workflowMode` / `isTest` / `isSimulation` | enum/boolean | yes | Operational gates. |
-| `flagId` | string or null | yes | V2 Flag created by operational replay. |
+| `flagId` | string or null | yes | Flag created by operational replay. |
 
-An `operational_replay` uses the same V2 qualification service as live sampling but remains visibly traceable by job/run IDs. It is a testing input path, not a second monitoring architecture.
+An `operational_replay` uses the same qualification service as live sampling but remains visibly traceable by job/run IDs. It is a testing input path, not a second monitoring architecture.
 
 Retention defaults:
 
@@ -235,7 +235,7 @@ This is a replaceable read cache, not a source of truth.
 | `generatedAt` | timestamp | yes | Cache freshness. |
 | `staleAfter` | timestamp | yes | API recomputes after this time. |
 
-Dashboard `counts` contains `zoneCount`, `cameraCount`, `onlineCameraCount`, `cleanerCount`, `availableCleanerCount`, Alert counts by V2 status/severity, and Work counts by V2 status. `orchestrator` contains status, last run/success/failure times and safe failure code.
+Dashboard `counts` contains `zoneCount`, `cameraCount`, `onlineCameraCount`, `cleanerCount`, `availableCleanerCount`, Alert counts by status/severity, and Work counts by status. `orchestrator` contains status, last run/success/failure times and safe failure code.
 
 Each `topAlerts` item stores Alert ID, Camera/Zone labels, issue, condition, status, severity, priority, evidence thumbnail media ID and created/terminal time. Each `busyZones` item stores Zone ID/name, rank, combined score, normalized/raw people pressure, active Work points and qualifying issue count. Cleaner and assigned-Work arrays contain IDs, display snapshots, current status and the minimum navigation fields needed by the Dashboard.
 

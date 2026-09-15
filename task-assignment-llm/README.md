@@ -1,7 +1,7 @@
 # Task Assignment LLM
 
 This directory contains the isolated assignment prototype plus the structured
-provider adapter used by the V2 Node backend. Python never connects to
+provider adapter used by the Node backend. Python never connects to
 Firebase, Firestore, SQLite, Supabase, or another application database.
 
 The only external connection is the selected model provider:
@@ -9,10 +9,10 @@ The only external connection is the selected model provider:
 - Ollama on `127.0.0.1:11434` by default.
 - Gemini only when `GEMINI_API_KEY` is explicitly configured.
 
-## Current V2 integration flow
+## Current integration flow
 
 ```text
-Node reads and validates V2 Firestore state
+Node reads and validates current Firestore state
     -> Node calculates Alert priority, Cleaner availability and map distances
     -> Node sends bounded JSON to scripts/decide_assignment.py
     -> Ollama or Gemini selects one Alert and Cleaner pair
@@ -76,7 +76,7 @@ No LangChain, LangGraph, RAG, or conversation memory is used.
 
 ## Historical database proposal
 
-> The V2 backend integration supersedes this early proposal. Keep it only as a record of the teammate prototype's original assumptions.
+> The production backend integration supersedes this early proposal. Keep it only as a record of the teammate prototype's original assumptions.
 
 The current prototype remains JSON-only. The structures below describe the
 minimum database changes proposed for a later integration stage. They are not

@@ -228,7 +228,7 @@ Create only indexes used by API contracts. Required composite indexes are:
 | `mediaAssets` | `ownerType`, `ownerId`, `createdAt desc` | Aggregate media history |
 | `processingJobs` | `siteId`, `createdAt desc` | Replay job list |
 
-Firestore may require separate variants for optional filters. Add one only after an endpoint and emulator test prove it is needed. Do not retain obsolete V1 indexes after V2 cutover.
+Firestore may require separate variants for optional filters. Add one only after an endpoint and emulator test prove it is needed. Do not retain obsolete legacy indexes after the production cutover.
 
 Disable indexing for large maps/arrays: geometry, detections, model versions, input snapshots, decision factors, safe before/after maps, zone analytics maps, Dashboard arrays and validation arrays.
 
@@ -274,7 +274,7 @@ Cleanup jobs mark media metadata before removing bytes, use allowlisted roots, a
 ## Schema evolution
 
 - Every repository schema change increments a named contract version when meaning changes.
-- Readers may temporarily accept V1 during a migration phase, but every V2 writer emits only V2.
+- Readers may temporarily accept legacy records during a migration phase, but every production writer emits only the production schema.
 - Historical snapshots are never silently rewritten just because names changed.
 - Rebuildable caches may be deleted and regenerated.
 - Migration scripts support dry-run, exact project/database validation, counts, resumable checkpoints and idempotent reruns.

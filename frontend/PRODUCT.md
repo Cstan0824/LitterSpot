@@ -42,12 +42,12 @@ The system combines registered fixed-camera geometry, local detection models, a 
 
 - Product name: LitterSpot.
 - User-facing language is operational, concise, and understandable without AI terminology.
-- Melissa's delivered Supervisor and Cleaner interfaces remain the visual and interaction authority during V2 integration.
+- Melissa's delivered Supervisor and Cleaner interfaces remain the visual and interaction authority for the integrated application.
 
 ## Evidence on hand
 
 - The repository contains trained floor-hazard, people, bin-localisation, and bin-state inference code and weights.
-- The backend has tested V2 contracts for Site Maps, Camera registration and monitoring, Alerts, Cleaners, Work Orders, Orchestrator Runs, notifications, dashboard summaries, and bin-placement analytics.
+- The backend has tested production contracts for Site Maps, Camera registration and monitoring, Alerts, Cleaners, Work Orders, Orchestrator Runs, notifications, dashboard summaries, and bin-placement analytics.
 - Current screenshots and seeded development records are prototype evidence. They are not performance claims about model accuracy or production scale.
 
 ## Product principles

@@ -1,6 +1,6 @@
 # Local emulator development
 
-Run the complete isolated V2 stack from the repository root:
+Run the complete isolated application stack from the repository root:
 
 ```sh
 npm run start:emulator

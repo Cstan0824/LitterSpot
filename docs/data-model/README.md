@@ -1,4 +1,4 @@
-# LitterSpot Firestore V2 plan
+# LitterSpot Firestore production model
 
 ## Status and authority
 
@@ -176,7 +176,7 @@ Common mutation fields are:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schemaVersion` | integer | Stored document contract. V2 uses `2`. |
+| `schemaVersion` | integer | Stored document contract. The production model uses `2`. |
 | `createdAt` | timestamp | First successful persistence time. |
 | `createdByUid` | string or null | Human UID that created the record. Null means a system actor. |
 | `updatedAt` | timestamp | Latest parent-document mutation time. |
