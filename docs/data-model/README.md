@@ -2,12 +2,8 @@
 
 ## Status and authority
 
-This directory records the application database design for the clarified
-LitterSpot product.
-
-Use these documents with the
-[`database-field-dictionary.md`](../database-field-dictionary.md), which records
-the concrete fields used by the implementation.
+This directory is the authoritative Firestore collection and field reference
+for the implemented LitterSpot application.
 
 ## Design decisions
 
@@ -20,7 +16,7 @@ the concrete fields used by the implementation.
 - Parent Alert and Work Order documents keep their latest state for fast screens.
 - Node/Express is the only writer of operational data.
 - The frontend may directly read only its own `notifications` through Firestore rules.
-- Ordinary two-second Camera samples and frames are not stored in Firestore.
+- Ordinary adaptive Camera samples and frames are not stored in Firestore.
 - Alert Evidence and required Completion Evidence use local prototype media storage with Firestore metadata.
 - Raw LLM output stays outside Firestore in ignored developer storage.
 - Every persisted document starts with `schemaVersion: 2` unless the collection is explicitly external or temporary.
@@ -215,4 +211,4 @@ These concepts are derived and must not become competing sources of truth:
 - Busy Zone rank. Calculate it from the latest 15 minutes and active Work Orders, then cache it in `dashboardSummaries`.
 - current Alert age and priority. Calculate from timestamps and policy, then persist recalculated values when scheduler or workflow activity occurs.
 - live recommendations. `binPlacementSnapshots/{siteId}` is a replaceable calculation cache, not a history of pending recommendations.
-- two-second AI Observation. Keep it in Node memory unless it becomes a persisted Flag, replay trace, or aggregate.
+- individual sampled AI Observation. Keep it in Node memory unless it becomes a persisted Flag, replay trace, or aggregate.

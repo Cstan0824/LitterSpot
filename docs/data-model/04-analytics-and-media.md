@@ -131,7 +131,7 @@ Retention defaults:
 
 ## `analyticsMinuteBuckets/{bucketId}`
 
-One document represents one UTC minute for one Site and holds per-Zone numeric aggregates. It replaces one-document-per-two-second-sample storage.
+One document represents one UTC minute for one Site and holds per-Zone numeric aggregates. It avoids one-document-per-sample storage.
 
 | Field | Type | Required | Meaning and workflow use |
 | --- | --- | ---: | --- |

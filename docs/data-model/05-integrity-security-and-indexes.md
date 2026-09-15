@@ -60,21 +60,23 @@ Do not reintroduce V1 values such as `new`, `acknowledged`, `awaiting_verificati
 | View selected-Site operational data | yes | yes | yes | own Work only | controlled tools only |
 | Daily Alert/Work decisions | no | yes | yes | own transitions only | controlled tools only |
 | Supervisor account management | recovery only | yes | no | no | no |
-| Site Map dimensions/Zone/Camera placement | structural admin | yes | no | no | no |
-| Camera Registration/re-registration | structural admin | yes | yes | no | no |
-| Cleaner profile/schedule/station/override | structural admin | yes | yes | no | no |
-| Pause/resume Orchestrator | structural admin | yes | yes | no | no |
+| Site Map dimensions/Zone/Camera placement | initial map at Site creation only | yes | no | no | no |
+| Camera Registration/re-registration | no | yes | yes | no | no |
+| Cleaner profile/schedule/station/override | no | yes | yes | no | no |
+| Pause/resume Orchestrator | no | yes | yes | no | no |
 | Read own notifications through Firestore | no product need | yes | yes | yes | no |
 | Write operational Firestore directly | Admin backend only | no | no | no | no |
 
-Superadmin access to selected-Site operational pages is read and structural in its separate interface. Daily dismissal, replacement, resolution and Verification override remain in the Client Supervisor interface.
+Superadmin access to selected-Site operational pages is read-only. Site lifecycle and Root recovery remain in its separate interface. Daily dismissal, replacement, resolution and Verification override remain in the Client Supervisor interface.
+
+The generic `/api/sites`, `/api/zones`, and `/api/cameras` compatibility routes are only Supervisor-gated and their unfiltered reads are not Site-scoped. The matrix above describes the primary product workflows, not those compatibility routes.
 
 ## Required invariants
 
 ### Tenant and identity
 
 - Every tenant-owned document has one valid `siteId`.
-- Backend queries always add the caller's Site before other filters.
+- Primary product services add the caller's Site before other filters. Generic location compatibility routes are the documented exception.
 - Resource IDs from a request are loaded and checked against the caller's Site before mutation.
 - Exactly one active Root Supervisor exists per active Site.
 - A Cleaner and Supervisor belongs to one Site only.
@@ -91,14 +93,14 @@ Superadmin access to selected-Site operational pages is read and structural in i
 
 ### Cameras
 
-- The first Site Camera uses laptop source.
-- At most one active laptop Camera exists per Site.
-- Later prototype Cameras use looped video and publish with `monitoringEnabled=false`.
+- Any Camera may use laptop or looped-video source.
+- At most one laptop Camera has monitoring enabled per Site.
+- Every newly published Camera starts with `monitoringEnabled=false`.
 - Camera publication requires a ready source and validated initial Registration.
 - Source replacement publishes its new Registration in the same transaction as the source pointer.
 - Only one unexpired Monitoring Session lease owns Site capture.
 - A sample must match the owner lease, Camera source revision, Registration revision, Monitoring Episode and next sequence.
-- Replay/test samples never enter operational workflow.
+- Development and simulation observations are marked with `isSimulation`; enabled looped Cameras may exercise the operational workflow for demonstrations.
 
 ### Alerts and Work
 

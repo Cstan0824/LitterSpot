@@ -144,7 +144,7 @@ This is the structured System-page tool log.
 | `errorCode` | string or null | Safe failure. |
 | `startedAt` / `completedAt` | timestamp | Timing. |
 
-Raw provider output is written only when development debug mode is enabled. Files live under `data/orchestrator-debug`, are ignored by Git, cap each response at 64 KiB, rotate after 14 days, and use Run ID for correlation.
+Structured JSON emitted by the provider bridge is written only when development debug mode is enabled. Files live under `data/orchestrator-debug`, are ignored by Git, cap each response at 64 KiB, rotate after 14 days, and use Run ID for correlation. Hidden provider reasoning and the provider's original transport response are not stored.
 
 ## `notifications/{notificationId}`
 

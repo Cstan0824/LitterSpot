@@ -1,6 +1,6 @@
 # Cameras and cleanliness operations
 
-Camera runtime updates from 2026-09-05 are described in [camera-monitoring-testing-guide.md](../camera-monitoring-testing-guide.md). All new Cameras begin disabled; creation order no longer restricts source type. Live frames travel through authenticated event streaming and are not Firestore documents. Current runtime freshness, frame sequence, rolling qualification, evidence candidates, and partial Camera Verification samples stay in Node memory. Firestore records material transitions and minute summaries. A Node restart begins a new episode and reloads unfinished durable Verification requests.
+Runtime behavior is described in [camera monitoring](../camera-monitoring.md). All new Cameras begin disabled; creation order does not restrict source type. Live frames travel through authenticated event streaming and are not Firestore documents. Current runtime freshness, frame sequence, rolling qualification, evidence candidates, and partial Camera Verification samples stay in Node memory. Firestore records material transitions and minute summaries. A Node restart begins a new episode and reloads unfinished durable Verification requests.
 
 ## `cameraDrafts/{draftId}`
 
