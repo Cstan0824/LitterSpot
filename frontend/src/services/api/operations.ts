@@ -63,7 +63,7 @@ export type OperationsReadModel = {
   cameras: OperationsCamera[];
 };
 
-export const getDashboardResource = async (signal?: AbortSignal) => (await apiRequest<{ dashboard: OperationsDashboard }>("/api/dashboard/v2", { signal })).dashboard;
+export const getDashboardResource = async (signal?: AbortSignal) => (await apiRequest<{ dashboard: OperationsDashboard }>("/api/dashboard", { signal })).dashboard;
 export const getSiteMapResource = async (signal?: AbortSignal) => (await apiRequest<{ map: OperationsReadModel["siteMap"] }>("/api/site-map", { signal })).map;
 const pageUrl = (path: string, input: Record<string, string | number | undefined>) => { const query = new URLSearchParams(); Object.entries(input).forEach(([key, value]) => { if (value !== undefined && value !== "") query.set(key, String(value)); }); return `${path}?${query}`; };
 const normalizePage = <T>(response: { items?: T[]; nextCursor: string | null; hasMore: boolean; totalCount: number }, fallback: T[]): ListPage<T> => ({ items: response.items ?? fallback, nextCursor: response.nextCursor, hasMore: response.hasMore, totalCount: response.totalCount });

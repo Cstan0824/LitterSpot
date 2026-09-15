@@ -139,19 +139,19 @@ export type ServiceHealth = {
 };
 
 export const getSystemView = (signal?: AbortSignal) =>
-  apiRequest<SystemView>("/api/operations/v2/system", { signal });
+  apiRequest<SystemView>("/api/operations/system", { signal });
 
 export const setOrchestratorStatus = (status: "running" | "paused", reason?: string | null) =>
-  apiRequest<{ config: SystemView["configuration"] }>("/api/orchestrator/v2/status", {
+  apiRequest<{ config: SystemView["configuration"] }>("/api/orchestrator/status", {
     method: "POST",
     json: { status, reason: reason?.trim() || null },
   });
 
 export const getOrchestratorRunDetail = (runId: string, signal?: AbortSignal) =>
-  apiRequest<OrchestratorRunDetail>(`/api/orchestrator/v2/runs/${encodeURIComponent(runId)}`, { signal });
+  apiRequest<OrchestratorRunDetail>(`/api/orchestrator/runs/${encodeURIComponent(runId)}`, { signal });
 
 export const getOrchestratorRunsPage = (cursor?: string, signal?: AbortSignal): Promise<ListPage<SystemRun>> => {
-  const url = `/api/orchestrator/v2/runs?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+  const url = `/api/orchestrator/runs?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
   return cachedPageRequest(url, async () => { const result = await apiRequest<{ runs: SystemRun[]; nextCursor: string | null; hasMore: boolean; totalCount: number }>(url); return { items: result.runs, nextCursor: result.nextCursor, hasMore: result.hasMore, totalCount: result.totalCount }; }, 30_000, signal);
 };
 

@@ -21,7 +21,7 @@ describe("Site Map API client", () => {
     expect(request).toHaveBeenLastCalledWith("/api/site-map/retired-zones", { signal: undefined });
     request.mockResolvedValueOnce({ events: [] });
     await getSiteMapAuditEvents();
-    expect(request).toHaveBeenLastCalledWith("/api/operations/v2/audit-events", { signal: undefined });
+    expect(request).toHaveBeenLastCalledWith("/api/operations/audit-events", { signal: undefined });
   });
 
   it("uses the complete real draft lifecycle", async () => {

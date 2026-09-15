@@ -42,7 +42,7 @@ run("development test support", () => {
 
   it("creates an idempotent simulated Flag, Alert, history and Orchestrator trigger", async () => {
     const body = { cameraId, issueType: "floor_litter", condition: "litter", severity: "warning", confidence: 0.99, clientRequestId: `integration-${suffix}` };
-    const first = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body);
+    const first = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body);
     expect(first.status).toBe(201);
     expect(first.body.alert).toMatchObject({ siteId, cameraId, issueType: "floor_litter", status: "waiting_for_cleaner", isSimulation: true, managementMode: "orchestrated" });
     expect(first.body.flag).toMatchObject({ alertId: first.body.alert.id, isSimulation: true, qualificationPolicyVersion: "simulated-alert-v1" });
@@ -50,38 +50,38 @@ run("development test support", () => {
     expect((await firestore.collection("alerts").doc(first.body.alert.id).collection("events").get()).size).toBe(1);
     expect((await firestore.collection("orchestratorOutbox").where("aggregateId", "==", first.body.alert.id).get()).docs.some((document) => document.data().status === "pending")).toBe(true);
 
-    const replay = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body);
+    const replay = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body);
     expect(replay.status).toBe(201);
     expect(replay.body.idempotent).toBe(true);
     expect(replay.body.alert.id).toBe(first.body.alert.id);
 
-    const changed = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, severity: "critical" });
+    const changed = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, severity: "critical" });
     expect(changed.status).toBe(409);
     const context = await getAssignmentContext(siteId);
     expect(context.alerts.map((alert) => alert.alertId)).toContain(first.body.alert.id);
 
-    const conflict = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, clientRequestId: `different-${suffix}` });
+    const conflict = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, clientRequestId: `different-${suffix}` });
     expect(conflict.status).toBe(409);
   });
 
   it("rejects invalid conditions, cross-Site Cameras and unauthenticated requests", async () => {
     const body = { cameraId, issueType: "floor_spill", condition: "spill", severity: "critical", clientRequestId: `invalid-${suffix}` };
-    expect((await request(app).post("/api/test-support/v2/alerts").send(body)).status).toBe(401);
-    expect((await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, condition: "full" })).status).toBe(400);
+    expect((await request(app).post("/api/test-support/alerts").send(body)).status).toBe(401);
+    expect((await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, condition: "full" })).status).toBe(400);
     const otherCamera = `other-camera-${suffix}`;
     await firestore.collection("cameras").doc(otherCamera).set({ schemaVersion: 2, siteId: "other-site", status: "active" });
-    expect((await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, cameraId: otherCamera })).status).toBe(404);
+    expect((await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send({ ...body, cameraId: otherCamera })).status).toBe(404);
   });
 
   it("notifies Site Supervisors once when a new simulated Alert is created while paused", async () => {
     await firestore.collection("orchestratorConfigs").doc(siteId).update({ status: "paused" });
     const body = { cameraId, issueType: "floor_spill", condition: "spill", severity: "critical", confidence: 0.99, clientRequestId: `paused-${suffix}` };
     try {
-      const first = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body);
+      const first = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body);
       expect(first.status).toBe(201);
       const notifications = () => firestore.collection("notifications").where("alertId", "==", first.body.alert.id).where("type", "==", "alert_waiting_orchestrator_paused").get();
       expect((await notifications()).size).toBe(1);
-      const replay = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body);
+      const replay = await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body);
       expect(replay.body.idempotent).toBe(true);
       expect((await notifications()).size).toBe(1);
     } finally {
@@ -94,7 +94,7 @@ run("development test support", () => {
     await firestore.collection("userAccounts").doc(rootUid).update({ authority: "regular" });
     await firestore.collection("supervisors").doc(rootUid).update({ authority: "regular" });
     try {
-      expect((await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body)).status).toBe(403);
+      expect((await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body)).status).toBe(403);
     } finally {
       await firestore.collection("userAccounts").doc(rootUid).update({ authority: "root" });
       await firestore.collection("supervisors").doc(rootUid).update({ authority: "root" });
@@ -102,7 +102,7 @@ run("development test support", () => {
     const previousEnvironment = env.appEnvironment;
     env.appEnvironment = "production-cloud";
     try {
-      expect((await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body)).status).toBe(404);
+      expect((await request(app).post("/api/test-support/alerts").set("Authorization", `Bearer ${token}`).send(body)).status).toBe(404);
     } finally {
       env.appEnvironment = previousEnvironment;
     }

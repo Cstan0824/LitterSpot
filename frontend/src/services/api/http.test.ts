@@ -20,7 +20,7 @@ describe("request layer", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(apiRequest<{ ok: boolean }>("/api/orchestrator/v2/status", { method: "POST", json: { status: "paused" } })).resolves.toEqual({ ok: true });
+    await expect(apiRequest<{ ok: boolean }>("/api/orchestrator/status", { method: "POST", json: { status: "paused" } })).resolves.toEqual({ ok: true });
     expect(getIdToken).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

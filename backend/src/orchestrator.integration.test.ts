@@ -183,12 +183,12 @@ run("Orchestrator integration", () => {
   it("exposes assignment only through a leased Node-controlled run", async () => {
     const scenario = await seedScenario();
     const workerId = `external-worker-${randomUUID()}`;
-    const created = await request(app).post("/internal/orchestrator/v2/assignment-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, triggerType: "integration_test" });
+    const created = await request(app).post("/internal/orchestrator/assignment-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, triggerType: "integration_test" });
     expect(created.status).toBe(201);
-    const context = await request(app).get(`/internal/orchestrator/v2/runs/${created.body.runId}/assignment-context`).query({ siteId: scenario.siteId }).set(internalHeaders(workerId));
+    const context = await request(app).get(`/internal/orchestrator/runs/${created.body.runId}/assignment-context`).query({ siteId: scenario.siteId }).set(internalHeaders(workerId));
     expect(context.status).toBe(200);
     expect(context.body.context.eligiblePairs).toHaveLength(4);
-    const assigned = await request(app).post(`/internal/orchestrator/v2/runs/${created.body.runId}/assign-cleaner`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, alertId: scenario.alertIds[0], cleanerId: scenario.cleanerIds[1], rationaleSummary: "Critical Alert selected with an available Cleaner." });
+    const assigned = await request(app).post(`/internal/orchestrator/runs/${created.body.runId}/assign-cleaner`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, alertId: scenario.alertIds[0], cleanerId: scenario.cleanerIds[1], rationaleSummary: "Critical Alert selected with an available Cleaner." });
     expect(assigned.status).toBe(201);
     expect(assigned.body.workOrder).toMatchObject({ alertId: scenario.alertIds[0], assignedCleanerId: scenario.cleanerIds[1], managementMode: "orchestrated" });
     const runDetails = await firestore.collection("orchestratorRuns").doc(created.body.runId).get();
@@ -217,12 +217,12 @@ run("Orchestrator integration", () => {
     await firestore.collection("workOrders").doc(workOrderId).collection("verifications").doc(verificationId).set({ schemaVersion: 2, siteId: scenario.siteId, workOrderId, alertId: scenario.alertIds[0], status: "ready", outcome: "passed", outcomeReasonCodes: ["required_clear_samples_observed"], sampleSummaries: [], requestedAt: Timestamp.fromDate(scenario.now) });
 
     const workerId = `review-worker-${randomUUID()}`;
-    const reviewRun = await request(app).post("/internal/orchestrator/v2/review-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId, triggerType: "integration_test" });
+    const reviewRun = await request(app).post("/internal/orchestrator/review-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId, triggerType: "integration_test" });
     expect(reviewRun.status).toBe(201);
-    const context = await request(app).get(`/internal/orchestrator/v2/runs/${reviewRun.body.runId}/review-context`).query({ siteId: scenario.siteId, workOrderId }).set(internalHeaders(workerId));
+    const context = await request(app).get(`/internal/orchestrator/runs/${reviewRun.body.runId}/review-context`).query({ siteId: scenario.siteId, workOrderId }).set(internalHeaders(workerId));
     expect(context.status).toBe(200);
     expect(context.body.context.verificationOutcome).toBe("passed");
-    const resolved = await request(app).post(`/internal/orchestrator/v2/runs/${reviewRun.body.runId}/resolve-verified-work`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId });
+    const resolved = await request(app).post(`/internal/orchestrator/runs/${reviewRun.body.runId}/resolve-verified-work`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId });
     expect(resolved.status).toBe(200);
     expect(resolved.body.workOrder.status).toBe("resolved");
     const cleaner = await firestore.collection("cleaners").doc(scenario.cleanerIds[0]).get();
@@ -242,8 +242,8 @@ run("Orchestrator integration", () => {
     await firestore.collection("workOrders").doc(workOrderId).collection("verifications").doc(verificationId).set({ schemaVersion: 2, siteId: scenario.siteId, workOrderId, alertId: scenario.alertIds[0], status: "ready", outcome: "failed", outcomeReasonCodes: ["issue_still_visible"], sampleSummaries: [], requestedAt: Timestamp.fromDate(scenario.now) });
 
     const workerId = `review-worker-${randomUUID()}`;
-    const reviewRun = await request(app).post("/internal/orchestrator/v2/review-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId, triggerType: "integration_test" });
-    const rework = await request(app).post(`/internal/orchestrator/v2/runs/${reviewRun.body.runId}/request-rework`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId });
+    const reviewRun = await request(app).post("/internal/orchestrator/review-runs").set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId, triggerType: "integration_test" });
+    const rework = await request(app).post(`/internal/orchestrator/runs/${reviewRun.body.runId}/request-rework`).set(internalHeaders(workerId)).send({ siteId: scenario.siteId, workOrderId });
     expect(rework.status).toBe(200);
     expect(rework.body.workOrder).toMatchObject({ status: "in_progress", assignedCleanerId: scenario.cleanerIds[0], reworkCount: 1 });
     expect((await firestore.collection("cleaners").doc(scenario.cleanerIds[0]).get()).data()?.activeWorkOrderId).toBe(workOrderId);

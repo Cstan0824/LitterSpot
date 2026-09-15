@@ -99,19 +99,19 @@ export type BinPlacementComparison = {
 };
 
 export const getBinPlacementRecommendations = (days?: number, signal?: AbortSignal) =>
-  apiRequest<{ snapshot: BinPlacementSnapshot }>(`/api/bin-placement/v2/recommendations${days === undefined ? "" : `?days=${encodeURIComponent(days)}`}`, { signal });
+  apiRequest<{ snapshot: BinPlacementSnapshot }>(`/api/bin-placement/recommendations${days === undefined ? "" : `?days=${encodeURIComponent(days)}`}`, { signal });
 
 export const refreshBinPlacementRecommendations = (days: number) =>
-  apiRequest<{ snapshot: BinPlacementSnapshot }>("/api/bin-placement/v2/recommendations/refresh", { method: "POST", json: { days } });
+  apiRequest<{ snapshot: BinPlacementSnapshot }>("/api/bin-placement/recommendations/refresh", { method: "POST", json: { days } });
 
 export const implementBinPlacement = (zoneId: string, snapshotCalculatedAt: string, note?: string) =>
-  apiRequest<{ intervention: BinPlacementIntervention }>(`/api/bin-placement/v2/zones/${encodeURIComponent(zoneId)}/implement`, {
+  apiRequest<{ intervention: BinPlacementIntervention }>(`/api/bin-placement/zones/${encodeURIComponent(zoneId)}/implement`, {
     method: "POST",
     json: { snapshotCalculatedAt, ...(note?.trim() ? { note: note.trim() } : {}) },
   });
 
 export const getBinPlacementInterventions = (signal?: AbortSignal) =>
-  apiRequest<{ interventions: BinPlacementIntervention[] }>("/api/bin-placement/v2/interventions", { signal });
+  apiRequest<{ interventions: BinPlacementIntervention[] }>("/api/bin-placement/interventions", { signal });
 
 export const getBinPlacementComparison = (interventionId: string, days: number, signal?: AbortSignal) =>
-  apiRequest<{ comparison: BinPlacementComparison }>(`/api/bin-placement/v2/interventions/${encodeURIComponent(interventionId)}/comparison?days=${encodeURIComponent(days)}`, { signal });
+  apiRequest<{ comparison: BinPlacementComparison }>(`/api/bin-placement/interventions/${encodeURIComponent(interventionId)}/comparison?days=${encodeURIComponent(days)}`, { signal });

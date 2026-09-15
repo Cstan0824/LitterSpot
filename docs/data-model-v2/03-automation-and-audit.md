@@ -240,7 +240,7 @@ The V2 System page currently uses these persisted codes:
 - `orchestrator_review_failed` when automatic review stops unexpectedly;
 - `site_operation_failed` for failed Site cleanup reconciliation.
 
-`orchestrator_worker_disabled` is a response-only runtime warning. Node derives it during `GET /api/operations/v2/system` when Site configuration says `running` but this process has the background worker disabled. It is not stored as a Firestore event.
+`orchestrator_worker_disabled` is a response-only runtime warning. Node derives it during `GET /api/operations/system` when Site configuration says `running` but this process has the background worker disabled. It is not stored as a Firestore event.
 
 ## `systemMetadata/schema`
 

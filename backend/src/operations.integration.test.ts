@@ -72,7 +72,7 @@ run("platform operations", () => {
     const persisted = await getDoc(doc(db, "notifications", id));
     expect(persisted.data()?.title).toBe(notification.title);
     expect(await listNotifications(siteId, uid)).toHaveLength(1);
-    const inbox = await request(app).get("/api/operations/v2/notifications").set("Authorization", `Bearer ${token}`);
+    const inbox = await request(app).get("/api/operations/notifications").set("Authorization", `Bearer ${token}`);
     expect(inbox.status).toBe(200);
     expect(inbox.body.notifications[0].createdAt).toEqual(expect.any(String));
     await expect(setDoc(doc(db, "notifications", id), { title: "forged" })).rejects.toMatchObject({ code: "permission-denied" });
@@ -112,11 +112,11 @@ run("platform operations", () => {
     await updateSiteStatus(siteId, "active", "testing complete", actor, suffix);
     expect((await firestore.collection("workOrders").doc(workId).get()).data()?.status).toBe("dismissed");
     expect((await firestore.collection("workOrders").doc(workId).collection("events").get()).size).toBe(1);
-    const audit = await request(app).get("/api/operations/v2/audit-events").query({ siteId: "other-site" }).set("Authorization", `Bearer ${token}`);
+    const audit = await request(app).get("/api/operations/audit-events").query({ siteId: "other-site" }).set("Authorization", `Bearer ${token}`);
     expect(audit.status).toBe(200);
     expect(audit.body.events.every((event: any) => event.siteId === siteId)).toBe(true);
     expect(JSON.stringify(audit.body)).not.toContain(password);
-    const system = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${token}`);
+    const system = await request(app).get("/api/operations/system").set("Authorization", `Bearer ${token}`);
     expect(system.status).toBe(200);
     expect(system.body.configuration.status).toBe("paused");
   });
@@ -153,7 +153,7 @@ run("platform operations", () => {
     await recordSystemEvent(siteId, "assignment_failed");
     await recordSystemEvent(siteId, "assignment_failed");
     await recordSystemEvent(siteId, "assignment_failed", true);
-    const result = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${token}`);
+    const result = await request(app).get("/api/operations/system").set("Authorization", `Bearer ${token}`);
     expect(result.status).toBe(200);
     expect(result.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ code: "assignment_failed", status: "recovered", occurrenceCount: 2 })]));
   });
@@ -165,7 +165,7 @@ run("platform operations", () => {
     const runId = `system-run-${suffix}`;
     const noOpRunId = `system-no-op-run-${suffix}`;
     await firestore.collection("orchestratorConfigs").doc(siteId).update({ status: "running", revision: 10 });
-    const paused = await request(app).post("/api/orchestrator/v2/status")
+    const paused = await request(app).post("/api/orchestrator/status")
       .set("Authorization", `Bearer ${regularToken}`)
       .send({ status: "paused", reason: "Testing the safe System view" });
     expect(paused.status).toBe(200);
@@ -205,7 +205,7 @@ run("platform operations", () => {
       completedAt: new Date(),
     });
 
-    const result = await request(app).get("/api/operations/v2/system").set("Authorization", `Bearer ${regularToken}`);
+    const result = await request(app).get("/api/operations/system").set("Authorization", `Bearer ${regularToken}`);
     expect(result.status).toBe(200);
     expect(result.body.runtime.backlog).toEqual({ waitingAlertCount: 1, awaitingReviewWorkOrderCount: 1 });
     expect(result.body.controlHistory[0]).toMatchObject({ status: "paused", actorUid: regularUid, actorNameSnapshot: "Regular Supervisor", reason: "Testing the safe System view" });

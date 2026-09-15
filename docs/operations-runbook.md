@@ -72,7 +72,7 @@ do not expose a stack or raw upstream payload.
 Dependency failures are deduplicated in `systemEvents` by dependency, event
 code, and scope. The current product provides authenticated Site visibility:
 
-- `GET /api/operations/v2/system`
+- `GET /api/operations/system`
 
 Only allowlisted safe details are persisted. There is intentionally no public
 endpoint for creating, resolving, or deleting system events.
@@ -228,7 +228,7 @@ idempotent so an interrupted metadata update can be retried.
 1. Capture the `X-Request-ID`, UTC timestamp, route, job/media ID, and visible
    HTTP status. Do not capture tokens or passwords.
 2. Check `/api/health/live`, then `/api/health/ready`.
-3. Inspect `GET /api/operations/v2/system` and the matching structured
+3. Inspect `GET /api/operations/system` and the matching structured
    logs.
 4. For failed jobs, inspect the persisted stable error code and retry only via
    the documented retry endpoint. Reusing the upload idempotency key with a

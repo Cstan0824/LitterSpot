@@ -183,12 +183,12 @@ run("Phase 11 service regressions",()=>{
     try{
       const signin=await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=x`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password,returnSecureToken:true})});
       const token=(await signin.json() as any).idToken;
-      expect((await request(app).post("/api/analytics/v2/daily/rebuild").set("Authorization",`Bearer ${token}`).send({localDate:"2026-02-30"})).status).toBe(400);
-      const dashboard=await request(app).get("/api/dashboard/v2?siteId=other-site").set("Authorization",`Bearer ${token}`);
+      expect((await request(app).post("/api/analytics/daily/rebuild").set("Authorization",`Bearer ${token}`).send({localDate:"2026-02-30"})).status).toBe(400);
+      const dashboard=await request(app).get("/api/dashboard?siteId=other-site").set("Authorization",`Bearer ${token}`);
       expect(dashboard.status).toBe(200); expect(dashboard.body.dashboard.siteId).toBe(s.siteId);
       await s.put("cleaners",uid,{authUid:uid,status:"active"});
       await firestore.collection("userAccounts").doc(uid).update({role:"cleaner",authority:null});
-      expect((await request(app).get("/api/dashboard/v2").set("Authorization",`Bearer ${token}`)).status).toBe(403);
+      expect((await request(app).get("/api/dashboard").set("Authorization",`Bearer ${token}`)).status).toBe(403);
     }finally{await firebaseAuth.deleteUser(uid);}
   });
 });

@@ -11,18 +11,18 @@ describe("System client", () => {
   it("loads the bounded Site System view", async () => {
     const controller = new AbortController();
     await getSystemView(controller.signal);
-    expect(request).toHaveBeenCalledWith("/api/operations/v2/system", { signal: controller.signal });
+    expect(request).toHaveBeenCalledWith("/api/operations/system", { signal: controller.signal });
   });
 
   it("sends a bounded pause reason and a null resume reason", async () => {
     await setOrchestratorStatus("paused", "  Camera maintenance  ");
-    expect(request).toHaveBeenCalledWith("/api/orchestrator/v2/status", { method: "POST", json: { status: "paused", reason: "Camera maintenance" } });
+    expect(request).toHaveBeenCalledWith("/api/orchestrator/status", { method: "POST", json: { status: "paused", reason: "Camera maintenance" } });
     await setOrchestratorStatus("running");
-    expect(request).toHaveBeenLastCalledWith("/api/orchestrator/v2/status", { method: "POST", json: { status: "running", reason: null } });
+    expect(request).toHaveBeenLastCalledWith("/api/orchestrator/status", { method: "POST", json: { status: "running", reason: null } });
   });
 
   it("encodes the Run ID before loading its technical detail", async () => {
     await getOrchestratorRunDetail("run/one");
-    expect(request).toHaveBeenCalledWith("/api/orchestrator/v2/runs/run%2Fone", { signal: undefined });
+    expect(request).toHaveBeenCalledWith("/api/orchestrator/runs/run%2Fone", { signal: undefined });
   });
 });

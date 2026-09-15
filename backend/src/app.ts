@@ -78,11 +78,11 @@ app.use("/api/me", supervisorRoutes);
 app.use("/api/superadmin", requireSuperadmin, superadminRoutes);
 app.use("/api/cleaner", requireCleaner, cleanerSelfRoutes);
 app.use("/api", requireSupervisor);
-app.use("/api/operations/v2", operationsRoutes);
-app.use(["/api/dashboard/v2", "/api/analytics/v2", "/api/bin-placement/v2"], auditMutation);
-app.use("/api/dashboard/v2", phase11DashboardRoutes);
-app.use("/api/analytics/v2", phase11AnalyticsRoutes);
-app.use("/api/bin-placement/v2", phase11BinPlacementRoutes);
+app.use("/api/operations", operationsRoutes);
+app.use(["/api/dashboard", "/api/analytics", "/api/bin-placement"], auditMutation);
+app.use("/api/dashboard", phase11DashboardRoutes);
+app.use("/api/analytics", phase11AnalyticsRoutes);
+app.use("/api/bin-placement", phase11BinPlacementRoutes);
 app.use(["/api/site-map", "/api/camera-creation", "/api/monitoring", "/api/alerts", "/api/supervisors"], auditMutation);
 app.use("/api/site-map", siteMapRoutes);
 app.use("/api/camera-creation", cameraCreationRoutes);
@@ -99,11 +99,11 @@ app.use("/api/work-orders", (req, _res, next) => {
   if (req.authUser.siteId && req.authUser.role === "supervisor") return workOrderRoutes(req, _res, next);
   return next();
 });
-app.use("/api/test-support/v2", testSupportRoutes);
+app.use("/api/test-support", testSupportRoutes);
 app.use("/api/development/cameras", cameraSceneRoutes);
 app.use("/api/zones", zoneRoutes);
-app.use("/api/orchestrator/v2", orchestratorSupervisorRoutes);
-app.use("/internal/orchestrator/v2", orchestratorInternalRoutes);
+app.use("/api/orchestrator", orchestratorSupervisorRoutes);
+app.use("/internal/orchestrator", orchestratorInternalRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Route not found.", requestId: req.requestId }));
 

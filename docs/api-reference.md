@@ -10,7 +10,7 @@ not call Firestore or the private FastAPI service directly.
 
 | Status | Routes | Persistence | Safe for future frontend integration? |
 | --- | --- | --- | --- |
-| Current product | `/api/me`, `/api/superadmin/*`, `/api/site-map/*`, `/api/camera-creation/*`, `/api/monitoring/*`, `/api/cleaners`, `/api/cleaner/*`, `/api/work-orders`, `/api/alerts`, `/api/dashboard/v2`, `/api/analytics/v2`, `/api/bin-placement/v2`, `/api/operations/v2`, `/api/orchestrator/v2` | Firebase Authentication, cloud Firestore, and local media | Yes |
+| Current product | `/api/me`, `/api/superadmin/*`, `/api/site-map/*`, `/api/camera-creation/*`, `/api/monitoring/*`, `/api/cleaners`, `/api/cleaner/*`, `/api/work-orders`, `/api/alerts`, `/api/dashboard`, `/api/analytics`, `/api/bin-placement`, `/api/operations`, `/api/orchestrator` | Firebase Authentication, cloud Firestore, and local media | Yes |
 | Protected media | `/api/media/:mediaId`, `/api/media/:mediaId/content`, `/api/media/:mediaId/overlay` | Authenticated Site-scoped local file delivery | Yes |
 | Retired APIs | Former media intake, processing jobs, analysis/detection inspection, raw Flags/Issue Observations, unversioned dashboard/analytics, public System-event ledger, and `/api/cameras/{cameraId}/registration/*` | Internal services and persisted history retained | No; routes return 404 |
 | Public health checks | `/api/health/live`, `/api/health/ready`, `/api/health` | None | Yes |
@@ -460,15 +460,15 @@ retired. Internal qualification and stored history remain.
 
 ## 12. Site dashboard
 
-Use `GET /api/dashboard/v2` and `POST /api/dashboard/v2/refresh` for the
+Use `GET /api/dashboard` and `POST /api/dashboard/refresh` for the
 current dashboard. Section 16 documents the active dashboard/analytics
-contracts. Former unversioned dashboard, summary, and reconcile APIs are retired.
+contracts. Former dashboard summary and reconcile APIs are retired.
 
 ## 13. Bin placement and analytics
 
-Current analytics and bin-placement snapshots use `/api/analytics/v2` and
-`/api/bin-placement/v2`, documented in section 16. Former unversioned
-analytics report, CSV, and reconciliation public APIs are retired.
+Current analytics and bin-placement snapshots use `/api/analytics` and
+`/api/bin-placement`, documented in section 16. Former analytics report,
+CSV, and reconciliation public APIs are retired.
 Their V1 report generator and bucket writer have been removed. Existing
 historical records are not deleted by this code cleanup.
 
@@ -493,44 +493,45 @@ rim-crossing overflow ground truth or dispatch a cleaner automatically.
 
 ## 14. System events and operational hardening
 
-The current System page reads `GET /api/operations/v2/system`. Its safe event,
+The current System page reads `GET /api/operations/system`. Its safe event,
 configuration, backlog, and Run contracts are in section 16. The former public
 `/api/system-events` ledger is retired. Internal dependency-event generation
 remains used by frame inference and startup recovery. See
 [the operations runbook](operations-runbook.md) for tests and recovery.
 
-## 15. Retired V1 Orchestrator entry points
+## 15. Retired legacy Orchestrator entry points
 
-Unversioned `/api/orchestrator/*` and `/internal/orchestrator/*` routes are
-retired, and their internal V1 services have been removed. This code cleanup
-does not delete stored Runs, Work, review history, or Alerts. Use the current
-routes below for operational assignment and review.
+Legacy recovery, decision, and review endpoint shapes under
+`/api/orchestrator/*` and `/internal/orchestrator/*` remain retired. Their
+services have been removed. This cleanup does not delete stored Runs, Work,
+review history, or Alerts. Use the current routes below for operational
+assignment and review.
 
-## 15.1 V2 Orchestrator assignment and review
+## 15.1 Orchestrator assignment and review
 
-The V2 LLM selects one Alert and Cleaner pair from a bounded Node-validated context. Node calculates priority, eligibility, Station Point distance and fresh Recent Work distance. Python never reads Firestore.
+The LLM selects one Alert and Cleaner pair from a bounded Node-validated context. Node calculates priority, eligibility, Station Point distance and fresh Recent Work distance. Python never reads Firestore.
 
 Supervisor routes:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/orchestrator/v2/config` | Read configuration and health timestamps |
-| `POST` | `/api/orchestrator/v2/status` | Pause or resume with `{ "status": "running" | "paused", "reason": null }` |
-| `GET` | `/api/orchestrator/v2/runs?limit=50` | List Site-scoped V2 Runs. Each Run includes display-safe `references` for its Alert, Cleaner, and Work when known. |
-| `GET` | `/api/orchestrator/v2/runs/{runId}` | Read Run, display-safe references, provider attempts, and Node tool actions. |
-| `POST` | `/api/orchestrator/v2/assignment-cycle` | Run one real provider-backed cycle |
+| `GET` | `/api/orchestrator/config` | Read configuration and health timestamps |
+| `POST` | `/api/orchestrator/status` | Pause or resume with `{ "status": "running" | "paused", "reason": null }` |
+| `GET` | `/api/orchestrator/runs?limit=50` | List Site-scoped Runs. Each Run includes display-safe `references` for its Alert, Cleaner, and Work when known. |
+| `GET` | `/api/orchestrator/runs/{runId}` | Read Run, display-safe references, provider attempts, and Node tool actions. |
+| `POST` | `/api/orchestrator/assignment-cycle` | Run one real provider-backed cycle |
 
 Private routes require `X-Orchestrator-Token` and `X-Orchestrator-Worker-ID`:
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `POST` | `/internal/orchestrator/v2/assignment-runs` | Create a leased assignment Run |
-| `GET` | `/internal/orchestrator/v2/runs/{runId}/assignment-context?siteId={siteId}` | Return up to 10 waiting Alerts, available Cleaners and eligible pairs |
-| `POST` | `/internal/orchestrator/v2/runs/{runId}/assign-cleaner` | Validate and commit the selected pair |
-| `POST` | `/internal/orchestrator/v2/review-runs` | Create a leased deterministic review Run |
-| `GET` | `/internal/orchestrator/v2/runs/{runId}/review-context?siteId={siteId}&workOrderId={workOrderId}` | Read ready Verification outcome |
-| `POST` | `/internal/orchestrator/v2/runs/{runId}/resolve-verified-work` | Apply only a passed outcome |
-| `POST` | `/internal/orchestrator/v2/runs/{runId}/request-rework` | Apply only a failed outcome |
+| `POST` | `/internal/orchestrator/assignment-runs` | Create a leased assignment Run |
+| `GET` | `/internal/orchestrator/runs/{runId}/assignment-context?siteId={siteId}` | Return up to 10 waiting Alerts, available Cleaners and eligible pairs |
+| `POST` | `/internal/orchestrator/runs/{runId}/assign-cleaner` | Validate and commit the selected pair |
+| `POST` | `/internal/orchestrator/review-runs` | Create a leased deterministic review Run |
+| `GET` | `/internal/orchestrator/runs/{runId}/review-context?siteId={siteId}&workOrderId={workOrderId}` | Read ready Verification outcome |
+| `POST` | `/internal/orchestrator/runs/{runId}/resolve-verified-work` | Apply only a passed outcome |
+| `POST` | `/internal/orchestrator/runs/{runId}/request-rework` | Apply only a failed outcome |
 
 Assignment decision body:
 
@@ -549,24 +550,24 @@ The first assignment-context response is fixed to that Run and hashed. Re-readin
 
 Camera Verification is automatic but deterministic. Fresh ordered samples move the Verification to `ready` and enqueue `review_work`. The worker resolves passed Work, returns failed Work to the same Cleaner, and leaves inconclusive Work for Supervisor review. Pausing the Orchestrator blocks review mutation as well as assignment.
 
-## 16. Future frontend integration rule
+## 16. Current API contracts
 
-### V2 Phase 11 APIs
+### Analytics APIs
 
 All routes require an active Site Supervisor and use the authenticated Site.
 
 | Method | Route | Response |
 | --- | --- | --- |
-| GET | `/api/dashboard/v2` | `{ dashboard }`, one-minute cache |
-| POST | `/api/dashboard/v2/refresh` | `201 { dashboard }` |
-| GET | `/api/analytics/v2/daily?from=YYYY-MM-DD&to=YYYY-MM-DD` | `{ summaries }` |
-| POST | `/api/analytics/v2/daily/rebuild` | `{ summaries }`; supply `localDate` or array `dates`, never both |
-| POST | `/api/analytics/v2/minute/cleanup` | `{ deleted }`; expired minutes after daily preservation |
-| GET | `/api/bin-placement/v2/recommendations?days=30` | `{ snapshot }`; cheap cached read, refreshing when missing, expired, or the requested window changes |
-| POST | `/api/bin-placement/v2/recommendations/refresh` | `201 { snapshot }`; body `{ "days": 30 }` |
-| POST | `/api/bin-placement/v2/zones/:zoneId/implement` | `201 { intervention }` |
-| GET | `/api/bin-placement/v2/interventions` | `{ interventions }`, newest first |
-| GET | `/api/bin-placement/v2/interventions/:id/comparison?days=7` | `{ comparison }`, selected Zone only |
+| GET | `/api/dashboard` | `{ dashboard }`, one-minute cache |
+| POST | `/api/dashboard/refresh` | `201 { dashboard }` |
+| GET | `/api/analytics/daily?from=YYYY-MM-DD&to=YYYY-MM-DD` | `{ summaries }` |
+| POST | `/api/analytics/daily/rebuild` | `{ summaries }`; supply `localDate` or array `dates`, never both |
+| POST | `/api/analytics/minute/cleanup` | `{ deleted }`; expired minutes after daily preservation |
+| GET | `/api/bin-placement/recommendations?days=30` | `{ snapshot }`; cheap cached read, refreshing when missing, expired, or the requested window changes |
+| POST | `/api/bin-placement/recommendations/refresh` | `201 { snapshot }`; body `{ "days": 30 }` |
+| POST | `/api/bin-placement/zones/:zoneId/implement` | `201 { intervention }` |
+| GET | `/api/bin-placement/interventions` | `{ interventions }`, newest first |
+| GET | `/api/bin-placement/interventions/:id/comparison?days=7` | `{ comparison }`, selected Zone only |
 
 Ranges accept integer days from 2 to 3660, without fixed presets. Recommendations use completed local days. Fewer than two observed days produces `insufficient_data` and null score/rank. Enough observed days but fewer than requested produces `partial_data`.
 
@@ -584,15 +585,15 @@ See [the operations runbook](operations-runbook.md) for index deployment instruc
 
 The automatic worker finalizes only the previous Site-local day. Use the explicit daily rebuild endpoint for older repair dates. An array rebuild shares one Alert/Work history read across the batch. Firestore quota exhaustion returns `503` with `code: "firestore_quota_exceeded"`.
 
-### V2 Phase 10 platform APIs
+### Platform APIs
 
 | Method | Route | Access and response |
 | --- | --- | --- |
-| GET | `/api/operations/v2/system` | Supervisor's Site; configuration, runtime worker setting, backlog counts, recent control history, 20 recent Runs, and safe events |
-| GET | `/api/operations/v2/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
-| GET | `/api/cleaner/notifications?limit=50` | V2 Cleaner's own inbox; `{ notifications }` |
-| GET | `/api/cleaner/map` | V2 Cleaner's active-map projection; `{ map }` containing dimensions, Zone polygons, and only that Cleaner's Station Point |
-| GET | `/api/operations/v2/audit-events` | Root's own Site only; `{ events }` |
+| GET | `/api/operations/system` | Supervisor's Site; configuration, runtime worker setting, backlog counts, recent control history, 20 recent Runs, and safe events |
+| GET | `/api/operations/notifications?limit=50` | Supervisor's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/notifications?limit=50` | Cleaner's own inbox; `{ notifications }` |
+| GET | `/api/cleaner/map` | Cleaner's active-map projection; `{ map }` containing dimensions, Zone polygons, and only that Cleaner's Station Point |
+| GET | `/api/operations/audit-events` | Root's own Site only; `{ events }` |
 | GET | `/api/superadmin/sites/:siteId/operations/:operationId` | Superadmin; `{ operation }` |
 | POST | `/api/superadmin/sites/:siteId/operations/:operationId/reconcile` | Superadmin; processes one cleanup page and returns `{ operation }` |
 
@@ -605,8 +606,8 @@ The System response separates process state from Site configuration:
 - `configuration.status` is the Site's saved `running` or `paused` state;
 - `runtime.backgroundWorkerEnabled` reports whether this Node process starts the Orchestrator worker;
 - `runtime.providerConnectivity` stays `not_probed`; the endpoint does not call Ollama merely to paint the page;
-- `runtime.backlog.waitingAlertCount` counts V2 Alerts still waiting for a Cleaner;
-- `runtime.backlog.awaitingReviewWorkOrderCount` counts V2 Work awaiting review;
+- `runtime.backlog.waitingAlertCount` counts Alerts still waiting for a Cleaner;
+- `runtime.backlog.awaitingReviewWorkOrderCount` counts Work awaiting review;
 - `controlHistory` contains up to 20 recent pause/resume actions, newest first;
 - `recentRuns` contains at most 20 Runs with display-safe references and retry/tool counts;
 - `events` contains persisted safe fault summaries plus a response-only `orchestrator_worker_disabled` warning when configuration and process settings disagree.
@@ -689,7 +690,7 @@ The caller must be an active Supervisor for the Camera's Site. `camera` includes
 
 `orchestratorTrace` is a safe audit view of related assignment/review Runs. It includes the structured decision summary, decision factors, selected Cleaner, provider/model identifiers, result, error code, and timestamps. It deliberately excludes raw provider output, internal tool input, and assignment context snapshots. `auditEvents` supplies related Supervisor/system audit entries.
 
-### V2 Camera registration lifecycle
+### Camera registration lifecycle
 
 Camera Creation and `POST /api/site-map/camera-placements/{cameraId}` for a Physical Camera Move may include a `provisionalZone` alongside the Camera placement. The backend validates that Zone against the active Site Map, stores it only in the Camera Draft, and accepts the Camera point only when it falls inside exactly that active or provisional Zone.
 
@@ -699,11 +700,11 @@ Camera Creation and `POST /api/site-map/camera-placements/{cameraId}` for a Phys
 
 ### Development-only simulated Alerts
 
-`POST /api/test-support/v2/alerts` requires a Root Supervisor bearer token and is rejected in production-cloud mode. Site identity comes from the authenticated account.
+`POST /api/test-support/alerts` requires a Root Supervisor bearer token and is rejected in production-cloud mode. Site identity comes from the authenticated account.
 
 ```json
 {
-  "cameraId": "existing-active-v2-camera-id",
+  "cameraId": "existing-active-camera-id",
   "issueType": "floor_litter",
   "condition": "litter",
   "severity": "warning",
