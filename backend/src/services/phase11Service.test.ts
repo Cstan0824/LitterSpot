@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasEnoughComparisonDays, interventionExclusionEndsAt, rankBinPlacementFactors } from "./v2BinPlacement.js";
+import { hasEnoughComparisonDays, interventionExclusionEndsAt, rankBinPlacementFactors } from "./binPlacement.js";
 import { siteMidnight, fullDayExclusion, shiftSiteInstant, validLocalDate } from "./phase11Calendar.js";
 
 describe("Phase 11 analytics policies", () => {

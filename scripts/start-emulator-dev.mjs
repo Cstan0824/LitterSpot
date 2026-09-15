@@ -83,7 +83,7 @@ start("firebase", process.execPath, emulatorArgs, { FIREBASE_EMULATORS_PATH: joi
 await Promise.all([waitForPort(8180, "Firestore emulator"), waitForPort(9199, "Auth emulator")]);
 
 await new Promise((resolveSeed, rejectSeed) => {
-  const seed = spawn(process.execPath, [join(root, "node_modules", "tsx", "dist", "cli.mjs"), join(root, "backend", "src", "scripts", "v2", "bootstrapDevelopmentSite.ts")], {
+  const seed = spawn(process.execPath, [join(root, "node_modules", "tsx", "dist", "cli.mjs"), join(root, "backend", "src", "scripts", "bootstrapDevelopmentSite.ts")], {
     cwd: root, env: { ...process.env, ...common, ROOT_SUPERVISOR_EMAIL: "root@sunway-test.com", ROOT_SUPERVISOR_PASSWORD: "password123", ROOT_SUPERVISOR_DISPLAY_NAME: "Sunway Root Supervisor", SUPERADMIN_EMAIL: "superadmin@litterspot.com", SUPERADMIN_PASSWORD: "password123", SUPERADMIN_DISPLAY_NAME: "LitterSpot Superadmin" }, stdio: "inherit",
   });
   seed.once("error", rejectSeed); seed.once("exit", code => code === 0 ? resolveSeed() : rejectSeed(new Error(`Local bootstrap failed with exit code ${code}.`)));

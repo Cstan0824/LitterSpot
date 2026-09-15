@@ -1,6 +1,6 @@
 import { app } from "../backend/src/app.js";
 import { firestore, firebaseAuth } from "../backend/src/config/firebase.js";
-import { setV2LiveInferenceForTests } from "../backend/src/services/v2LiveMonitoringService.js";
+import { setLiveInferenceForTests } from "../backend/src/services/liveMonitoringService.js";
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error("Emulators required");
@@ -27,7 +27,7 @@ for (const cameraId of ["browser-c1", "browser-c2", "browser-c3", "browser-c4", 
   await firestore.collection("siteMapRevisions").doc("browser-map").collection("cameraPlacements").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, zoneId: "browser-zone", point: { xMeters: 10, yMeters: 10 } });
   await firestore.collection("cameras").doc(cameraId).collection("demoScenes").doc("clean").set({ sourceRevisionId: `${cameraId}-source`, registrationRevisionId: `${cameraId}-reg`, mediaId: "browser-clean" });
 }
-setV2LiveInferenceForTests(async input => {
+setLiveInferenceForTests(async input => {
   // The test boundary substitutes only model inference; Camera/Alert contracts remain real.
   const cameraId = (input.registration as any).cameraId;
   const camera = await firestore.collection("cameras").doc(cameraId).get();

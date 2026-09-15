@@ -64,10 +64,10 @@ Extend each concern at its owning seam:
 
 - `ai-service/app/pipeline.py`: model orchestration, focus-region transforms,
   coordinate mapping, and inference-only frame output.
-- `backend/src/services/v2LiveMonitoringService.ts` and
+- `backend/src/services/liveMonitoringService.ts` and
   `frameInferenceClient.ts`: Camera sampling, delayed analyzed footage, and
   private inference calls.
-- `backend/src/services/v2AlertService.ts`: current Camera-scoped Alert
+- `backend/src/services/alertService.ts`: current Camera-scoped Alert
   confirmation and evidence persistence.
 - `backend/src/services/phase11Service.ts`: current dashboard, daily analytics,
   and bin-placement reads.

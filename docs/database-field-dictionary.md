@@ -151,8 +151,8 @@ Shared fields: `createdAt`, `updatedAt`, optional `updatedByUid`.
 | `migrationSource` | string, optional | Indicates creation from a legacy Supervisor profile or a migration script. Audit provenance, not a permission. |
 
 Writers/readers: [authentication](../backend/src/middleware/authenticateUser.ts),
-[Cleaner management](../backend/src/services/v2CleanerService.ts),
-[identity operations](../backend/src/services/v2IdentityService.ts).
+[Cleaner management](../backend/src/services/cleanerService.ts),
+[identity operations](../backend/src/services/identityService.ts).
 
 ## 4. `supervisors/{uid}`
 
@@ -210,8 +210,8 @@ Account workflow: personnel creation -> provisioning -> invited -> first
 authenticated request -> active. Disablement blocks personnel access and then
 disables Auth. These statuses do not encode whether the Cleaner is on shift.
 
-Sources: [Cleaner management](../backend/src/services/v2CleanerService.ts) and
-[identity operations](../backend/src/services/v2IdentityService.ts).
+Sources: [Cleaner management](../backend/src/services/cleanerService.ts) and
+[identity operations](../backend/src/services/identityService.ts).
 
 ### 5.1 `cleanerStaffCodes/{normalizedCode}`
 
@@ -358,7 +358,7 @@ Shared fields: `createdAt`, `createdByUid`.
 | `storageProvider` | string, compatibility input | Retention accepts missing/null/local values and rejects cloud providers. Current media writers do not set this field. |
 
 Sources: [media delivery](../backend/src/services/mediaService.ts),
-[Camera source and reference uploads](../backend/src/services/v2CameraDraftService.ts),
+[Camera source and reference uploads](../backend/src/services/cameraDraftService.ts),
 [retention](../backend/src/services/mediaRetentionService.ts).
 
 ## 8. `processingJobs/{jobId}`
@@ -598,8 +598,8 @@ Raw detection records remain after rejection. `analyticsEligible: true` with
 This section documents the retired V1 grouped-observation and Flag format. Its
 evaluator and policy implementation have been removed. Existing records remain
 available for migration or historical inspection. Current Alerts are owned by
-[the Alert service](../backend/src/services/v2AlertService.ts) and
-[current policy](../backend/src/services/v2AlertPolicy.ts).
+[the Alert service](../backend/src/services/alertService.ts) and
+[current policy](../backend/src/services/alertPolicy.ts).
 
 ### 11.1 `issueObservations/{observationId}`
 
@@ -868,7 +868,7 @@ records describe operator/system actions rather than new visual evidence.
 ## 13. Cleaner presence and location
 
 This section records the retired V1 GPS/presence format. Current Cleaner
-availability uses [schedules and Station Points](../backend/src/services/v2CleanerAvailability.ts).
+availability uses [schedules and Station Points](../backend/src/services/cleanerAvailability.ts).
 The location-history retention tool remains available for historical data.
 
 ### 13.1 `cleanerPresence/{cleanerId}`
@@ -917,7 +917,7 @@ Cleaner ID and heartbeat ID.
 ## 14. Work orders and assignment records
 
 The fields below document the retired V1 Work format. Current Work is owned by
-[the operational Work service](../backend/src/services/v2WorkOrderService.ts).
+[the operational Work service](../backend/src/services/workOrderService.ts).
 
 ### 14.1 `workOrders/{workOrderId}`
 
@@ -1014,7 +1014,7 @@ field: `createdAt`.
 ## 15. Review records
 
 This section records retired V1 review structures. Current Work verification
-is owned by [the operational Work service](../backend/src/services/v2WorkOrderService.ts).
+is owned by [the operational Work service](../backend/src/services/workOrderService.ts).
 These structures accept and store verification requests/decisions. They do not
 by themselves capture a camera frame or invoke an LLM/VLM.
 
@@ -1073,7 +1073,7 @@ verification pipeline.
 ## 16. Notifications and retired push devices
 
 Current durable in-app notifications are owned by
-[the notification service](../backend/src/services/v2NotificationService.ts).
+[the notification service](../backend/src/services/notificationService.ts).
 The push-device fields below describe the retired V1 FCM implementation.
 
 ### 16.1 `notifications/{notificationId}`
@@ -1119,8 +1119,8 @@ fields: `createdAt`, `updatedAt`; registration can refresh the creation value.
 
 The fields below document the retired V1 Orchestrator format. Current Runs and
 outbox processing are owned by
-[the Orchestrator service](../backend/src/services/v2OrchestratorService.ts)
-and [worker](../backend/src/services/v2OrchestratorWorker.ts).
+[the Orchestrator service](../backend/src/services/orchestratorService.ts)
+and [worker](../backend/src/services/orchestratorWorker.ts).
 
 ### 17.1 `orchestratorRuns/{runId}`
 
@@ -1636,7 +1636,7 @@ are not Auth tokens and should be passed unchanged only with the same filters.
 
 | Structure | Where it lives and how it is used |
 | --- | --- |
-| Alert policy | `backend/src/services/v2AlertPolicy.ts`; source-code rules for current Alert qualification, priority, and status progression. |
+| Alert policy | `backend/src/services/alertPolicy.ts`; source-code rules for current Alert qualification, priority, and status progression. |
 | Model weights/version configuration | FastAPI configuration and local model files. Firestore stores version labels and results, not model binaries. |
 | FastAPI inference DTO | Transient response with image, people, bins, hazards, model versions, timing. Node normalizes/persists selected fields. No Python application database write. |
 | Local media files | Filesystem under `MEDIA_STORAGE_ROOT`, linked by generated storage keys. Not automatically synchronized between team laptops. |
@@ -1719,17 +1719,17 @@ This dictionary was checked against the production writers/readers in:
 - [Firebase setup](../backend/src/config/firebase.ts)
 - [Auth dispatch](../backend/src/middleware/authenticateUser.ts)
 - [Supervisor bootstrap](../backend/src/scripts/bootstrapSupervisor.ts)
-- [Cleaner management](../backend/src/services/v2CleanerService.ts)
-- [Identity operations](../backend/src/services/v2IdentityService.ts)
+- [Cleaner management](../backend/src/services/cleanerService.ts)
+- [Identity operations](../backend/src/services/identityService.ts)
 - [Location hierarchy](../backend/src/services/locationService.ts)
 - [Media delivery](../backend/src/services/mediaService.ts)
-- [Camera source and reference uploads](../backend/src/services/v2CameraDraftService.ts)
-- [Alert workflow](../backend/src/services/v2AlertService.ts)
-- [Cleaner availability](../backend/src/services/v2CleanerAvailability.ts)
-- [Work orders](../backend/src/services/v2WorkOrderService.ts)
-- [Operational verification](../backend/src/services/v2WorkOrderService.ts)
-- [Notifications](../backend/src/services/v2NotificationService.ts)
-- [Orchestrator](../backend/src/services/v2OrchestratorService.ts)
+- [Camera source and reference uploads](../backend/src/services/cameraDraftService.ts)
+- [Alert workflow](../backend/src/services/alertService.ts)
+- [Cleaner availability](../backend/src/services/cleanerAvailability.ts)
+- [Work orders](../backend/src/services/workOrderService.ts)
+- [Operational verification](../backend/src/services/workOrderService.ts)
+- [Notifications](../backend/src/services/notificationService.ts)
+- [Orchestrator](../backend/src/services/orchestratorService.ts)
 - [Current dashboard](../backend/src/services/phase11Service.ts)
 - [System events](../backend/src/services/systemEventService.ts)
 - [Media retention](../backend/src/services/mediaRetentionService.ts)

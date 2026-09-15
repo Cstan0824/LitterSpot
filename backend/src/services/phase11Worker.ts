@@ -2,7 +2,7 @@ import { cleanupMinuteBuckets, catchUpDailySummaries } from "./phase11Daily.js";
 import { refreshBinPlacement } from "./phase11Service.js";
 import { allDocuments } from "./phase11Data.js";
 import { firestore } from "../config/firebase.js";
-import { flushV2MinuteBuckets, liveAnalyticsSites } from "./v2LiveMonitoringService.js";
+import { flushMinuteBuckets, liveAnalyticsSites } from "./liveMonitoringService.js";
 import { persistCameraCoverageMinute } from "./phase11MinuteStore.js";
 import { siteLocalDate, siteMidnight } from "./phase11Calendar.js";
 import { safeFirestoreError } from "../shared/firestoreErrors.js";
@@ -14,7 +14,7 @@ let current: Promise<void> | null = null;
 export async function runPhase11MinuteMaintenance(now = new Date(), onlySiteId?: string) {
   const siteIds = onlySiteId ? [onlySiteId] : liveAnalyticsSites();
   for (const siteId of siteIds) {
-    await flushV2MinuteBuckets(siteId, now);
+    await flushMinuteBuckets(siteId, now);
     await persistCameraCoverageMinute(siteId,new Date(Math.floor(+now/60000)*60000-60000));
   }
 }

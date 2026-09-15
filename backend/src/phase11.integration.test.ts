@@ -4,7 +4,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import request from "supertest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
-import { rebuildDailySummary, refreshBinPlacement, buildDashboard, getDashboardV2, implementBinPlacement, compareIntervention, cleanupMinuteBuckets, getBinPlacementSnapshot } from "./services/phase11Service.js";
+import { rebuildDailySummary, refreshBinPlacement, buildDashboard, getDashboard, implementBinPlacement, compareIntervention, cleanupMinuteBuckets, getBinPlacementSnapshot } from "./services/phase11Service.js";
 import { persistMinuteContributions } from "./services/phase11MinuteStore.js";
 import { runPhase11Maintenance } from "./services/phase11Worker.js";
 import { dailyId } from "./services/phase11Daily.js";
@@ -37,7 +37,7 @@ run("Phase 11 service regressions",()=>{
     const repeat=await rebuildDailySummary(s.siteId,"2026-08-30",now);
     expect(repeat.siteTotals).toEqual(first.siteTotals);
   });
-  it("uses 15-minute Zone aggregates, bounded equal weights and V2 Alert states",async()=>{
+  it("uses 15-minute Zone aggregates, bounded equal weights and Alert states",async()=>{
     const s=await setup();
     await s.minute("2026-09-08T09:59:00Z","a",10,s.a);
     await s.minute("2026-09-08T09:59:00Z","b",5,s.b);
@@ -48,7 +48,7 @@ run("Phase 11 service regressions",()=>{
     expect(dashboard.counts.alertByStatus.assigned).toBe(1);
     expect(dashboard.counts.alertByStatus.waiting_for_cleaner).toBe(0);
     expect(dashboard.busyZones.map((z:any)=>[z.zoneId,z.score])).toEqual([[s.b,75],[s.a,50]]);
-    expect((await getDashboardV2(s.siteId,now)).generatedAt).toBe(dashboard.generatedAt);
+    expect((await getDashboard(s.siteId,now)).generatedAt).toBe(dashboard.generatedAt);
   });
   it("uses highest historical severity for resolved Alert fallback and excludes dismissals",async()=>{
     const s=await setup();

@@ -57,7 +57,7 @@ export const registeredBinSchema = z.object({
   binPolygon: checkedPolygonSchema,
 }).strict();
 
-export const cameraRegistrationDraftV2Schema = registrationBaseSchema.extend({
+export const cameraRegistrationDraftSchema = registrationBaseSchema.extend({
   schemaVersion: z.literal(2),
   bins: z.array(registeredBinSchema).max(32),
 }).strict().superRefine((value, context) => {
@@ -67,13 +67,10 @@ export const cameraRegistrationDraftV2Schema = registrationBaseSchema.extend({
   }
 });
 
-export const cameraRegistrationDraftSchema = cameraRegistrationDraftV2Schema;
-
-export type CameraRegistrationDraftV2 = z.infer<typeof cameraRegistrationDraftV2Schema>;
-export type CameraRegistrationDraft = CameraRegistrationDraftV2;
+export type CameraRegistrationDraft = z.infer<typeof cameraRegistrationDraftSchema>;
 export type RegisteredBin = z.infer<typeof registeredBinSchema>;
 export type CameraRegistrationReferenceSource = z.infer<typeof referenceSourceSchema>;
 
-export function normalizeCameraRegistrationDraft(draft: CameraRegistrationDraft): CameraRegistrationDraftV2 {
+export function normalizeCameraRegistrationDraft(draft: CameraRegistrationDraft): CameraRegistrationDraft {
   return draft;
 }
