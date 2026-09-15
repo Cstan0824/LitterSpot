@@ -54,7 +54,7 @@ def main() -> int:
         candidate_result["policyVersion"] = "assignment-v1"
         candidate_result["calculatedAt"] = candidate_result.get("simulationTime")
         context = {
-            "policyVersion": "assignment-v2",
+            "policyVersion": "bounded-pair-selection",
             "calculatedAt": candidate_result.get("simulationTime"),
             "alerts": [{
                 "alertId": arguments.alert_id,

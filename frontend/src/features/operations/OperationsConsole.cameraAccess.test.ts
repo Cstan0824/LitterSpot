@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveSupervisorCapabilities } from "../../services/v2/session";
+import { deriveSupervisorCapabilities } from "../../services/api/session";
 import { supervisorCameraPageAccess } from "./OperationsConsole";
 
 describe("Supervisor Camera controls", () => {

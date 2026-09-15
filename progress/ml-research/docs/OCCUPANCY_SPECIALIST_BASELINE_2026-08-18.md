@@ -59,7 +59,7 @@ occupancy ROI and temporal track persistence to reject this case.
 Detailed tables and JSONL traces are in:
 
 - `artifacts/specialist-evaluations/20260818Toccupancy-yolo11n-whatsapp-trace/`;
-- `artifacts/specialist-evaluations/20260818Toccupancy-yolo11n-whatsapp-video-evaluation-v2/`.
+- `artifacts/specialist-evaluations/20260818Toccupancy-yolo11n-whatsapp-video-evaluation-revision-2/`.
 
 The provisional video review labels are versioned in
 `mock-data/internvl-evaluation/provisional-expected-video-frames.json` and must

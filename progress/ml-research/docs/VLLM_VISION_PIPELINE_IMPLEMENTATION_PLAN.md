@@ -16,10 +16,9 @@ serves it. vLLM is not itself a detection model. The selected model, model
 revision, vLLM version, prompt version, and output schema must be pinned as one
 tested deployment unit.
 
-The current product workflow is documented in
-[`current-clarified-requirements.md`](../../../docs/current-clarified-requirements.md)
-and its continuation. This historical implementation plan ends at a versioned
-`ConfirmedFlag` contract.
+The implemented product is documented in the formal project documents under
+`docs/`. This historical implementation plan ends at a versioned
+`ConfirmedFlag` contract and is not an authority for current behavior.
 
 ## Objective
 

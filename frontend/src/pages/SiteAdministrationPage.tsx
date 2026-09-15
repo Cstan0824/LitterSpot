@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { SiteMapViewer } from "../components/SiteMapViewer";
 import { siteMapDraftIssues, siteMapDraftSaveInput } from "../features/operations/siteMapDraft";
 import { recommendedSiteMapGridInterval, siteMapGridSummary } from "../features/operations/siteMapGrid";
-import { V2ApiError } from "../services/v2/errors";
-import { discardSiteMapDraft, getActiveSiteMap, getRetiredSiteMapZones, getSiteMapAuditEvents, getSiteMapDraft, publishSiteMapDraft, saveSiteMapDraft, startSiteMapDraft, uploadSiteMapBackground, validateSiteMapDraft, type ActiveSiteMap, type SiteMapAuditEvent, type SiteMapBackground, type SiteMapDraft, type SiteMapZone } from "../services/v2/siteMap";
-import { siteMapPolygonArea, type SiteMapPoint } from "../services/v2/mapGeometry";
+import { ApiError } from "../services/api/errors";
+import { discardSiteMapDraft, getActiveSiteMap, getRetiredSiteMapZones, getSiteMapAuditEvents, getSiteMapDraft, publishSiteMapDraft, saveSiteMapDraft, startSiteMapDraft, uploadSiteMapBackground, validateSiteMapDraft, type ActiveSiteMap, type SiteMapAuditEvent, type SiteMapBackground, type SiteMapDraft, type SiteMapZone } from "../services/api/siteMap";
+import { siteMapPolygonArea, type SiteMapPoint } from "../services/api/mapGeometry";
 import "./site-administration.css";
 
 type View = "overview" | "map" | "audit";
@@ -33,7 +33,7 @@ function Icon({ name }: { name: "map" | "zone" | "audit" | "upload" | "edit" | "
 }
 
 function errorMessage(reason: unknown) {
-  if (reason instanceof V2ApiError) {
+  if (reason instanceof ApiError) {
     const details = reason.details && typeof reason.details === "object" ? reason.details as { issues?: Array<{ message?: string }> } : null;
     return details?.issues?.[0]?.message || reason.message;
   }
@@ -81,7 +81,7 @@ export function SiteAdministrationPage({ siteName, readOnly = false, quietReadOn
           setDraft(currentDraft);
           setDraftBackground(currentDraft.background ?? (currentDraft.backgroundMediaId === map.background?.mediaId ? map.background : null));
         } catch (reason) {
-          if (!(reason instanceof V2ApiError) || reason.status !== 404) throw reason;
+          if (!(reason instanceof ApiError) || reason.status !== 404) throw reason;
           setDraft(null); setDraftBackground(null);
         }
       } else { setDraft(null); setDraftBackground(null); setRetiredZones([]); setAudits([]); }
@@ -141,7 +141,7 @@ export function SiteAdministrationPage({ siteName, readOnly = false, quietReadOn
     if (readOnly) return;
     setBusy(true); setError("");
     try { const created = await startSiteMapDraft(); setDraft(created); setDraftBackground(created.background ?? activeMap?.background ?? null); setView("map"); setNotice("Site Map draft started from the active revision."); await loadAudit(); }
-    catch (reason) { if (reason instanceof V2ApiError && reason.code === "site_map_draft_exists") { const current = await getSiteMapDraft(); setDraft(current); setDraftBackground(current.background ?? activeMap?.background ?? null); setView("map"); setNotice("The existing Site Map draft was recovered."); } else setError(errorMessage(reason)); }
+    catch (reason) { if (reason instanceof ApiError && reason.code === "site_map_draft_exists") { const current = await getSiteMapDraft(); setDraft(current); setDraftBackground(current.background ?? activeMap?.background ?? null); setView("map"); setNotice("The existing Site Map draft was recovered."); } else setError(errorMessage(reason)); }
     finally { setBusy(false); }
   };
 

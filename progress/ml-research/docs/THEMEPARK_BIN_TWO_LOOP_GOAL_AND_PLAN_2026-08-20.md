@@ -266,7 +266,7 @@ Only mitigations supported by Loop 1 evidence enter Loop 2.
 
 1. Freeze the Loop 1 report and select only the mapped mitigations required by
    failed gates.
-2. Version any added data as dataset v2 and report exactly which categories and
+2. Version any added data as dataset revision 2 and report exactly which categories and
    sources changed.
 3. Keep the Loop 1 public test and locked WhatsApp fixtures untouched.
 4. Retrain with the smallest defensible change set.

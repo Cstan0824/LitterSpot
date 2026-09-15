@@ -10,7 +10,7 @@ const stateDir = join(root, ".local");
 const pidFile = join(stateDir, "local-services.json");
 const python = process.platform === "win32" ? join(root, ".venv", "Scripts", "python.exe") : join(root, ".venv", "bin", "python");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_gco_gbs_v2", "production.pt");
+const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_bin_state", "production.pt");
 const token = "local-playground-token";
 const children = [];
 
@@ -69,7 +69,7 @@ process.once("SIGTERM", async () => { shuttingDown = true; await cleanup(); proc
 
 const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], {
   STATE_CLASSIFIER_PATH: classifier,
-  STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2",
+  STATE_CLASSIFIER_VERSION: "multitask-mobilenet-bin-state",
   DEVICE: "0",
   INTERNAL_API_TOKEN: token,
 });

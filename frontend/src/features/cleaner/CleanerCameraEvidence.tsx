@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { v2Request } from "../../services/v2/http";
+import { apiRequest } from "../../services/api/http";
 import type { CameraObservation } from "../../../../shared/cameraMonitoring";
 import { ObservationOverlay } from "../operations/CameraLiveView";
 
@@ -9,7 +9,7 @@ export function CleanerCameraEvidence({ workOrderId }: { workOrderId: string }) 
     const controller = new AbortController(); let objectUrl: string | undefined;
     setUrl(undefined); setObservation(undefined); setLoading(true); setFailed(false);
     const path = `/api/cleaner/work-orders/${encodeURIComponent(workOrderId)}/camera-evidence`;
-    void Promise.all([v2Request<{ evidence: { observation?: CameraObservation } }>(path, { signal: controller.signal }), v2Request<Blob>(`${path}?content=true`, { signal: controller.signal, responseType: "blob" })]).then(([result, blob]) => {
+    void Promise.all([apiRequest<{ evidence: { observation?: CameraObservation } }>(path, { signal: controller.signal }), apiRequest<Blob>(`${path}?content=true`, { signal: controller.signal, responseType: "blob" })]).then(([result, blob]) => {
       if (controller.signal.aborted) return;
       objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); setObservation(result.evidence.observation);
     }).catch(() => { if (!controller.signal.aborted) setFailed(true); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });

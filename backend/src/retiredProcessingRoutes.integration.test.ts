@@ -64,7 +64,7 @@ run("retired processing APIs and protected operational boundary", () => {
     ["get", "/api/analysis-runs"], ["get", "/api/analysis-runs/record"], ["post", "/api/analysis-runs/record/evaluate-alerts"],
     ["get", "/api/analytics/reports"], ["get", "/api/analytics/reports/record/csv"], ["post", "/api/analytics/reports"], ["post", "/api/analytics/reconcile"],
     ["get", "/api/detections"], ["get", "/api/detections/record"], ["post", "/api/detections/bin-state"], ["post", "/api/detections/bin-state/batch"],
-    ["get", "/api/dashboard"], ["get", "/api/dashboard/summary"], ["post", "/api/dashboard/reconcile"],
+    ["get", "/api/dashboard/summary"], ["post", "/api/dashboard/reconcile"],
     ["get", "/api/flags"], ["get", "/api/flags/record"], ["get", "/api/issue-observations"], ["get", "/api/issue-observations/record"],
     ["get", "/api/processing-jobs"], ["get", "/api/processing-jobs/record/results"], ["post", "/api/processing-jobs/record/process"], ["post", "/api/processing-jobs/record/retry"],
     ["get", "/api/system-events"], ["get", "/api/system-events/record"],
@@ -74,17 +74,26 @@ run("retired processing APIs and protected operational boundary", () => {
     ["get", "/api/cameras/record/registration/revisions"], ["post", "/api/cameras/record/registration/reference"],
     ["post", "/api/cameras/record/registration/source-video"], ["post", "/api/cameras/record/registration/validate"],
     ["post", "/api/cameras/record/registration/preview"], ["put", "/api/cameras/record/registration"],
-    ["get", "/api/orchestrator/runs"], ["get", "/api/orchestrator/runs/record"], ["post", "/api/orchestrator/recover"], ["post", "/api/orchestrator/runs/ensure"],
+    ["post", "/api/orchestrator/recover"], ["post", "/api/orchestrator/runs/ensure"],
     ["get", "/internal/orchestrator/runs"], ["get", "/internal/orchestrator/runs/record/context"], ["get", "/internal/orchestrator/work-orders/record/review-context"],
     ["get", "/internal/orchestrator/alerts/record/eligible-cleaners"], ["post", "/internal/orchestrator/runs/record/claim"], ["post", "/internal/orchestrator/runs/record/complete"],
     ["post", "/internal/orchestrator/runs/record/decisions"], ["post", "/internal/orchestrator/runs/record/review-requests"], ["post", "/internal/orchestrator/runs/record/reviews"], ["post", "/internal/orchestrator/work-orders"],
   ])("returns route-not-found for authenticated %s %s", async (method, path) => {
-    const response = await (method === "get" ? request(app).get(path) : method === "put" ? request(app).put(path) : request(app).post(path)).set("Authorization", `Bearer ${token}`);
+    const operation = method === "get" ? request(app).get(path) : method === "put" ? request(app).put(path) : request(app).post(path);
+    const response = path.startsWith("/internal/")
+      ? await operation.set({ "x-orchestrator-token": String(process.env.ORCHESTRATOR_INTERNAL_TOKEN), "x-orchestrator-worker-id": "retirement-boundary-test" })
+      : await operation.set("Authorization", `Bearer ${token}`);
     expect(response.status).toBe(404);
     expect(response.body.error).toBe("Route not found.");
   });
 
-  it.each(["/api/me", "/api/site-map", "/api/cameras?status=all", "/api/camera-creation/cameras", "/api/alerts", "/api/work-orders", "/api/dashboard/v2", "/api/analytics/v2/daily", "/api/bin-placement/v2/recommendations", "/api/orchestrator/v2/config", "/api/orchestrator/v2/runs"])("keeps current route %s", async path => {
+  it("treats the retired run path segment as a current Run identifier", async () => {
+    const response = await request(app).get("/api/orchestrator/runs/record").set("Authorization", `Bearer ${token}`);
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("Orchestrator Run not found.");
+  });
+
+  it.each(["/api/me", "/api/site-map", "/api/cameras?status=all", "/api/camera-creation/cameras", "/api/alerts", "/api/work-orders", "/api/dashboard", "/api/analytics/daily", "/api/bin-placement/recommendations", "/api/orchestrator/config", "/api/orchestrator/runs"])("keeps current route %s", async path => {
     expect((await request(app).get(path).set("Authorization", `Bearer ${token}`)).status).toBe(200);
   });
 
@@ -100,7 +109,7 @@ run("retired processing APIs and protected operational boundary", () => {
   });
 
   it("keeps current internal Orchestrator worker authentication", async () => {
-    const response = await request(app).post("/internal/orchestrator/v2/assignment-runs").send({ siteId });
+    const response = await request(app).post("/internal/orchestrator/assignment-runs").send({ siteId });
     expect(response.status).toBe(401);
   });
 

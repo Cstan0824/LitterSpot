@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { v2Json } from "../services/v2Presentation.js";
+import { serializeFirestore } from "../services/presentation.js";
 import { cameraFramesForSite, subscribeCameraEvents } from "../services/cameraLiveEvents.js";
 import { getLiveCameraConfiguration } from "../services/cameraConfigurationCache.js";
 
 export const cameraLiveRoutes = Router();
 cameraLiveRoutes.get("/config", async (req, res) => {
   const siteId = String(req.authUser.siteId);
-  res.set("Cache-Control", "no-store").json(v2Json(await getLiveCameraConfiguration(siteId)));
+  res.set("Cache-Control", "no-store").json(serializeFirestore(await getLiveCameraConfiguration(siteId)));
 });
 
 cameraLiveRoutes.get("/events", (req, res) => {

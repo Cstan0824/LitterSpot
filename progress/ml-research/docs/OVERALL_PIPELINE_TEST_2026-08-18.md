@@ -55,7 +55,7 @@ enough to replace the specialists.
 `PERCEPTION_BACKEND=specialists` starts successfully but reports degraded until
 all three approved checkpoints exist:
 
-- bin state: `runs/state_classifier/multitask_gco_gbs_v2/production.pt`;
+- bin state: `runs/state_classifier/multitask_bin_state/production.pt`;
 - floor hazards: the configured segmentation checkpoint;
 - occupancy: `models/production/occupancy_yolo11n.pt`.
 

@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  getV2OrchestratorRunDetail,
-  getV2OrchestratorRunsPage,
-  getV2ServiceHealth,
-  getV2SystemView,
-  setV2OrchestratorStatus,
-  type V2OrchestratorRunDetail,
-  type V2ServiceHealth,
-  type V2SystemEvent,
-  type V2SystemRun,
-  type V2SystemView,
-} from "../services/v2/system";
+  getOrchestratorRunDetail,
+  getOrchestratorRunsPage,
+  getServiceHealth,
+  getSystemView,
+  setOrchestratorStatus,
+  type OrchestratorRunDetail,
+  type ServiceHealth,
+  type SystemEvent,
+  type SystemRun,
+  type SystemView,
+} from "../services/api/system";
 import "./system-page.css";
-import type { V2ListPage } from "../services/v2/pagination";
+import type { ListPage } from "../services/api/pagination";
 
 type RunFilter = "all" | "assignment" | "review";
 
@@ -25,7 +25,7 @@ function formatDate(value?: string | null, fallback = "Not recorded") {
   return Number.isNaN(date.getTime()) ? fallback : dateTime.format(date);
 }
 
-function elapsed(run: V2SystemRun) {
+function elapsed(run: SystemRun) {
   if (!run.startedAt || !run.completedAt) return run.status === "running" ? "In progress" : "Not recorded";
   const milliseconds = new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return "Not recorded";
@@ -44,7 +44,7 @@ function issueLabel(value?: string | null) {
   return value ? readable(value) : "Cleaning issue";
 }
 
-function runResult(run: V2SystemRun) {
+function runResult(run: SystemRun) {
   const labels: Record<string, string> = {
     assigned: "Work assigned",
     resolved: "Work resolved",
@@ -59,26 +59,26 @@ function runResult(run: V2SystemRun) {
   return run.resultCode ? labels[run.resultCode] ?? readable(run.resultCode) : readable(run.status);
 }
 
-function runState(run: V2SystemRun) {
+function runState(run: SystemRun) {
   if (run.status === "succeeded") return run.resultCode === "rework" ? "attention" : "succeeded";
   if (run.status === "exhausted" || run.resultCode === "needs_supervisor") return "attention";
   if (run.status === "running") return "running";
   return "failed";
 }
 
-function runTitle(run: V2SystemRun) {
+function runTitle(run: SystemRun) {
   return run.references?.workOrder?.title
     ?? (run.references?.alert ? `${issueLabel(run.references.alert.issueType)} Alert` : null)
     ?? (run.type === "assignment" ? "Cleaner assignment" : "Cleaning review");
 }
 
-function runLocation(run: V2SystemRun) {
+function runLocation(run: SystemRun) {
   const reference = run.references?.alert;
   const parts = [reference?.zoneName, reference?.cameraName].filter((value): value is string => Boolean(value));
   return parts.length ? parts.join(" · ") : "Location not captured";
 }
 
-function runSummary(run: V2SystemRun) {
+function runSummary(run: SystemRun) {
   if (run.decisionSummary) return run.decisionSummary;
   const summaries: Record<string, string> = {
     assigned: "The selected Alert and Cleaner passed Node validation, and one Work Order was created.",
@@ -104,7 +104,7 @@ function SystemIcon({ name }: { name: "run" | "review" | "warning" | "worker" })
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 20H2Z" /><path d="M12 9v5M12 17v.1" /></svg>;
 }
 
-function RunDetail({ run, detail, loading, error, onRetry, onClose }: { run: V2SystemRun; detail?: V2OrchestratorRunDetail; loading: boolean; error?: string; onRetry: () => void; onClose: () => void }) {
+function RunDetail({ run, detail, loading, error, onRetry, onClose }: { run: SystemRun; detail?: OrchestratorRunDetail; loading: boolean; error?: string; onRetry: () => void; onClose: () => void }) {
   const [showAllCandidates, setShowAllCandidates] = useState(false);
   if (loading) return <div className="system-run-detail system-run-detail-state" role="status">Loading Run details…</div>;
   if (error) return <div className="system-run-detail system-run-detail-state error"><p>{error}</p><button type="button" onClick={onRetry}>Try again</button></div>;
@@ -151,7 +151,7 @@ function RunDetail({ run, detail, loading, error, onRetry, onClose }: { run: V2S
       <div><span>Decision summary</span><p>{runSummary(detail.run)}</p></div>
       <dl>
         <div><dt>Provider</dt><dd>{detail.run.type === "review" ? "Node verification" : detail.run.provider ?? "Not recorded"}</dd></div>
-        <div><dt>Model / policy</dt><dd>{detail.run.type === "review" ? "review-v2" : detail.run.model ?? "Not recorded"}</dd></div>
+        <div><dt>Model / policy</dt><dd>{detail.run.type === "review" ? "fresh-evidence-review" : detail.run.model ?? "Not recorded"}</dd></div>
         <div><dt>Retries</dt><dd>{detail.run.retryCount ?? Math.max(0, detail.run.providerRequestCount - 1)}</dd></div>
         <div><dt>Elapsed</dt><dd>{elapsed(detail.run)}</dd></div>
       </dl>
@@ -166,14 +166,14 @@ function RunDetail({ run, detail, loading, error, onRetry, onClose }: { run: V2S
   </div>;
 }
 
-function SystemIssue({ event }: { event: V2SystemEvent }) {
+function SystemIssue({ event }: { event: SystemEvent }) {
   return <article className={event.status}>
     <i><SystemIcon name={event.status === "open" ? "warning" : "worker"} /></i>
     <div><span>{event.status === "open" ? readable(event.code) : "Recovered"}</span><strong>{event.message}</strong><p>{event.occurrenceCount === 1 ? "Recorded once." : `Recorded ${event.occurrenceCount} times.`}{event.derivedFromRuntime ? " This warning comes from the current Node process." : ""}</p><small>{event.status === "recovered" ? `Recovered ${formatDate(event.recoveredAt)}` : `Last occurred ${formatDate(event.lastOccurredAt ?? event.updatedAt)}`}</small></div>
   </article>;
 }
 
-function ServiceStatus({ view, health }: { view: V2SystemView; health?: V2ServiceHealth }) {
+function ServiceStatus({ view, health }: { view: SystemView; health?: ServiceHealth }) {
   const inference = health?.dependencies?.aiInference;
   const inferenceReady = inference === "ready";
   return <section className="system-services">
@@ -188,16 +188,16 @@ function ServiceStatus({ view, health }: { view: V2SystemView; health?: V2Servic
   </section>;
 }
 
-export function SystemPage({ readOnly = false, initialView, loadView = getV2SystemView, loadRun = getV2OrchestratorRunDetail, loadRunsPage = getV2OrchestratorRunsPage }: { readOnly?: boolean; initialView?: V2SystemView; loadView?: (signal?: AbortSignal) => Promise<V2SystemView>; loadRun?: (runId: string, signal?: AbortSignal) => Promise<V2OrchestratorRunDetail>; loadRunsPage?: (cursor?: string, signal?: AbortSignal) => Promise<V2ListPage<V2SystemRun>> } = {}) {
-  const [view, setView] = useState<V2SystemView | undefined>(initialView);
-  const [health, setHealth] = useState<V2ServiceHealth>();
+export function SystemPage({ readOnly = false, initialView, loadView = getSystemView, loadRun = getOrchestratorRunDetail, loadRunsPage = getOrchestratorRunsPage }: { readOnly?: boolean; initialView?: SystemView; loadView?: (signal?: AbortSignal) => Promise<SystemView>; loadRun?: (runId: string, signal?: AbortSignal) => Promise<OrchestratorRunDetail>; loadRunsPage?: (cursor?: string, signal?: AbortSignal) => Promise<ListPage<SystemRun>> } = {}) {
+  const [view, setView] = useState<SystemView | undefined>(initialView);
+  const [health, setHealth] = useState<ServiceHealth>();
   const [loading, setLoading] = useState(!initialView);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date>();
   const [filter, setFilter] = useState<RunFilter>("all");
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const [runDetails, setRunDetails] = useState<Record<string, V2OrchestratorRunDetail>>({});
+  const [runDetails, setRunDetails] = useState<Record<string, OrchestratorRunDetail>>({});
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const [pauseOpen, setPauseOpen] = useState(false);
@@ -240,7 +240,7 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
 
   useEffect(() => {
     const controller = new AbortController();
-    const check = () => { void getV2ServiceHealth(controller.signal).then(setHealth).catch(() => { if (!controller.signal.aborted) setHealth({ status: "degraded", dependencies: { aiInference: "unavailable" } }); }); };
+    const check = () => { void getServiceHealth(controller.signal).then(setHealth).catch(() => { if (!controller.signal.aborted) setHealth({ status: "degraded", dependencies: { aiInference: "unavailable" } }); }); };
     check();
     const interval = window.setInterval(check, 30_000);
     return () => { window.clearInterval(interval); controller.abort(); };
@@ -290,7 +290,7 @@ export function SystemPage({ readOnly = false, initialView, loadView = getV2Syst
     setStatusPending(true);
     setStatusError("");
     try {
-      await setV2OrchestratorStatus(status, status === "paused" ? pauseReason : null);
+      await setOrchestratorStatus(status, status === "paused" ? pauseReason : null);
       await loadSystem(true);
       setPauseReason("");
       setPauseOpen(false);

@@ -25,7 +25,7 @@ An automated service actor that reasons about operational state and uses control
 _Avoid_: Supervisor account, cleaner assignment model
 
 **Orchestrator Run**:
-A durable application record of one assignment or review attempt, including structured inputs, decision explanation, tool calls, result, and failures; optional raw model output is separate developer filesystem data.
+A durable application record of one assignment or review attempt, including structured inputs, decision explanation, tool calls, result, and failures; optional structured provider-bridge output is separate developer filesystem data.
 _Avoid_: Hidden provider reasoning, Work Order history
 
 ## Location and cameras

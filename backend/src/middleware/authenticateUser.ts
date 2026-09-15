@@ -101,8 +101,8 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
     if (account.role === "supervisor") {
       const profile = await firestore.collection("supervisors").doc(String(account.profileId)).get();
       const profileData = profile.data();
-      const v2Profile = profileData?.schemaVersion === 2;
-      if (!profile.exists || profileData?.status !== "active" || !v2Profile && profileData?.role !== "supervisor") {
+      const currentProfile = profileData?.schemaVersion === 2;
+      if (!profile.exists || profileData?.status !== "active" || !currentProfile && profileData?.role !== "supervisor") {
         return res.status(403).json({ error: "Supervisor access is inactive.", requestId: req.requestId });
       }
       const siteId = String(accountData.siteId ?? profileData?.siteId ?? "");
@@ -131,8 +131,8 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
       const profileReference = firestore.collection("cleaners").doc(cleanerId);
       const profile = await profileReference.get();
       const data = profile.data();
-      const v2Profile = data?.schemaVersion === 2;
-      if (!profile.exists || !v2Profile || data?.status !== "active" || data.authUid !== decoded.uid) {
+      const currentProfile = data?.schemaVersion === 2;
+      if (!profile.exists || !currentProfile || data?.status !== "active" || data.authUid !== decoded.uid) {
         return res.status(403).json({ error: "Cleaner access is inactive.", requestId: req.requestId });
       }
       const email = decoded.email ?? String(data.email ?? "");

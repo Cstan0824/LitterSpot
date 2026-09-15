@@ -16,7 +16,7 @@ DEFAULT_SOURCES = {
     "binHybridOcclusion": ROOT / "artifacts/detection-stability/current/diagnostics/bin-hybrid-occluded-full-vote.json",
     "floor": ROOT / "artifacts/detection-stability/current/diagnostics/floor-taco.json",
     "occupancyStill": ROOT / "artifacts/detection-stability/current/diagnostics/occupancy/results.json",
-    "occupancyVideo": ROOT / "artifacts/detection-stability/current/diagnostics/occupancy-video-postprocess-v2/results.json",
+    "occupancyVideo": ROOT / "artifacts/detection-stability/current/diagnostics/occupancy-video-postprocess-revision-2/results.json",
 }
 
 

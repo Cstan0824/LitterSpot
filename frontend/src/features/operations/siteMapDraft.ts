@@ -1,5 +1,5 @@
-import { containingZoneId, pointInSiteMapBoundary, validateZoneCandidate, type ZoneCandidateIssue } from "../../services/v2/mapGeometry";
-import type { SiteMapBackground, SiteMapDraft, SiteMapDraftSave } from "../../services/v2/siteMap";
+import { containingZoneId, pointInSiteMapBoundary, validateZoneCandidate, type ZoneCandidateIssue } from "../../services/api/mapGeometry";
+import type { SiteMapBackground, SiteMapDraft, SiteMapDraftSave } from "../../services/api/siteMap";
 
 export type SiteDraftIssue = ZoneCandidateIssue & { kind: "map" | "zone" | "camera" | "station" | "background" };
 

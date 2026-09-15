@@ -576,15 +576,15 @@ Recommended model versions:
 
 ```text
 V1: Public dataset baseline
-V2: Public checkpoint fine-tuned on theme-park CCTV data
-V3: V2 fine-tuned with observed false positives and missed detections
+Revision 2: Public checkpoint fine-tuned on theme-park CCTV data
+Revision 3: Revision 2 fine-tuned with observed false positives and missed detections
 ```
 
 Output names:
 
 ```text
 models/production/bin_overflow_public_v1.pt
-models/production/bin_overflow_themepark_v2.pt
+models/production/bin_overflow_themepark_revision_2.pt
 models/production/bin_overflow_themepark_v3.pt
 ```
 

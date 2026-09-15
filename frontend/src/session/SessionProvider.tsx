@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut as firebaseSignOut, type User } from "firebase/auth";
 import { firebaseAuth } from "../config/firebase";
-import { transitionAccountScope } from "../services/v2/accountScope";
-import { getApplicationSession, type ApplicationSession } from "../services/v2/session";
+import { transitionAccountScope } from "../services/api/accountScope";
+import { getApplicationSession, type ApplicationSession } from "../services/api/session";
 
 type SessionState =
   | { status: "checking"; session: null; error: null }

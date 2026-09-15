@@ -1,12 +1,12 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
-import { recoverV2OrchestratorRuns } from "./services/v2OrchestratorService.js";
-import { startV2OrchestratorWorker, stopV2OrchestratorWorker } from "./services/v2OrchestratorWorker.js";
-import { recoverV2SiteOperations } from "./services/v2SiteOperationService.js";
+import { recoverOrchestratorRuns } from "./services/orchestratorService.js";
+import { startOrchestratorWorker, stopOrchestratorWorker } from "./services/orchestratorWorker.js";
+import { recoverSiteOperations } from "./services/siteOperationService.js";
 import { startPhase11Worker, stopPhase11Worker } from "./services/phase11Worker.js";
 import { isFirestoreQuotaError, safeFirestoreError } from "./shared/firestoreErrors.js";
-import { sweepMonitoringRuntime } from "./services/v2LiveMonitoringService.js";
-import { recoverV2CameraVerificationCollectors } from "./services/v2WorkOrderService.js";
+import { sweepMonitoringRuntime } from "./services/liveMonitoringService.js";
+import { recoverCameraVerificationCollectors } from "./services/workOrderService.js";
 // Sweep only episodes present in this Node runtime, avoiding a global cloud scan.
 const monitoringSweep = setInterval(() => { void sweepMonitoringRuntime().catch(error => console.error(JSON.stringify({ event: "camera_monitoring_sweep_failed", ...safeFirestoreError(error) }))); }, 10000);
 monitoringSweep.unref();
@@ -23,7 +23,7 @@ async function maintenance() {
   if (maintenanceRunning) return;
   maintenanceRunning = true;
   let delay = env.siteOperationRecoveryIntervalMs;
-  try { await recoverV2SiteOperations(); maintenanceFailures = 0; }
+  try { await recoverSiteOperations(); maintenanceFailures = 0; }
   catch (error) {
     maintenanceFailures += 1;
     if (isFirestoreQuotaError(error)) delay = Math.min(env.siteOperationRecoveryMaxBackoffMs, env.siteOperationRecoveryIntervalMs * 2 ** Math.min(maintenanceFailures, 8));
@@ -43,9 +43,9 @@ async function startupRecovery(label: string, operation: () => Promise<number>) 
 const server = app.listen(env.port, async () => {
   console.log(`LitterSpot backend listening on port ${env.port}`);
   if (env.analyticsWorkerEnabled) startPhase11Worker();
-  await startupRecovery("orchestrator_recovery", recoverV2OrchestratorRuns);
-  await startupRecovery("camera_verification_recovery", recoverV2CameraVerificationCollectors);
-  if (env.orchestratorWorkerEnabled) startV2OrchestratorWorker();
+  await startupRecovery("orchestrator_recovery", recoverOrchestratorRuns);
+  await startupRecovery("camera_verification_recovery", recoverCameraVerificationCollectors);
+  if (env.orchestratorWorkerEnabled) startOrchestratorWorker();
   scheduleMaintenance(1_000);
 });
 
@@ -56,7 +56,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM") {
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: "info", event: "shutdown_started", signal }));
   server.close();
   if (maintenanceTimer) clearTimeout(maintenanceTimer);
-  stopV2OrchestratorWorker();
+  stopOrchestratorWorker();
   clearInterval(monitoringSweep);
   const timeout = new Promise<"timeout">((resolve) => {
     const timer = setTimeout(() => resolve("timeout"), 20_000);

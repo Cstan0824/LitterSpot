@@ -6,7 +6,7 @@ import {
   cleanupMinuteBuckets,
   compareIntervention,
   getBinPlacementSnapshot,
-  getDashboardV2,
+  getDashboard,
   getDailySummaries,
   implementBinPlacement,
   listInterventions,
@@ -24,7 +24,7 @@ const actor = (req: any) => ({
 });
 export const phase11DashboardRoutes = Router();
 phase11DashboardRoutes.get("/", async (req, res) =>
-  res.json({ dashboard: await getDashboardV2(String(req.authUser.siteId)) }),
+  res.json({ dashboard: await getDashboard(String(req.authUser.siteId)) }),
 );
 phase11DashboardRoutes.post("/refresh", async (req, res) =>
   res

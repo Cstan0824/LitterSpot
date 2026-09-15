@@ -1,5 +1,5 @@
-import type { V2Point } from "../../services/v2/operations";
+import type { OperationsPoint } from "../../services/api/operations";
 
-export function initialCleanerStation(savedStation?: V2Point | null): V2Point | null {
+export function initialCleanerStation(savedStation?: OperationsPoint | null): OperationsPoint | null {
   return savedStation ?? null;
 }

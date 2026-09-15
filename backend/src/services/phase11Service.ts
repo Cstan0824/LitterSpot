@@ -1,22 +1,22 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
-import { presentV2Cleaner } from "./v2CleanerService.js";
-import { getV2OrchestratorConfig } from "./v2OrchestratorService.js";
-import { priorityScore } from "./v2AlertPolicy.js";
-import { rankBinPlacementFactors } from "./v2BinPlacement.js";
-import { v2Json } from "./v2Presentation.js";
-import { canonicalHash } from "./v2Persistence.js";
+import { presentCleaner } from "./cleanerService.js";
+import { getOrchestratorConfig } from "./orchestratorService.js";
+import { priorityScore } from "./alertPolicy.js";
+import { rankBinPlacementFactors } from "./binPlacement.js";
+import { serializeFirestore } from "./presentation.js";
+import { canonicalHash } from "./persistence.js";
 import { allDocuments, millis, operationalFacts, requireAnalyticsSite, siteDocuments } from "./phase11Data.js";
 import { getDailySummaries } from "./phase11Daily.js";
 import { fullDayExclusion, shiftDate, siteLocalDate, siteMidnight, shiftSiteInstant, validateDays } from "./phase11Calendar.js";
-import { v2AuditEventData } from "./v2AuditService.js";
+import { auditEventData } from "./auditService.js";
 export { rebuildDailySummary, rebuildDailySummaries, getDailySummaries, cleanupMinuteBuckets } from "./phase11Daily.js";
 
 const activeWork = ["assigned", "in_progress", "awaiting_review"];
 const alertStates = ["waiting_for_cleaner", ...activeWork, "resolved", "dismissed"];
 const byName = (a: string, b: string) => a.localeCompare(b);
-const safe = (data: any) => v2Json(data);
+const safe = (data: any) => serializeFirestore(data);
 const severityRank = (s: string) => s === "critical" ? 2 : 1;
 const activeZone = (data: Record<string, unknown>) => data.lifecycleStatus === "active" || (data.lifecycleStatus == null && data.status === "active");
 
@@ -25,12 +25,12 @@ export async function buildDashboard(siteId: string, now = new Date()) {
   const end = new Date(Math.floor(+now / 60000) * 60000), start = new Date(+end - 15 * 60000);
   const [zoneDocs, cameraDocs, cleanerDocs, alertDocs, workDocs, config, runtimeDocs, minutes] = await Promise.all([
     siteDocuments("zones", siteId), siteDocuments("cameras", siteId), siteDocuments("cleaners", siteId),
-    siteDocuments("alerts", siteId), siteDocuments("workOrders", siteId), getV2OrchestratorConfig(siteId), siteDocuments("cameraRuntimeStates", siteId),
+    siteDocuments("alerts", siteId), siteDocuments("workOrders", siteId), getOrchestratorConfig(siteId), siteDocuments("cameraRuntimeStates", siteId),
     allDocuments(firestore.collection("analyticsMinuteBuckets").where("siteId", "==", siteId)
       .where("bucketStart", ">=", Timestamp.fromDate(start)).where("bucketStart", "<", Timestamp.fromDate(end)).orderBy("bucketStart")),
   ]);
   const zones = zoneDocs.filter(d => activeZone(d.data())), cameras = cameraDocs.filter(d => d.data().status === "active");
-  const cleaners = await Promise.all(cleanerDocs.filter(d => d.data().status === "active").map(d => presentV2Cleaner(d.id, siteId, now)));
+  const cleaners = await Promise.all(cleanerDocs.filter(d => d.data().status === "active").map(d => presentCleaner(d.id, siteId, now)));
   const available = cleaners.filter(c => c.availability.available);
   const alerts = alertDocs.map(d => ({ ...d.data(), id: d.id } as any));
   const works = workDocs.map(d => ({ ...d.data(), id: d.id } as any));
@@ -74,7 +74,7 @@ export async function buildDashboard(siteId: string, now = new Date()) {
   await firestore.collection("dashboardSummaries").doc(siteId).set(data);
   return safe(data);
 }
-export async function getDashboardV2(siteId: string, now = new Date()) {
+export async function getDashboard(siteId: string, now = new Date()) {
   await requireAnalyticsSite(siteId);
   const snap = await firestore.collection("dashboardSummaries").doc(siteId).get();
   return snap.data()?.calculationVersion === "dashboard-v3" && millis(snap.data()?.staleAfter) > +now ? safe(snap.data()) : buildDashboard(siteId,now);
@@ -161,7 +161,7 @@ export async function implementBinPlacement(siteId:string,zoneId:string,actor:an
     tx.create(intervention,data);
     tx.update(ref,{zoneRankings:s.zoneRankings.filter((z:any)=>z.zoneId!==zoneId),sourceFingerprint:null});
     const audit=firestore.collection("auditEvents").doc();
-    tx.create(audit,v2AuditEventData({auditEventId:audit.id,actor,siteId,action:"bin_placement_implemented",resourceType:"BinPlacementIntervention",resourceId:interventionId,outcome:"succeeded",after:{zoneId},requestId:interventionId}));
+    tx.create(audit,auditEventData({auditEventId:audit.id,actor,siteId,action:"bin_placement_implemented",resourceType:"BinPlacementIntervention",resourceId:interventionId,outcome:"succeeded",after:{zoneId},requestId:interventionId}));
     return interventionId;
   });
   return safe({id,...(await firestore.collection("binPlacementInterventions").doc(id).get()).data()});

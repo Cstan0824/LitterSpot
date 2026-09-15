@@ -51,7 +51,7 @@ def normalized_box(value: dict[str, float], image: Image.Image):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=ROOT / "samples/bin-state-edge-cases/manifest.json")
-    parser.add_argument("--checkpoint", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_v2/production.pt")
+    parser.add_argument("--checkpoint", type=Path, default=ROOT / "runs/state_classifier/multitask_bin_state/production.pt")
     parser.add_argument("--output", type=Path, default=ROOT / "runs/edge-case-evaluation/report.json")
     parser.add_argument("--strict", action="store_true", help="Fail when a reviewed expected state differs from the prediction")
     parser.add_argument("--validate-localizer", action="store_true", help="Also validate fixed-camera behavior for no-ROI fixtures")

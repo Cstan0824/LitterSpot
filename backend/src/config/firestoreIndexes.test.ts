@@ -16,7 +16,7 @@ function hasAuditIndex(fields: Array<[string, "ASCENDING" | "DESCENDING"]>) {
     && index.fields.every((field, position) => field.fieldPath === fields[position][0] && field.order === fields[position][1]));
 }
 
-describe("Firestore V2 audit indexes", () => {
+describe("Firestore audit indexes", () => {
   it("keeps every Audit Event query used by Root and Superadmin APIs deployable", () => {
     expect(hasAuditIndex([["siteId", "ASCENDING"], ["occurredAt", "DESCENDING"]])).toBe(true);
     expect(hasAuditIndex([["actorUid", "ASCENDING"], ["occurredAt", "DESCENDING"]])).toBe(true);

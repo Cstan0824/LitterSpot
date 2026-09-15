@@ -55,7 +55,7 @@ The final 100 University of Malaya images stay untouched. Two candidates were
 measured. The replay-balanced checkpoint preserved generic performance
 (precision 0.9369, recall 0.8866, mAP50 0.9532) and improved the Malaysian
 count proxy from 0.34 to 0.85. The active, Malaysia-first checkpoint
-`bin-localizer-yolo11n-gco-gbs-um-v2` instead reaches 76% exactly-three, 96%
+`bin-localizer-yolo11n` instead reaches 76% exactly-three, 96%
 at-least-three, and 0.9867 count coverage at confidence 0.85. This specialization
 does not pass the generic gate (generic mAP50 0.5756), which is an explicit
 tradeoff for the current deployment target. Malaysian figures are a count

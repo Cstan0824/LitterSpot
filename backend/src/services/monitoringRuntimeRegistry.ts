@@ -1,5 +1,5 @@
 import type { DocumentData } from "firebase-admin/firestore";
-import type { MonitoringLease } from "./v2MonitoringLease.js";
+import type { MonitoringLease } from "./monitoringLease.js";
 
 export type MonitoringRuntimeSession = MonitoringLease & {
   siteId: string;

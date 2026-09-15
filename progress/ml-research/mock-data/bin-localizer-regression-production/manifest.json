@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "suite": "bin_localizer_locked_whatsapp_plus_public_confuser_revision_2",
+  "status": "provisional-assistant-visual-review-needs-operator-approval",
+  "trainingUse": false,
+  "thresholdSelectionUse": false,
+  "sampleRateFps": 1.0,
+  "minimumPositiveCases": 3,
+  "minimumNegativeCases": 3,
+  "cases": [
+    {
+      "caseId": "basket-topped-waste",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.12.35 AM.mp4",
+      "expectedBins": [{"binId": "basket-1", "regionNormalized": {"x1": 0.35, "y1": 0.0, "x2": 0.66, "y2": 0.82}}]
+    },
+    {
+      "caseId": "people-no-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-04 at 12.14.58 AM.mp4",
+      "negativeCategory": "people",
+      "expectedBins": []
+    },
+    {
+      "caseId": "green-closed-lid-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.33 AM.mp4",
+      "expectedBins": [{"binId": "green-wheelie-1", "regionNormalized": {"x1": 0.31, "y1": 0.34, "x2": 0.58, "y2": 0.94}}]
+    },
+    {
+      "caseId": "chair-crowd-no-bin",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM (1).mp4",
+      "negativeCategory": "chair",
+      "expectedBins": []
+    },
+    {
+      "caseId": "black-bin-topped-waste",
+      "path": "mock-data/internvl-evaluation/videos/WhatsApp Video 2026-08-12 at 10.35.34 AM.mp4",
+      "expectedBins": [{"binId": "black-open-bin-1", "regionNormalized": {"x1": 0.30, "y1": 0.33, "x2": 0.57, "y2": 0.94}}]
+    },
+    {
+      "caseId": "wooden-box-no-bin",
+      "path": "ml-training/data/public/openimages-v7-loop2-negative/images/009a8a93ff33934a.jpg",
+      "negativeCategory": "container_like",
+      "expectedBins": [],
+      "reviewEvidence": {
+        "status": "reviewed_no_bin",
+        "source": "Open Images V7 / Flickr",
+        "license": "CC-BY-2.0",
+        "trainingUse": false,
+        "thresholdSelectionUse": false
+      }
+    }
+  ]
+}

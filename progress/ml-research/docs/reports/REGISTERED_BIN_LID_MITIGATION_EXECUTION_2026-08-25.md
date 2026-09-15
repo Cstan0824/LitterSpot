@@ -9,7 +9,7 @@ The registered-camera mitigation plan is implemented and replayed against the lo
 
 ## Implemented controls
 
-- Registration schema v2 stores one `binId`, one whole-bin `binPolygon`, `binType`, a clean reference media ID, a walkable-floor polygon, and optional exclusions. Version-1 registrations are normalized for compatibility; new publishes write v2.
+- Registration schema revision 2 stores one `binId`, one whole-bin `binPolygon`, `binType`, a clean reference media ID, a walkable-floor polygon, and optional exclusions. Revision 1 registrations are normalized for compatibility; new publishes write schema version 2.
 - A registered camera emits one primary observation per enrolled bin. Generic localization is shadow-only: an unmatched candidate is `unknown/unregistered_candidate`, has no `binId`, and cannot enter state history, alerts, or placement analysis.
 - `RegisteredSceneEvidenceModule` derives top, side, bottom, and exterior zones from the whole-bin polygon. It compares a current frame with a clean reference after blur and brightness normalization.
 - A top-only change with no exterior evidence becomes `review/lid_obstruction`. A model overflow proposal without exterior evidence becomes `review/overflow_without_exterior_evidence`. Exterior side/bottom evidence is required before overflow remains eligible.

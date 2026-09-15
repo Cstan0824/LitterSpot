@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cameraDetailBackTarget, cameraMovePointAllowed, V2CameraWallPreview } from "./CameraOperationsPage";
+import { cameraDetailBackTarget, cameraMovePointAllowed, CameraWallPreview } from "./CameraOperationsPage";
 
 describe("Camera detail return navigation", () => {
   it("returns direct links to the unfiltered Camera wall", () => {
@@ -37,7 +37,7 @@ describe("Camera movement placement policy", () => {
 
 describe("read-only Camera wall presentation", () => {
   it("uses the same fixed-ratio disabled stage as the Root Supervisor Camera wall", () => {
-    const markup = renderToStaticMarkup(createElement(V2CameraWallPreview, { camera: { id: "camera-1", monitoringEnabled: false, sourceType: "looped_video" } as any, readOnly: true }));
+    const markup = renderToStaticMarkup(createElement(CameraWallPreview, { camera: { id: "camera-1", monitoringEnabled: false, sourceType: "looped_video" } as any, readOnly: true }));
     expect(markup).toContain("camera-live-view compact");
     expect(markup).toContain("camera-live-stage");
     expect(markup).toContain("Camera is disabled");

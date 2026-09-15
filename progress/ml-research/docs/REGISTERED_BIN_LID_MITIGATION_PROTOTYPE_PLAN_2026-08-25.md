@@ -60,8 +60,8 @@ The Firestore seam owns schema validation, revisioning, reference-media ownershi
 
 ```ts
 resolveForInference(cameraId: string): Promise<RegisteredCameraContext | null>
-validate(cameraId: string, draft: RegistrationDraftV2): Promise<RegistrationValidation>
-publish(cameraId: string, draft: RegistrationDraftV2, expectedRevision: number): Promise<RegisteredCameraContext>
+validate(cameraId: string, draft: RegistrationDraftRevision2): Promise<RegistrationValidation>
+publish(cameraId: string, draft: RegistrationDraftRevision2, expectedRevision: number): Promise<RegisteredCameraContext>
 ```
 
 Callers do not calculate polygons, inspect Firestore documents, or interpret revision conflicts.
@@ -89,7 +89,7 @@ The module is a pure reducer for tests. Persistence and alert creation remain ad
 ## 5. Registration schema version 2
 
 ```ts
-type RegistrationDraftV2 = {
+type RegistrationDraftRevision2 = {
   schemaVersion: 2;
   referenceMediaId: string;
   sourceWidth: number;

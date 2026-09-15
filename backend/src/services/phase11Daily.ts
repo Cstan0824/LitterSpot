@@ -1,8 +1,8 @@
 import { FieldValue, Timestamp, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
-import { canonicalHash } from "./v2Persistence.js";
-import { v2Json } from "./v2Presentation.js";
+import { canonicalHash } from "./persistence.js";
+import { serializeFirestore } from "./presentation.js";
 import { allDocuments, millis, operationalFacts, requireAnalyticsSite } from "./phase11Data.js";
 import { shiftDate, siteLocalDate, siteMidnight, validLocalDate } from "./phase11Calendar.js";
 
@@ -85,7 +85,7 @@ export async function rebuildDailySummary(siteId: string, date: string, now = ne
         warning: minuteBucketCount === 0 ? "no_minute_buckets" : minuteBucketCount < expectedMinutes ? "partial_monitoring_coverage" : null },
       aggregationVersion: "daily-v3", status: +end <= +now ? "final" : "provisional", generatedAt: Timestamp.fromDate(now), lastReconciledAt: Timestamp.fromDate(now) };
     await ref.set({ ...data, sourceSignature: canonicalHash("daily-source", minutes.map(d => [d.id, d.updateTime.toMillis()]), dayFacts) });
-    return v2Json({ id: ref.id, ...data });
+    return serializeFirestore({ id: ref.id, ...data });
   });
 }
 
@@ -108,7 +108,7 @@ export async function getDailySummaries(siteId: string, from?: string, to?: stri
   for (const doc of docs) {
     const data = doc.data(); if (data.schemaVersion !== 2) continue;
     const prior = dates.get(data.localDate);
-    if (!prior || data.aggregationVersion === "daily-v3" || millis(data.generatedAt) > millis(prior.generatedAt)) dates.set(data.localDate, v2Json({ id: doc.id, ...data }));
+    if (!prior || data.aggregationVersion === "daily-v3" || millis(data.generatedAt) > millis(prior.generatedAt)) dates.set(data.localDate, serializeFirestore({ id: doc.id, ...data }));
   }
   return [...dates.values()].sort((a,b) => b.localDate.localeCompare(a.localDate));
 }

@@ -7,7 +7,7 @@ Date: 2026-08-19
 | Fact/module | Expected gate | Actual result | Status |
 |---|---|---|---|
 | Bin state/overflow | Overflow precision >=0.85, recall >=0.90; unknown on missing/occluded ROI | No state checkpoint; manifest has 0 bin rows because public sources do not provide valid indoor state labels | **Blocked, correctly fail-closed** |
-| Floor litter | Precision/recall >=0.85; mask mAP/IoU gate | Clean v2 100-epoch follow-up: test box P=0.6729, R=0.2436, mAP50=0.2549; mask P=0.6729, R=0.2436, mAP50=0.2501. Five-epoch smoke was lower (box P=0.0073, R=0.2308). | **Failed promotion gate** |
+| Floor litter | Precision/recall >=0.85; mask mAP/IoU gate | Clean revision 2 100-epoch follow-up: test box P=0.6729, R=0.2436, mAP50=0.2549; mask P=0.6729, R=0.2436, mAP50=0.2501. Five-epoch smoke was lower (box P=0.0073, R=0.2308). | **Failed promotion gate** |
 | Floor spill | Precision >=0.80, recall >=0.90 | No spill training examples; metric unavailable | **Blocked** |
 | Human population | >=95% within +/-1 in normal operating band | 41 still cases: 34/41 within expected range (82.9%); 14/15 sampled video cases within +/-1 (93.3%). Existing targeted baseline remains 35/35 still and 14/15 video within +/-1. | **Diagnostic only; not retrained** |
 | API/fusion contract | Three-module schema, persistence and fail-closed degraded mode | 72 AI-service tests and 21 ML tests passed | **Passed** |
@@ -55,11 +55,11 @@ Date: 2026-08-19
 
 The floor checkpoint is retained only as a bootstrap smoke artifact:
 
-`ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_taco_smoke_v2/weights/best.pt`
+`ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_taco_smoke_revision_2/weights/best.pt`
 
 The longer unregistered experiment is:
 
-`ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_taco_full_v2/weights/best.pt`
+`ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_taco_full_revision_2/weights/best.pt`
 
 Neither is registered in production because the dataset contains solid litter
 only, no spills, no clean hard-negative set, and both held-out metrics fail the

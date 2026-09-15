@@ -279,7 +279,7 @@ Suggested command:
 
 ```powershell
 .\.venv\Scripts\python.exe ml-training\scripts\evaluate_bin_state_edge_cases.py `
-  --checkpoint runs\state_classifier\multitask_gco_gbs_v2\production.pt `
+  --checkpoint runs\state_classifier\multitask_bin_state\production.pt `
   --manifest ml-training\data\bin-state-edge-cases\manifest.csv
 ```
 
