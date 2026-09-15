@@ -1,3 +1,0 @@
-$kind: collection
-description: Authenticated Node adapters for isolated bin-state model testing. These requests reach private FastAPI but do not create media, jobs, analysis runs, detections, flags, alerts, or analytics.
-order: 7000

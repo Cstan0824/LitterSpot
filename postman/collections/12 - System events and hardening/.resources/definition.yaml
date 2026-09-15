@@ -1,3 +1,0 @@
-$kind: collection
-description: Phase 9 public liveness/readiness, authenticated operational system-event visibility, request IDs, security headers, rate-limit headers, and bounded cursor contracts. System events are created only by real dependency failures or automated smoke tests; there is intentionally no public mutation endpoint.
-order: 8900

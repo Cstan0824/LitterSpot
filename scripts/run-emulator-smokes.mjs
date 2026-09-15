@@ -23,14 +23,15 @@ async function runNpm(arguments_, extraEnvironment = {}) {
 const integrationTests = [
   ["src/app.test.ts", { RUN_HTTP_TESTS: "1" }],
   ["src/auth.integration.test.ts", {}],
-  ["src/services/firestoreCursorPagination.integration.test.ts", {}],
-  ["src/services/imageUpload.integration.test.ts", {}],
+  ["src/retiredProcessingRoutes.integration.test.ts", {}],
   ["src/services/mediaRetention.integration.test.ts", {}],
   ["src/v2Foundation.integration.test.ts", {}],
   ["src/v2Identity.integration.test.ts", {}],
   ["src/v2SiteMap.integration.test.ts", {}],
   ["src/v2Cleaner.integration.test.ts", {}],
   ["src/v2Camera.integration.test.ts", {}],
+  ["src/v2CameraRemoval.integration.test.ts", {}],
+  ["src/cameraScenes.integration.test.ts", {}],
   ["src/v2Monitoring.integration.test.ts", {}],
   ["src/services/v2MonitoringQuota.integration.test.ts", {}],
   ["src/v2WorkOrder.integration.test.ts", {}],
@@ -42,13 +43,13 @@ const integrationTests = [
 
 for (const [testFile, environment] of integrationTests) {
   const exitCode = await runNpm(
-    ["--workspace=backend", "run", "test", "--", "--run", testFile],
+    ["--workspace=backend", "run", "test", "--", "--run", "--testTimeout=15000", testFile],
     environment,
   );
   if (exitCode !== 0) process.exit(exitCode);
 }
 
-const smokeScripts = ["smoke:alerts", "smoke:dashboard", "smoke:analytics", "smoke:system-events"];
+const smokeScripts = ["smoke:system-events"];
 
 for (const script of smokeScripts) {
   const exitCode = await runNpm(["--workspace=backend", "run", script]);

@@ -127,7 +127,10 @@ Only authenticated Supervisor console sessions count toward that lifecycle. Clea
 
 **Confirmed** No destructive reset has been executed yet. Reset requires an explicit implementation-time approval and exact target validation.
 
-**Updated 2026-09-01** The current isolated development target is `litterspot-v2-database/(default)`. It began empty and was clean-bootstrapped for Phase 11 testing. The previous `litterspot-dev-jeremy/(default)` project is retained but no longer used after exhausting its Spark read quota. Existing shared-production Auth users, Firestore data, and `data/media-store` files remain untouched and are not reused.
+**Updated 2026-09-14** The application completed its cutover to production
+Firebase project `litterspot` and database `(default)`. Future isolated
+development and automated tests use Firebase emulators under project
+`demo-litterspot`. The former cloud-development projects are retired.
 
 The reset/bootstrap tooling must:
 
@@ -139,35 +142,25 @@ The reset/bootstrap tooling must:
 
 **Confirmed environment isolation**:
 
-- shared production Firebase project `litterspot` and named database `litterspot` are out of scope for this backend rebuild;
-- persistent manual development uses `litterspot-v2-database/(default)`;
+- the normal application uses production Firebase project `litterspot` and database `(default)`;
+- future isolated development uses the local Firebase emulators;
 - automated tests continue using Firebase Auth and Firestore emulators under demo project `demo-litterspot`;
 - the backend verifies `APP_ENV`, configured project ID, expected project ID, service-account project ID, and emulator-host consistency before connecting;
-- development-cloud media uses a separate ignored local directory under `.local/dev-cloud-media`;
-- the personal Web App configuration is ignored at `config/firebase-web.dev.json`, with only a placeholder example tracked.
+- production and emulator media remain in their separately configured local directories;
+- the personal Web App configuration is ignored at `frontend/.env.local`, with `frontend/.env.example` as the tracked template.
 
 ## 5. Delivery and testing strategy
 
-**Confirmed** Continue backend development API-first. Build and verify Node/Express, Firebase, FastAPI, and Orchestrator contracts before integrating the product frontend.
-
-**Confirmed** The current repository `frontend/` is not the target of new product integration or product acceptance testing. Wait for the frontend teammates' replacement files before wiring product APIs into their interface.
+**Completed** The product frontend is integrated with the Node, Firebase,
+FastAPI, and Orchestrator services. New changes must preserve the current API
+contracts and pass the automated repository checks.
 
 Primary verification methods:
 
 - backend and AI automated tests;
 - Firestore emulator integration tests where relevant;
-- Postman collection and scripted API workflows;
-- contract and schema validation.
-
-**Confirmed** Create a separate isolated API sandbox UI only when a workflow is impractical to verify through tests or Postman, such as browser Camera capture, Site Map plotting, Camera Registration geometry, video overlays, or Firestore real-time notification behavior.
-
-The sandbox:
-
-- lives outside `frontend/`;
-- is not product UI;
-- uses minimal styling and no teammate frontend components;
-- may use hardcoded controls solely to exercise real APIs;
-- can be replaced or removed after product frontend integration.
+- contract and schema validation;
+- focused browser automation only when a browser-native workflow requires it.
 
 ## 6. Decision log
 
@@ -200,11 +193,11 @@ The sandbox:
 
 ### 2026-08-30 — Isolated development Firebase
 
-- Persistent backend development and the prototype use the canonical project `litterspot-v2-database` with `(default)` Firestore.
-- The shared production Firebase project remains untouched.
+- **Superseded 2026-09-14:** the former cloud-development project is retired.
+- The application now uses `litterspot/(default)` for production.
 - Automated tests remain emulator-backed.
 - Backend startup fails closed on project/credential mismatch.
-- Development media and personal Web configuration stay in ignored local paths.
+- Emulator media and personal Web configuration stay in ignored local paths.
 
 ## 7. Phase 9 assignment revision
 

@@ -2,14 +2,15 @@
 
 ## 1. Status and purpose
 
-This document records the agreed target architecture for the LitterSpot prototype. It describes the intended ownership boundaries and integration flows, even when the current repository has not yet been fully changed to match them.
+This document records the architecture for the LitterSpot prototype and its
+ownership boundaries.
 
 The detailed functional scope is maintained in
-[requirements-baseline.md](./requirements-baseline.md). The approved future
-Cleaner, autonomous-orchestrator, and self-hosted deployment design is in
-[autonomous-orchestrator-and-cleaner-plan.md](./autonomous-orchestrator-and-cleaner-plan.md).
-
-The implementation sequence and database design are maintained in [backend-build-and-migration-plan.md](./backend-build-and-migration-plan.md) and [firestore-data-model.md](./firestore-data-model.md).
+[the clarified requirements](./current-clarified-requirements.md) and
+[their continuation](./current-clarified-requirements-continuation.md). Database
+topology and integrity rules are documented in
+[the Firestore data-model package](./data-model-v2/README.md) and the
+[architecture decisions](./adr/).
 
 **Architecture status:** the Supervisor detection platform, Phase 10-11
 authenticated Cleaner/work-order backend, Node-owned orchestrator foundation,
@@ -321,8 +322,7 @@ FCM remain Firebase cloud services.
 
 The orchestrator is trusted to make operational choices without routine human
 approval, while Node.js remains the business execution authority and enforces
-hard invariants. See
-[autonomous-orchestrator-and-cleaner-plan.md](./autonomous-orchestrator-and-cleaner-plan.md).
+hard invariants.
 
 ### Other later phases
 

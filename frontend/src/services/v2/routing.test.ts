@@ -20,6 +20,9 @@ describe("role routing", () => {
     expect(supervisorRouteFromHash("#/alerts?zone=main")).toBe("alerts");
     expect(supervisorRouteFromHash("#/site")).toBe("site");
     expect(supervisorRouteFromHash("#/cleaner")).toBe("dashboard");
+    expect(supervisorRouteFromHash("#/pipeline")).toBe("dashboard");
+    expect(supervisorRouteFromHash("#/playground")).toBe("dashboard");
+    expect(supervisorRouteFromHash("#/camera-registration")).toBe("camera-registration");
     expect(supervisorRouteFromHash("#/unknown")).toBe("dashboard");
   });
 });

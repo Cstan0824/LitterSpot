@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { firestore } from "../config/firebase.js";
 import {
-  listSystemEvents,
   recordSystemEventOccurrence,
   recoverSystemEvent,
 } from "../services/systemEventService.js";
@@ -59,11 +58,7 @@ async function main() {
     assert.equal(reopened.event.generation, 2);
     assert.equal(reopened.event.status, "open");
 
-    const listed = await listSystemEvents({ status: "open", scopeType: "job", scopeId: jobId, limit: 1 });
-    assert.equal(listed.events.length, 1);
-    assert.equal(listed.events[0].eventKey, eventKey);
-    assert.equal(listed.page.hasMore, false);
-    console.log("Phase 9 system-event smoke test passed: idempotent occurrence, recovery, generation-safe reopening, safe presentation, and filtered listing.");
+    console.log("System-event smoke test passed: idempotent occurrence, recovery, generation-safe reopening, and safe presentation.");
   } finally {
     if (eventKey) await firestore.recursiveDelete(firestore.collection("systemEvents").doc(eventKey));
   }

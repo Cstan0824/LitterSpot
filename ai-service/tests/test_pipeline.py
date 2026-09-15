@@ -68,9 +68,9 @@ class RecordingStateClassifier:
         self.arguments.append(args)
         region = BoundingBox(x1=10, y1=10, x2=50, y2=90)
         return SimpleNamespace(
-            region=region, state="overflow", stableState=None, confidence=0.9,
+            region=region, state="overflow", confidence=0.9,
             signals=StateSignals(binPresence=0.9, fullness=0.8, overflow=0.9),
-            confirmed=True, confirmationFrames=1, unknownReasons=[], processingTimeMs=1,
+            unknownReasons=[], processingTimeMs=1,
         )
 
 
@@ -319,7 +319,8 @@ class PipelineRegionTests(unittest.TestCase):
 
         result = pipeline.analyze(Image.new("RGB", (100, 100)), PipelineOptions())
 
-        self.assertEqual(classifier.arguments[0][2:5], (None, None, 1))
+        self.assertEqual(len(classifier.arguments[0]), 2)
+        self.assertEqual(classifier.arguments[0][1], BoundingBox(x1=10, y1=10, x2=50, y2=90))
         self.assertEqual(
             set(result.bins[0].model_dump()),
             {

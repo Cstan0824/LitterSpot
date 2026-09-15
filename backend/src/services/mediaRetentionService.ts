@@ -8,6 +8,7 @@ import { firestore } from "../config/firebase.js";
 import type { MediaRetentionOptions } from "../schemas/mediaRetention.js";
 import {
   ACTIVE_ALERT_STATUSES,
+  TERMINAL_ALERT_STATUSES,
   classifyJobForRetentionSafety,
   collectMediaReferenceIds,
   decideMediaRetentionCandidate,
@@ -84,7 +85,7 @@ function addAlertReferences(document: QueryDocumentSnapshot, target: Set<string>
     references.references.forEach((reference) => target.add(reference));
     return;
   }
-  if (status !== "resolved") throw new Error(`Alert ${document.id} has unknown status ${String(status)}; retention stopped safely.`);
+  if (!TERMINAL_ALERT_STATUSES.has(status)) throw new Error(`Alert ${document.id} has unknown status ${String(status)}; retention stopped safely.`);
 }
 
 function addJobReference(document: QueryDocumentSnapshot, target: Set<string>) {

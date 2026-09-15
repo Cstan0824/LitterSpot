@@ -34,7 +34,7 @@ $token = "local-playground-token"
 $runner = if ($npm) { $npm.Source } else { $bun.Source }
 $backendArguments = if ($npm) { @("--workspace=backend", "run", "dev") } else { @("run", "dev:backend") }
 $frontendArguments = if ($npm) { @("--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1") } else { @("run", "dev:frontend", "--", "--host", "127.0.0.1") }
-$pythonProcess = Start-ServiceProcess "fastapi" $python @("-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000") @{ STATE_CLASSIFIER_PATH = $classifier; STATE_CLASSIFIER_VERSION = "multitask-mobilenet-gco-gbs-v2"; ENABLE_LEGACY_DETECTOR = "false"; DEVICE = "0"; INTERNAL_API_TOKEN = $token }
+$pythonProcess = Start-ServiceProcess "fastapi" $python @("-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000") @{ STATE_CLASSIFIER_PATH = $classifier; STATE_CLASSIFIER_VERSION = "multitask-mobilenet-gco-gbs-v2"; DEVICE = "0"; INTERNAL_API_TOKEN = $token }
 $nodeProcess = Start-ServiceProcess "node" $runner $backendArguments @{ AI_SERVICE_URL = "http://127.0.0.1:8000"; AI_SERVICE_TOKEN = $token }
 $reactProcess = Start-ServiceProcess "react" $runner $frontendArguments @{}
 

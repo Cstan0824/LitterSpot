@@ -41,7 +41,7 @@ run("V2 development test support", () => {
   afterAll(async () => { await firebaseAuth.deleteUser(rootUid).catch(() => undefined); });
 
   it("creates an idempotent simulated Flag, Alert, history and Orchestrator trigger", async () => {
-    const body = { cameraId, issueType: "floor_litter", condition: "litter", severity: "warning", confidence: 0.99, clientRequestId: `postman-${suffix}` };
+    const body = { cameraId, issueType: "floor_litter", condition: "litter", severity: "warning", confidence: 0.99, clientRequestId: `integration-${suffix}` };
     const first = await request(app).post("/api/test-support/v2/alerts").set("Authorization", `Bearer ${token}`).send(body);
     expect(first.status).toBe(201);
     expect(first.body.alert).toMatchObject({ siteId, cameraId, issueType: "floor_litter", status: "waiting_for_cleaner", isSimulation: true, managementMode: "orchestrated" });

@@ -315,7 +315,6 @@ data/media-store/
 data/heldout-evaluation/
 data/Test videos/
 .postman/
-postman/exports/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

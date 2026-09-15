@@ -32,7 +32,7 @@ Stop and export the emulator state with `Ctrl+C` in the launcher terminal, or fr
 npm stop
 ```
 
-`npm stop` explicitly exports Auth and the default Firestore database before it terminates any emulator process. The next `npm run start:emulator` imports that snapshot. The launcher sets emulator environment variables only for its child processes. It does not rewrite cloud credentials or connect to `litterspot-v2-database`.
+`npm stop` explicitly exports Auth and the default Firestore database before it terminates any emulator process. The next `npm run start:emulator` imports that snapshot. The launcher sets emulator environment variables only for its child processes. It does not rewrite cloud credentials or connect to the configured production Firebase database.
 
 Restore the repository baseline with:
 
@@ -53,4 +53,5 @@ The tracked fixture includes about 58 MB of Camera videos and images. The large 
 
 Automated emulator tests use separate ports, Firestore `8280` and Auth `9299`, with disposable data. Running tests while this development stack is open does not add fixture documents to Sunway Theme Park.
 
-Do not run the ordinary `npm start` at the same time. It uses `backend/.env` and therefore targets the configured cloud development project.
+Do not run the ordinary `npm start` at the same time. It uses `backend/.env`
+and targets the configured production Firebase database.

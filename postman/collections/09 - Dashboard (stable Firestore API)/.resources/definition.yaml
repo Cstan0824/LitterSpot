@@ -1,3 +1,0 @@
-$kind: collection
-description: Authenticated Node-owned site dashboard read model, bounded operational lists, current grouped-temporal alert summaries, and explicit Firestore summary reconciliation. Run Site setup first so siteId is available.
-order: 8500
