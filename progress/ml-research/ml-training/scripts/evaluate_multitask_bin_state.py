@@ -14,7 +14,7 @@ from train_multitask_bin_state import MultiTaskMobileNet, TaskDataset, binary_me
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_v2/best.pt")
+    parser.add_argument("--checkpoint", type=Path, default=ROOT / "runs/state_classifier/multitask_bin_state/best.pt")
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
     checkpoint_path = args.checkpoint.resolve()

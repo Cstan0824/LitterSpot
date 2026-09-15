@@ -36,7 +36,7 @@ def main() -> int:
             "severity": "warning",
             "priorityScore": 50,
         }],
-        "policyVersion": "assignment-v2",
+        "policyVersion": "bounded-pair-selection",
         "cleaners": [
             {
                 "cleanerId": "CLN-SAME-ZONE",

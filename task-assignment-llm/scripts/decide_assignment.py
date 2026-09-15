@@ -1,4 +1,4 @@
-"""Read trusted V2 assignment context from stdin and return one model decision."""
+"""Read trusted assignment context from stdin and return one model decision."""
 
 from __future__ import annotations
 

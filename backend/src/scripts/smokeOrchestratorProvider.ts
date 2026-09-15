@@ -1,7 +1,7 @@
 import { pythonAssignmentSelector } from "../services/orchestratorProvider.js";
 
 const context = {
-  siteId: "smoke-site", activeMapRevisionId: "map", policyVersion: "assignment-v2", calculatedAt: new Date().toISOString(),
+  siteId: "smoke-site", activeMapRevisionId: "map", policyVersion: "bounded-pair-selection", calculatedAt: new Date().toISOString(),
   alerts: [{ alertId: "SMOKE-ALERT", severity: "critical", priorityScore: 90, ageMinutes: 10, issueType: "floor_litter", targetPoint: { xMeters: 10, yMeters: 10 } }],
   cleaners: [{ cleanerId: "SMOKE-CLEANER", availability: "available", stationPoint: { xMeters: 11, yMeters: 10 }, recentWorkLocation: null }],
   eligiblePairs: [{ alertId: "SMOKE-ALERT", cleanerId: "SMOKE-CLEANER", stationDistanceMeters: 1, recentWorkDistanceMeters: null, recentWorkStrength: null, locationUncertainty: null }],

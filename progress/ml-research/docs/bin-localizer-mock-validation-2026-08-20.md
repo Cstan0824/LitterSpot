@@ -12,7 +12,7 @@ was not converted into training frames and was not used to choose a threshold.
 
 ## Real checkpoint replay
 
-The last committed `bin-localizer-yolo11n-gco-gbs-um-v2` checkpoint was
+The last committed `bin-localizer-yolo11n` checkpoint was
 materialized to a temporary directory and evaluated at the existing 0.85
 operating confidence. Five videos were sampled at one frame per second.
 

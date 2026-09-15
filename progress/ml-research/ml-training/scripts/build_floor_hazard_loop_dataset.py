@@ -16,7 +16,7 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--litter-root", type=Path, default=Path("dataset/floor_rubbish/prepared_specialist_dataset_v2"))
+    parser.add_argument("--litter-root", type=Path, default=Path("dataset/floor_rubbish/prepared_specialist_dataset"))
     parser.add_argument("--spill-root", type=Path, default=Path("dataset/floor_spill/wet_surface_v4"))
     parser.add_argument("--output", type=Path, default=Path("dataset/floor_hazards/loop1"))
     parser.add_argument("--loop", type=int, choices=(1, 2), default=1)

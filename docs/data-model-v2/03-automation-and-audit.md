@@ -249,7 +249,7 @@ This singleton lets startup and migration tools reject an incompatible database 
 | Field | Type | Required | Meaning and workflow use |
 | --- | --- | ---: | --- |
 | `schemaVersion` | integer | yes | `2`. |
-| `databaseModel` | string | yes | `litterspot-firestore-v2`. |
+| `databaseModel` | string | yes | `litterspot-firestore`. |
 | `migrationState` | enum | yes | `initializing`, `ready`, or `blocked`. |
 | `minimumBackendVersion` | string | yes | Old binaries below this version refuse startup. |
 | `firebaseProjectId` | string | yes | Target identity written at bootstrap. |

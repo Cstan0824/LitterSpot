@@ -3,7 +3,7 @@ import { getApps } from "firebase-admin/app";
 import { firestore, firebaseAuth } from "../config/firebase.js";
 import { env } from "../config/env.js";
 import { RESET_COLLECTIONS } from "../shared/firestoreSchema.js";
-import { assertMigrationTarget } from "../services/databaseSafety.js";
+import { assertDatabaseInspectionTarget } from "../services/databaseSafety.js";
 
 const app = getApps()[0];
 const target = {
@@ -13,7 +13,7 @@ const target = {
   firestoreDatabaseId: env.firebaseDatabaseId,
   emulator: Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST),
 };
-assertMigrationTarget(target);
+assertDatabaseInspectionTarget(target);
 let authUserCount = 0;
 let pageToken: string | undefined;
 do {

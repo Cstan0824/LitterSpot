@@ -1,5 +1,5 @@
 export const SCHEMA_VERSION = 2 as const;
-export const DATABASE_MODEL = "litterspot-firestore-v2" as const;
+export const DATABASE_MODEL = "litterspot-firestore" as const;
 
 export const COLLECTIONS = [
   "userAccounts",

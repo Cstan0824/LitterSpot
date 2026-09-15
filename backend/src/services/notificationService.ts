@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 import { serializeFirestore } from "./presentation.js";
 import type { NotificationRecord } from "./notification.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
@@ -9,7 +9,7 @@ type NotificationInput = Omit<NotificationRecord, "schemaVersion" | "notificatio
 
 export function notificationRecord(input: NotificationInput) {
   const { eventKey, ...fields } = input;
-  const notificationId = canonicalHash("v2-recipient-event", input.siteId, input.recipientUid, input.type, eventKey);
+  const notificationId = recordKeyHash("recipient-event", input.siteId, input.recipientUid, input.type, eventKey);
   return { ...fields, schemaVersion: 2, notificationId, createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 90 * 86400_000) };
 }
 

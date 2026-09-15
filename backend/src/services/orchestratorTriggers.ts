@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 
 export function enqueueOrchestratorTriggerInTransaction(transaction: Transaction, input: {
   siteId: string;
@@ -12,7 +12,7 @@ export function enqueueOrchestratorTriggerInTransaction(transaction: Transaction
   uniquenessKey: string;
   verificationId?: string;
 }) {
-  const eventId = canonicalHash("v2-orchestrator-trigger", input.siteId, input.type, input.uniquenessKey);
+  const eventId = recordKeyHash("orchestrator-trigger", input.siteId, input.type, input.uniquenessKey);
   transaction.create(firestore.collection("orchestratorOutbox").doc(eventId), {
     schemaVersion: SCHEMA_VERSION,
     eventId,
@@ -38,7 +38,7 @@ export function enqueueOrchestratorTriggerInTransaction(transaction: Transaction
 
 export async function enqueueScheduledAssignmentTrigger(siteId: string, at = new Date()) {
   const fiveMinuteBucket = Math.floor(at.getTime() / 300_000);
-  const eventId = canonicalHash("v2-orchestrator-trigger", siteId, "retry_waiting_alerts", `scheduled:${fiveMinuteBucket}`);
+  const eventId = recordKeyHash("orchestrator-trigger", siteId, "retry_waiting_alerts", `scheduled:${fiveMinuteBucket}`);
   await firestore.collection("orchestratorOutbox").doc(eventId).create({
     schemaVersion: SCHEMA_VERSION,
     eventId,
@@ -64,7 +64,7 @@ export async function enqueueScheduledAssignmentTrigger(siteId: string, at = new
 }
 
 export async function enqueueImmediateAssignmentTrigger(siteId: string, triggerType: string, uniquenessKey: string) {
-  const eventId = canonicalHash("v2-orchestrator-trigger", siteId, "retry_waiting_alerts", uniquenessKey);
+  const eventId = recordKeyHash("orchestrator-trigger", siteId, "retry_waiting_alerts", uniquenessKey);
   await firestore.collection("orchestratorOutbox").doc(eventId).create({
     schemaVersion: SCHEMA_VERSION,
     eventId,

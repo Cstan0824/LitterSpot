@@ -4,7 +4,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { firebaseAuth, firestore } from "./config/firebase.js";
-import { canonicalHash } from "./services/persistence.js";
+import { recordKeyHash } from "./services/persistence.js";
 
 const run = process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip;
 async function signIn(email: string, password: string) {
@@ -45,8 +45,8 @@ run("Camera removal", () => {
     await firestore.collection("cameraRuntimeStates").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, connectionStatus: "online", monitoringEpisodeId: "durable-episode", monitoringSessionId: "durable-session" });
     await firestore.collection("alerts").doc(alertId).set({ schemaVersion: 2, alertId, siteId, cameraId, zoneId, zoneNameSnapshot: "Main Zone", issueType: "floor_litter", observedCondition: "litter", status: "assigned", severity: "warning", highestSeverity: "warning", activeWorkOrderId: workId, isSimulation: false, revision: 1, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
     await firestore.collection("workOrders").doc(workId).set({ schemaVersion: 2, workOrderId: workId, siteId, cameraId, zoneId, alertId, assignedCleanerId: cleanerId, cleanerNameSnapshot: "Removal Cleaner", issueType: "floor_litter", status: "assigned", severity: "warning", target: { type: "camera", cameraId, zoneId, zoneNameSnapshot: "Main Zone", point: { xMeters: 20, yMeters: 20 } }, isSimulation: false, revision: 1, createdAt: Timestamp.now(), updatedAt: Timestamp.now() });
-    await firestore.collection("activeAlertKeys").doc(canonicalHash("v2-active-alert", siteId, cameraId, "floor_litter")).set({ schemaVersion: 2, siteId, cameraId, issueType: "floor_litter", alertId });
-    await firestore.collection("activeWorkOrderKeys").doc(canonicalHash("v2-active-work", siteId, alertId)).set({ schemaVersion: 2, siteId, alertId, workOrderId: workId, cleanerId });
+    await firestore.collection("activeAlertKeys").doc(recordKeyHash("active-alert", siteId, cameraId, "floor_litter")).set({ schemaVersion: 2, siteId, cameraId, issueType: "floor_litter", alertId });
+    await firestore.collection("activeWorkOrderKeys").doc(recordKeyHash("active-work", siteId, alertId)).set({ schemaVersion: 2, siteId, alertId, workOrderId: workId, cleanerId });
     await firestore.collection("cameraDrafts").doc(draftId).set({ schemaVersion: 2, draftId, siteId, cameraId, kind: "reconfigure", status: "draft", referenceMediaId: draftMediaId, source: { sourceMediaId: sourceId } });
     await firestore.collection("cameraDraftLocks").doc(cameraId).set({ schemaVersion: 2, siteId, cameraId, draftId, kind: "reconfigure" });
     await firestore.collection("mediaAssets").doc(draftMediaId).set({ schemaVersion: 2, mediaId: draftMediaId, siteId, ownerType: "camera_draft", ownerId: draftId, storageKey: `media/${draftMediaId}/reference.jpg`, storageStatus: "available", mimeType: "image/jpeg" });
@@ -93,8 +93,8 @@ run("Camera removal", () => {
     expect(work.data()).toMatchObject({ status: "dismissed", dismissReason: "camera_removed" });
     expect(cleaner.data()?.activeWorkOrderId).toBeNull();
     expect(runtime.data()).toMatchObject({ connectionStatus: "offline", sourceErrorCode: "camera_removed", monitoringEpisodeId: null, monitoringSessionId: null });
-    expect((await firestore.collection("activeAlertKeys").doc(canonicalHash("v2-active-alert", siteId, cameraId, "floor_litter")).get()).exists).toBe(false);
-    expect((await firestore.collection("activeWorkOrderKeys").doc(canonicalHash("v2-active-work", siteId, alertId)).get()).exists).toBe(false);
+    expect((await firestore.collection("activeAlertKeys").doc(recordKeyHash("active-alert", siteId, cameraId, "floor_litter")).get()).exists).toBe(false);
+    expect((await firestore.collection("activeWorkOrderKeys").doc(recordKeyHash("active-work", siteId, alertId)).get()).exists).toBe(false);
     expect((await firestore.collection("cameraDrafts").doc(draftId).get()).exists).toBe(false);
     expect((await firestore.collection("cameraDraftLocks").doc(cameraId).get()).exists).toBe(false);
     expect((await firestore.collection("mediaAssets").doc(draftMediaId).get()).exists).toBe(false);

@@ -14,5 +14,5 @@ target. Its backed-up V1 named database was replaced by `(default)` in
 document paths, Auth UIDs, map and Camera Registration history, and media keys.
 Only the schema marker and cross-project document-reference targets change.
 Media remains on the Node host so this cutover does not require Firebase
-Storage or a Blaze billing account. The prior `litterspot-v2-database` project
+Storage or a Blaze billing account. The prior `litterspot` project
 is not a migration source and is left untouched.

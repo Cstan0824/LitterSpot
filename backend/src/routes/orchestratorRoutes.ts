@@ -46,7 +46,7 @@ orchestratorSupervisorRoutes.post("/assignment-cycle", async (req, res) => {
 
 export const orchestratorInternalRoutes = Router();
 orchestratorInternalRoutes.use(authenticateOrchestrator);
-orchestratorInternalRoutes.use(rateLimit({ namespace: "v2-orchestrator", maximum: env.generalRateLimitPerMinute }));
+orchestratorInternalRoutes.use(rateLimit({ namespace: "orchestrator", maximum: env.generalRateLimitPerMinute }));
 
 orchestratorInternalRoutes.post("/assignment-runs", async (req, res) => {
   const input = runBody.parse(req.body);

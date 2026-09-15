@@ -184,7 +184,7 @@ def state_metrics(rows, thresholds):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_ood_v3")
-    parser.add_argument("--base", type=Path, default=ROOT / "runs/state_classifier/multitask_gco_gbs_v2/production.pt")
+    parser.add_argument("--base", type=Path, default=ROOT / "runs/state_classifier/multitask_bin_state/production.pt")
     parser.add_argument("--hard-negative-dir", type=Path, default=ROOT / "ml-training/data/state-hard-negatives")
     parser.add_argument("--epochs", type=int, default=3); parser.add_argument("--samples-per-epoch", type=int, default=36000)
     parser.add_argument("--batch", type=int, default=128); parser.add_argument("--workers", type=int, default=8)

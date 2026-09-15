@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { firebaseAuth, firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
 import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
-import { canonicalHash, requestBodyHash } from "./persistence.js";
+import { requestBodyHash, recordKeyHash } from "./persistence.js";
 import { auditEventData, writeAuditEvent, type AuditActor } from "./auditService.js";
 import { projectSupervisorList, type SupervisorListSource } from "./supervisorProjection.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
@@ -10,9 +10,9 @@ import { queryCursorPage } from "./firestoreCursorPagination.js";
 export type IdentityOperationType = "create_site_root" | "create_supervisor" | "create_cleaner" | "recover_root";
 
 export function normalizeIdentityEmail(email: string) { return email.trim().toLowerCase(); }
-export function emailReservationId(email: string) { return canonicalHash("v2-user-email", normalizeIdentityEmail(email)); }
+export function emailReservationId(email: string) { return recordKeyHash("user-email", normalizeIdentityEmail(email)); }
 export function identityOperationId(actorUid: string, type: IdentityOperationType, idempotencyKey: string) {
-  return canonicalHash("v2-identity-operation", actorUid, type, idempotencyKey.trim());
+  return recordKeyHash("identity-operation", actorUid, type, idempotencyKey.trim());
 }
 
 export async function beginIdentityOperation(input: {

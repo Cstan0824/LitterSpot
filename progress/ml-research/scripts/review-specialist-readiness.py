@@ -14,7 +14,7 @@ from detection_stability import load_json, qualify
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "ml-training/data/specialists/manifest.json"
-DEFAULT_BIN_CHECKPOINT = ROOT / "runs/state_classifier/multitask_gco_gbs_v2/production.pt"
+DEFAULT_BIN_CHECKPOINT = ROOT / "runs/state_classifier/multitask_bin_state/production.pt"
 DEFAULT_FLOOR_CHECKPOINT = ROOT / "ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_v1/weights/best.pt"
 DEFAULT_OCCUPANCY_CHECKPOINT = ROOT / "models/production/occupancy_yolo11n.pt"
 DEFAULT_FLOOR_DATA = ROOT / "dataset/floor_rubbish/prepared_dataset/data.yaml"

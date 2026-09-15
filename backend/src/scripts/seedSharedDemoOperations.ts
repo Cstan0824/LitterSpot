@@ -192,7 +192,7 @@ for (const [dayIndex, localDate] of dates.entries()) {
       set(alertRef, {
         schemaVersion: 2, alertId, siteId, mapRevisionId, cameraId: camera?.id ?? null, cameraNameSnapshot: camera?.name ?? "Site operations",
         zoneId: zone.id, zoneNameSnapshot: zone.name, issueType, observedCondition, status: "resolved", severity,
-        highestSeverity: severity, priorityScore: severity === "critical" ? 90 : 55, priorityPolicyVersion: "priority-v2",
+        highestSeverity: severity, priorityScore: severity === "critical" ? 90 : 55, priorityPolicyVersion: "severity-age",
         activeWorkOrderId: null, evidenceMediaId: null, firstDetectedAt: Timestamp.fromDate(createdAt), lastDetectedAt: Timestamp.fromDate(createdAt),
         occurrenceCount: 1, affectedBinIds: issueType === "bin_service" ? [`${zone.id}-bin-01`] : [],
         createdAt: Timestamp.fromDate(createdAt), updatedAt: Timestamp.fromDate(resolvedAt), resolvedAt: Timestamp.fromDate(resolvedAt),

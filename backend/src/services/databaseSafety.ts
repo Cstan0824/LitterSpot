@@ -25,6 +25,20 @@ export function assertMigrationTarget(target: MigrationTarget) {
   }
 }
 
+export function assertDatabaseInspectionTarget(target: MigrationTarget) {
+  if (target.appEnvironment === "local-emulator") {
+    assertMigrationTarget(target);
+    return;
+  }
+  if (!["development-cloud", "production-cloud"].includes(target.appEnvironment)
+    || target.emulator
+    || !target.expectedFirebaseProjectId
+    || target.firebaseProjectId !== target.expectedFirebaseProjectId
+    || target.firestoreDatabaseId !== "(default)") {
+    throw new Error("database inspection commands require an exact EXPECTED_FIREBASE_PROJECT_ID match and the (default) database.");
+  }
+}
+
 export function requiredApplyConfirmation(target: Pick<MigrationTarget, "firebaseProjectId" | "firestoreDatabaseId">) {
   return `${target.firebaseProjectId}/${target.firestoreDatabaseId}`;
 }

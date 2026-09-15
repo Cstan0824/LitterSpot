@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp, type Transaction, type DocumentData } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 
 export class OrchestrationConflict extends HttpError {
   constructor(public readonly code: string) { super(409, `Orchestrator operation rejected: ${code}.`, { code }); }
@@ -18,7 +18,7 @@ function ordered(value: any): any {
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])]));
   return value;
 }
-export const assignmentContextHash = (snapshot: unknown) => canonicalHash("v2-assignment-context", ordered(snapshot));
+export const assignmentContextHash = (snapshot: unknown) => recordKeyHash("assignment-context", ordered(snapshot));
 
 export async function readOrchestrationGuard(tx: Transaction, command: OrchestrationCommand) {
   const runRef = firestore.collection("orchestratorRuns").doc(command.runId);

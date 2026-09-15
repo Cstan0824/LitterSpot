@@ -1,9 +1,9 @@
 {
-  "activeModel": "multitask-mobilenet-gco-gbs-v2",
+  "activeModel": "multitask-mobilenet-bin-state",
   "models": [
     {
-      "version": "multitask-mobilenet-gco-gbs-v2",
-      "path": "runs/state_classifier/multitask_gco_gbs_v2/production.pt",
+      "version": "multitask-mobilenet-bin-state",
+      "path": "runs/state_classifier/multitask_bin_state/production.pt",
       "mode": "presence-fullness-overflow-multi-head",
       "thresholds": {"presence": 0.563, "fullness": 0.34, "overflow": 0.31},
       "overflowPolicy": "recall_first_with_presence_floor",
@@ -12,7 +12,7 @@
       "classes": ["normal", "full", "overflow", "unknown"]
     },
     {
-      "version": "bin-localizer-yolo11n-gco-gbs-um-v2",
+      "version": "bin-localizer-yolo11n",
       "path": "models/production/bin_localizer_yolo11n.pt",
       "mode": "one-class-bin-localizer",
       "confidence": 0.80,

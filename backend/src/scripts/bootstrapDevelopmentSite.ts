@@ -57,8 +57,8 @@ await firestore.runTransaction(async (transaction) => {
     enabledLaptopCameraId: null,
     defaultSampleIntervalSeconds: 1,
     fullBinAlertsEnabled: true,
-    alertPolicyVersion: "cleanliness-v2",
-    analyticsPolicyVersion: "analytics-v2",
+    alertPolicyVersion: "grouped-temporal",
+    analyticsPolicyVersion: "minute-daily-rollup",
     createdAt: now,
     createdByUid: superadmin.uid,
     updatedAt: now,
@@ -118,14 +118,14 @@ await firestore.runTransaction(async (transaction) => {
   transaction.set(firestore.collection("orchestratorConfigs").doc(siteRef.id), {
     schemaVersion: SCHEMA_VERSION, siteId: siteRef.id, status: "running", pausedAt: null, pausedByUid: null,
     pauseReason: null, assignmentEnabled: true, reviewEnabled: true, provider: "ollama", model: "qwen3.5:4b",
-    assignmentPolicyVersion: "assignment-v2", reviewPolicyVersion: "review-v2", technicalRetryLimit: 3,
+    assignmentPolicyVersion: "bounded-pair-selection", reviewPolicyVersion: "fresh-evidence-review", technicalRetryLimit: 3,
     activeRunId: null,
     technicalRetryDelaysMs: [1000, 2000, 4000], requestTimeoutMs: 60_000, lastRunAt: null,
     lastSuccessfulRunAt: null, lastFailureAt: null, lastFailureCode: null, updatedAt: now, updatedByUid: superadmin.uid, revision: 1,
   }, { merge: true });
   transaction.set(firestore.collection("systemMetadata").doc("schema"), {
     schemaVersion: SCHEMA_VERSION, databaseModel: DATABASE_MODEL, migrationState: "ready",
-    minimumBackendVersion: "v2-phase-0", firebaseProjectId: env.firebaseProjectId, firestoreDatabaseId: env.firebaseDatabaseId,
+    minimumBackendVersion: "production-baseline", firebaseProjectId: env.firebaseProjectId, firestoreDatabaseId: env.firebaseDatabaseId,
     environment: env.appEnvironment, initializedAt: now, initializedBy: "bootstrapDevelopmentSite", updatedAt: now,
   }, { merge: true });
 });

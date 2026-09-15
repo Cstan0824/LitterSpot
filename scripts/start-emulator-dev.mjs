@@ -89,8 +89,8 @@ await new Promise((resolveSeed, rejectSeed) => {
   seed.once("error", rejectSeed); seed.once("exit", code => code === 0 ? resolveSeed() : rejectSeed(new Error(`Local bootstrap failed with exit code ${code}.`)));
 });
 
-const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_gco_gbs_v2", "production.pt");
-start("fastapi", python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2", DEVICE: "0", INTERNAL_API_TOKEN: token });
+const classifier = process.env.STATE_CLASSIFIER_PATH || join(root, "runs", "state_classifier", "multitask_bin_state", "production.pt");
+start("fastapi", python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-bin-state", DEVICE: "0", INTERNAL_API_TOKEN: token });
 start("node", npm, ["--workspace=backend", "run", "dev"], { PORT: "3000", AI_SERVICE_URL: "http://127.0.0.1:8000", AI_SERVICE_TOKEN: token, CORS_ORIGINS: "http://127.0.0.1:5173,http://localhost:5173" });
 start("frontend", npm, ["--workspace=frontend", "run", "dev", "--", "--port", "5173", "--strictPort"], {
   VITE_FIREBASE_API_KEY: "emulator", VITE_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com`, VITE_FIREBASE_PROJECT_ID: project,

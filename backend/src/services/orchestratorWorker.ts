@@ -5,7 +5,7 @@ import { runAssignmentCycle, runReviewCycle, recoverOrchestratorRuns } from "./o
 import { enqueueScheduledAssignmentTrigger } from "./orchestratorTriggers.js";
 import type { AssignmentSelector } from "./orchestratorProvider.js";
 
-const workerId = `v2-local-worker:${process.pid}`;
+const workerId = `local-worker:${process.pid}`;
 let timer: NodeJS.Timeout | null = null;
 let processing = false;
 let lastScheduledScanBucket: number | null = null;

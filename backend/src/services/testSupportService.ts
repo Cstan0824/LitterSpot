@@ -6,7 +6,7 @@ import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
 import { priorityScore, type IssueType } from "./alertPolicy.js";
 import { auditEventData, type AuditActor } from "./auditService.js";
 import { enqueueOrchestratorTriggerInTransaction } from "./orchestratorTriggers.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 import { notifySiteSupervisors } from "./notificationService.js";
 
 type SimulatedCondition = "litter" | "spill" | "full" | "overflow";
@@ -41,14 +41,14 @@ export async function createSimulatedAlert(input: {
   const placement = await firestore.collection("siteMapRevisions").doc(mapRevisionId).collection("cameraPlacements").doc(input.cameraId).get();
   if (!placement.exists || placement.data()?.siteId !== input.siteId || !placement.data()?.zoneId || !placement.data()?.point) throw new HttpError(409, "Camera Placement is missing from the Active Map Revision.");
 
-  const alertId = canonicalHash("v2-simulated-alert", input.siteId, input.cameraId, input.issueType, input.clientRequestId);
-  const flagId = canonicalHash("v2-simulated-flag", alertId);
-  const activeKeyId = canonicalHash("v2-active-alert", input.siteId, input.cameraId, input.issueType);
+  const alertId = recordKeyHash("simulated-alert", input.siteId, input.cameraId, input.issueType, input.clientRequestId);
+  const flagId = recordKeyHash("simulated-flag", alertId);
+  const activeKeyId = recordKeyHash("active-alert", input.siteId, input.cameraId, input.issueType);
   const alertRef = firestore.collection("alerts").doc(alertId);
   const flagRef = firestore.collection("flags").doc(flagId);
   const activeKeyRef = firestore.collection("activeAlertKeys").doc(activeKeyId);
-  const auditRef = firestore.collection("auditEvents").doc(canonicalHash("v2-simulated-alert-audit", alertId));
-  const requestFingerprint = canonicalHash("v2-simulated-alert-request", input);
+  const auditRef = firestore.collection("auditEvents").doc(recordKeyHash("simulated-alert-audit", alertId));
+  const requestFingerprint = recordKeyHash("simulated-alert-request", input);
   let idempotent = false;
 
   await firestore.runTransaction(async (transaction) => {
@@ -115,7 +115,7 @@ export async function createSimulatedAlert(input: {
       severity: input.severity,
       highestSeverity: input.severity,
       priorityScore: priorityScore({ severity: input.severity, createdAtMs: now, nowMs: now }),
-      priorityPolicyVersion: "priority-v2",
+      priorityPolicyVersion: "severity-age",
       nextEscalationAt: input.severity === "warning" ? Timestamp.fromMillis(now + 15 * 60_000) : null,
       firstDetectedAt: FieldValue.serverTimestamp(),
       lastDetectedAt: FieldValue.serverTimestamp(),
@@ -137,7 +137,7 @@ export async function createSimulatedAlert(input: {
       revision: 1,
     });
     transaction.create(alertRef.collection("occurrences").doc(flagId), { schemaVersion: SCHEMA_VERSION, siteId: input.siteId, alertId, flagId, capturedAt: FieldValue.serverTimestamp(), confidence: input.confidence, observedCondition: input.condition, severityCandidate: input.severity, becameEvidence: false, createdAt: FieldValue.serverTimestamp() });
-    transaction.create(alertRef.collection("events").doc(canonicalHash("v2-simulated-alert-event", alertId)), { schemaVersion: SCHEMA_VERSION, siteId: input.siteId, alertId, type: "created", fromStatus: null, toStatus: "waiting_for_cleaner", fromSeverity: null, toSeverity: input.severity, workOrderId: null, actor: { type: "human", uid: actor.uid, role: actor.role, authority: actor.authority ?? null, displayNameSnapshot: actor.displayName }, reasonCode: "simulated_test_alert", note: null, requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
+    transaction.create(alertRef.collection("events").doc(recordKeyHash("simulated-alert-event", alertId)), { schemaVersion: SCHEMA_VERSION, siteId: input.siteId, alertId, type: "created", fromStatus: null, toStatus: "waiting_for_cleaner", fromSeverity: null, toSeverity: input.severity, workOrderId: null, actor: { type: "human", uid: actor.uid, role: actor.role, authority: actor.authority ?? null, displayNameSnapshot: actor.displayName }, reasonCode: "simulated_test_alert", note: null, requestId, occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null });
     transaction.create(auditRef, auditEventData({ auditEventId: auditRef.id, actor, siteId: input.siteId, siteNameSnapshot: String(site.data()?.name), action: "simulated_alert_created", resourceType: "Alert", resourceId: alertId, outcome: "succeeded", after: { cameraId: input.cameraId, issueType: input.issueType, condition: input.condition, severity: input.severity }, requestId }));
     enqueueOrchestratorTriggerInTransaction(transaction, { siteId: input.siteId, type: "assign_alert", aggregateType: "alert", aggregateId: alertId, triggerType: "simulated_alert_created", uniquenessKey: alertId });
     transaction.set(firestore.collection("cameraRuntimeStates").doc(input.cameraId), { schemaVersion: SCHEMA_VERSION, siteId: input.siteId, cameraId: input.cameraId, cleanlinessState: "alerted", updatedAt: FieldValue.serverTimestamp() }, { merge: true });

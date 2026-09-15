@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { env } from "../config/env.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 import { serializeFirestore } from "./presentation.js";
 import { getOrchestratorConfig, listOrchestratorRunsPage } from "./orchestratorService.js";
 
@@ -31,7 +31,7 @@ const reviewFailureCodes: SystemEventCode[] = [
 ];
 
 export async function recordSystemEvent(siteId: string, code: SystemEventCode, recovered = false) {
-  const ref = firestore.collection("systemEvents").doc(canonicalHash("v2-system-event", siteId, code));
+  const ref = firestore.collection("systemEvents").doc(recordKeyHash("system-event", siteId, code));
   await firestore.runTransaction(async (tx) => {
     const current = await tx.get(ref);
     if (recovered && !current.exists) return;

@@ -10,7 +10,7 @@ $env:PYTHONPATH = "ai-service"
 .\.venv\Scripts\python.exe -m unittest discover -s ai-service\tests -p "test_*.py"
 ```
 
-Checkpoint: `runs/state_classifier/multitask_gco_gbs_v2/production.pt`
+Checkpoint: `runs/state_classifier/multitask_bin_state/production.pt`
 
 | Mock fixture | Samples | Expected behavior | Actual result | Status |
 | --- | ---: | --- | --- | --- |

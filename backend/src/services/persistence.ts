@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { DocumentData, DocumentSnapshot, Transaction } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
+import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
 
 const forbiddenAuditKeys = /(?:password|token|authorization|credential|secret|stack|absolutePath|storagePath|rawOutput)/i;
 
@@ -29,13 +30,17 @@ export function canonicalHash(namespace: string, ...parts: unknown[]) {
   return createHash("sha256").update(JSON.stringify([namespace, ...parts])).digest("hex");
 }
 
+export function recordKeyHash(namespace: string, ...parts: unknown[]) {
+  return canonicalHash(`v${SCHEMA_VERSION}-${namespace}`, ...parts);
+}
+
 export function operationKeyId(actorId: string, operation: string, idempotencyKey: string) {
   if (!idempotencyKey.trim() || idempotencyKey.length > 160) throw new HttpError(400, "A valid idempotency key is required.");
-  return canonicalHash("v2-operation-key", actorId, operation, idempotencyKey.trim());
+  return recordKeyHash("operation-key", actorId, operation, idempotencyKey.trim());
 }
 
 export function requestBodyHash(body: unknown) {
-  return canonicalHash("v2-request-body", body);
+  return recordKeyHash("request-body", body);
 }
 
 export function assertIdempotencyReplay(data: Record<string, unknown>, bodyHash: string) {

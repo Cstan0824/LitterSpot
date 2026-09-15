@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $pidFile = Join-Path $root ".local\local-services.json"
-$classifier = if ($env:STATE_CLASSIFIER_PATH) { $env:STATE_CLASSIFIER_PATH } else { Join-Path $root "runs\state_classifier\multitask_gco_gbs_v2\production.pt" }
+$classifier = if ($env:STATE_CLASSIFIER_PATH) { $env:STATE_CLASSIFIER_PATH } else { Join-Path $root "runs\state_classifier\multitask_bin_state\production.pt" }
 
 if (!(Test-Path $python)) { throw "Python environment missing. Run: python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -r ai-service\requirements.txt" }
 if (!(Test-Path $classifier)) { Write-Warning "No bin-state classifier was found. The dashboard will run, but FastAPI will report degraded until STATE_CLASSIFIER_PATH points to a local checkpoint." }
@@ -34,7 +34,7 @@ $token = "local-playground-token"
 $runner = if ($npm) { $npm.Source } else { $bun.Source }
 $backendArguments = if ($npm) { @("--workspace=backend", "run", "dev") } else { @("run", "dev:backend") }
 $frontendArguments = if ($npm) { @("--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1") } else { @("run", "dev:frontend", "--", "--host", "127.0.0.1") }
-$pythonProcess = Start-ServiceProcess "fastapi" $python @("-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000") @{ STATE_CLASSIFIER_PATH = $classifier; STATE_CLASSIFIER_VERSION = "multitask-mobilenet-gco-gbs-v2"; DEVICE = "0"; INTERNAL_API_TOKEN = $token }
+$pythonProcess = Start-ServiceProcess "fastapi" $python @("-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000") @{ STATE_CLASSIFIER_PATH = $classifier; STATE_CLASSIFIER_VERSION = "multitask-mobilenet-bin-state"; DEVICE = "0"; INTERNAL_API_TOKEN = $token }
 $nodeProcess = Start-ServiceProcess "node" $runner $backendArguments @{ AI_SERVICE_URL = "http://127.0.0.1:8000"; AI_SERVICE_TOKEN = $token }
 $reactProcess = Start-ServiceProcess "react" $runner $frontendArguments @{}
 

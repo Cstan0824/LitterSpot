@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HttpError } from "../shared/httpError.js";
-import { assertExpectedRevision, assertIdempotencyReplay, assertSiteScope, operationKeyId, requestBodyHash, sanitizeAuditSummary } from "./persistence.js";
+import { assertExpectedRevision, assertIdempotencyReplay, assertSiteScope, operationKeyId, recordKeyHash, requestBodyHash, sanitizeAuditSummary } from "./persistence.js";
 
 describe("persistence foundation", () => {
   it("fails closed when a resource belongs to another Site", () => {
@@ -20,6 +20,10 @@ describe("persistence foundation", () => {
     const hash = requestBodyHash({ name: "Sunway", values: [1, 2] });
     expect(assertIdempotencyReplay({ requestBodyHash: hash, resourceType: "Site", resourceId: "site-1", responseStatus: 201 }, hash)).toEqual({ resourceType: "Site", resourceId: "site-1", responseStatus: 201 });
     expect(() => assertIdempotencyReplay({ requestBodyHash: hash }, requestBodyHash({ name: "Other" }))).toThrow(/different input/i);
+  });
+
+  it("preserves existing stored record identities while using domain namespaces", () => {
+    expect(recordKeyHash("active-alert", "site", "camera", "floor_litter")).toBe("1748bc220fc6d35d91d428e1d1f94cdd996978597ddaeafb6a94ffc374bf1bea");
   });
 
   it("bounds audit summaries and rejects secret-bearing keys at any depth", () => {

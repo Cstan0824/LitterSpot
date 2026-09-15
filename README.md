@@ -256,11 +256,11 @@ workflow is the single `npm start` command above:
 
 ```powershell
 # Windows PowerShell: pin the tested classifier before npm start
-$env:STATE_CLASSIFIER_PATH = (Resolve-Path "runs\state_classifier\multitask_gco_gbs_v2\production.pt").Path
+$env:STATE_CLASSIFIER_PATH = (Resolve-Path "runs\state_classifier\multitask_bin_state\production.pt").Path
 npm start
 
 # macOS: pin the tested classifier before npm start
-export STATE_CLASSIFIER_PATH="$PWD/runs/state_classifier/multitask_gco_gbs_v2/production.pt"
+export STATE_CLASSIFIER_PATH="$PWD/runs/state_classifier/multitask_bin_state/production.pt"
 npm start
 ```
 
@@ -290,7 +290,7 @@ isolated experiment without changing the tracked artifact.
 
 | Capability | Default local path | Override |
 | --- | --- | --- |
-| Bin state (normal/full/overflow) | `runs/state_classifier/multitask_gco_gbs_v2/production.pt` | `STATE_CLASSIFIER_PATH` |
+| Bin state (normal/full/overflow) | `runs/state_classifier/multitask_bin_state/production.pt` | `STATE_CLASSIFIER_PATH` |
 | Bin localizer | `models/production/bin_localizer_yolo11n.pt` | `BIN_LOCALIZER_PATH` |
 | Floor litter/spill segmentation | `runs/segment/ml-training/floor_rubbish/runs/theme_park_hazards/yolo26s_seg_v1/weights/best.pt` | `FLOOR_HAZARD_PATH` |
 | People detector | `yolo26s.pt` | `PEOPLE_COUNT_PATH` |
@@ -312,7 +312,7 @@ uploads use `/api/camera-creation`.
 
 ### Node-owned operational alert policy
 
-The authoritative application workflow is `grouped-temporal-v2`: floor litter
+The authoritative application workflow is `grouped-temporal`: floor litter
 requires 3 positive observations in the latest 5 within 30 minutes, bin
 overflow requires 2 in the latest 3 within 15 minutes, and floor spill requires
 2 consecutive positives within 10 minutes. These sequences are maintained per

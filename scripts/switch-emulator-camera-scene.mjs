@@ -34,8 +34,8 @@ else {
 
 const cameraId = process.env.LITTERSPOT_DEMO_CAMERA_ID ?? "0q4vBxM6XjVAa4mHnAL2";
 const sceneKey = scene === "clean"
-  ? process.env.LITTERSPOT_DEMO_CLEAN_SCENE ?? "clean-v2"
-  : process.env.LITTERSPOT_DEMO_DIRTY_SCENE ?? "dirty-v2";
+  ? process.env.LITTERSPOT_DEMO_CLEAN_SCENE ?? "clean"
+  : process.env.LITTERSPOT_DEMO_DIRTY_SCENE ?? "dirty";
 const email = process.env.LITTERSPOT_DEMO_ROOT_EMAIL ?? "root@sunway-test.com";
 const password = process.env.LITTERSPOT_DEMO_ROOT_PASSWORD ?? "password123";
 

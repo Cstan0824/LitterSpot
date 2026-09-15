@@ -3,7 +3,7 @@ import { firestore } from "../config/firebase.js";
 import { HttpError } from "../shared/httpError.js";
 import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
 import { createNotificationInTransaction } from "./notificationService.js";
-import { canonicalHash } from "./persistence.js";
+import { canonicalHash, recordKeyHash } from "./persistence.js";
 import type { AuditActor } from "./auditService.js";
 
 const ACTIVE_ALERT_STATUSES = new Set(["waiting_for_cleaner", "assigned", "in_progress", "awaiting_review"]);
@@ -102,7 +102,7 @@ export async function dismissActiveCameraOperations(transaction: Transaction, in
   for (const alert of current.alerts) {
     const data = alert.data()!;
     transaction.update(alert.ref, { status: "dismissed", activeWorkOrderId: null, dismissedAt: FieldValue.serverTimestamp(), dismissedBy: systemActor, dismissReason: reasonCode, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
-    transaction.delete(firestore.collection("activeAlertKeys").doc(canonicalHash("v2-active-alert", input.siteId, input.cameraId, data.issueType)));
+    transaction.delete(firestore.collection("activeAlertKeys").doc(recordKeyHash("active-alert", input.siteId, input.cameraId, data.issueType)));
     transaction.create(alert.ref.collection("events").doc(canonicalHash(reasonCode, input.publicationKey, alert.id)), {
       schemaVersion: SCHEMA_VERSION, siteId: input.siteId, alertId: alert.id, type: "dismissed",
       fromStatus: data.status, toStatus: "dismissed", fromSeverity: data.severity ?? null, toSeverity: data.severity ?? null,
@@ -120,8 +120,8 @@ export async function dismissActiveCameraOperations(transaction: Transaction, in
       actor: systemActor, reasonCode, note: null, evidenceMediaIds: [], requestId: input.requestId,
       occurredAt: FieldValue.serverTimestamp(), analyticsAppliedVersion: null, analyticsAppliedAt: null,
     });
-    transaction.delete(firestore.collection("activeWorkOrderKeys").doc(canonicalHash("v2-active-work", input.siteId, data.alertId ?? work.id)));
-    transaction.delete(firestore.collection("activeWorkOrderKeys").doc(canonicalHash("v2-active-manual-work", input.siteId, work.id)));
+    transaction.delete(firestore.collection("activeWorkOrderKeys").doc(recordKeyHash("active-work", input.siteId, data.alertId ?? work.id)));
+    transaction.delete(firestore.collection("activeWorkOrderKeys").doc(recordKeyHash("active-manual-work", input.siteId, work.id)));
     const cleaner = current.cleaners.get(String(data.assignedCleanerId));
     if (cleaner?.exists && cleaner.data()?.activeWorkOrderId === work.id) transaction.update(cleaner.ref, { activeWorkOrderId: null, activeWorkAssignedAt: null, updatedAt: FieldValue.serverTimestamp(), revision: FieldValue.increment(1) });
     const recipientUid = cleaner?.data()?.authUid;

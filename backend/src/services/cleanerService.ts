@@ -5,14 +5,14 @@ import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
 import { auditEventData, writeAuditEvent, type AuditActor } from "./auditService.js";
 import { deriveCleanerAvailability, type WeeklySchedule } from "./cleanerAvailability.js";
 import { beginIdentityOperation, compensateIdentityOperation, createIdentityAuthUser, identityOperationId, normalizeIdentityEmail } from "./identityService.js";
-import { canonicalHash } from "./persistence.js";
+import { recordKeyHash } from "./persistence.js";
 import { publishCleanerStation } from "./mapService.js";
 import { enqueueImmediateAssignmentTrigger } from "./orchestratorTriggers.js";
 import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 const timestamp = (value: unknown) => value instanceof Timestamp ? value.toDate().toISOString() : null;
 const normalizeStaffCode = (value: string) => value.trim().toUpperCase();
-const staffKeyId = (siteId: string, code: string) => canonicalHash("v2-cleaner-staff-code", siteId, normalizeStaffCode(code));
+const staffKeyId = (siteId: string, code: string) => recordKeyHash("cleaner-staff-code", siteId, normalizeStaffCode(code));
 
 async function releaseStaffKeyIfOwned(reference: FirebaseFirestore.DocumentReference, cleanerId: string) {
   await firestore.runTransaction(async (transaction) => {

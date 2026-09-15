@@ -6,7 +6,7 @@ import { HttpError } from "../shared/httpError.js";
 import { SCHEMA_VERSION } from "../shared/firestoreSchema.js";
 import { createAlertWorkOrder, applyVerification, getWorkOrder } from "./workOrderService.js";
 import { deriveCleanerAvailability } from "./cleanerAvailability.js";
-import { canonicalHash } from "./persistence.js";
+import { canonicalHash, recordKeyHash } from "./persistence.js";
 import {
   assignmentPairKey,
   isEligibleAssignmentPair,
@@ -280,7 +280,7 @@ export async function getAssignmentContext(
     siteId,
     siteName: String(site.name),
     activeMapRevisionId,
-    policyVersion: String(config.assignmentPolicyVersion ?? "assignment-v2"),
+    policyVersion: String(config.assignmentPolicyVersion ?? "bounded-pair-selection"),
     calculatedAt: now.toISOString(),
     alerts,
     cleaners,
@@ -292,7 +292,7 @@ async function createRun(siteId: string, type: "assignment" | "review", workerId
   const { config } = await readExecutionConfig(siteId, type === "assignment");
   if (type === "review" && config.reviewEnabled !== true) throw new HttpError(409, "Orchestrator review is disabled.");
   const runId = randomUUID();
-  const eventId = canonicalHash("v2-orchestrator-event", siteId, type, runId);
+  const eventId = recordKeyHash("orchestrator-event", siteId, type, runId);
   const leaseExpiresAt = Timestamp.fromMillis(Date.now() + env.orchestratorLeaseSeconds * 1000);
   const runRef = firestore.collection("orchestratorRuns").doc(runId);
   const eventRef = firestore.collection("orchestratorOutbox").doc(eventId);
@@ -346,7 +346,7 @@ async function createRun(siteId: string, type: "assignment" | "review", workerId
       triggerType: input.triggerType,
       status: "claimed",
       availableAt: FieldValue.serverTimestamp(),
-      claimTokenHash: canonicalHash("v2-orchestrator-claim", runId, workerId),
+      claimTokenHash: recordKeyHash("orchestrator-claim", runId, workerId),
       claimedBy: workerId,
       claimExpiresAt: leaseExpiresAt,
       deliveryAttempts: 1,
@@ -419,7 +419,7 @@ async function assertRun(runId: string, workerId: string, type?: "assignment" | 
 }
 
 async function writeAction(runId: string, input: { siteId: string; sequence: number; tool: string; inputSummary: Record<string, unknown>; outcome: "succeeded" | "rejected" | "failed"; resultSummary?: Record<string, unknown>; errorCode?: string | null }) {
-  const actionId = canonicalHash("v2-orchestrator-action", runId, input.sequence, input.tool);
+  const actionId = recordKeyHash("orchestrator-action", runId, input.sequence, input.tool);
   await firestore.collection("orchestratorRuns").doc(runId).collection("actions").doc(actionId).set({
     schemaVersion: SCHEMA_VERSION,
     siteId: input.siteId,
@@ -437,7 +437,7 @@ async function writeAction(runId: string, input: { siteId: string; sequence: num
 }
 
 async function writeAttempt(runId: string, input: Record<string, unknown> & { siteId: string; sequence: number; kind: "provider_request" | "cleaner_reservation"; outcome: string }) {
-  const attemptId = canonicalHash("v2-orchestrator-attempt", runId, input.sequence, input.kind);
+  const attemptId = recordKeyHash("orchestrator-attempt", runId, input.sequence, input.kind);
   await firestore.collection("orchestratorRuns").doc(runId).collection("attempts").doc(attemptId).set({
     schemaVersion: SCHEMA_VERSION,
     runId,
@@ -505,7 +505,7 @@ async function notifySupervisors(siteId: string, runId: string, type: "assignmen
   const supervisors = await firestore.collection("supervisors").where("siteId", "==", siteId).where("status", "==", "active").get();
   const expiresAt = Timestamp.fromMillis(Date.now() + 90 * 24 * 60 * 60 * 1000);
   await Promise.all(supervisors.docs.map((supervisor) => {
-    const notificationId = canonicalHash("v2-notification", siteId, type, stableKey, supervisor.id);
+    const notificationId = recordKeyHash("notification", siteId, type, stableKey, supervisor.id);
     return firestore.collection("notifications").doc(notificationId).create({
       schemaVersion: SCHEMA_VERSION,
       notificationId,
@@ -632,7 +632,7 @@ export async function assignCleanerByIdsTool(input: { siteId: string; runId: str
 }
 
 export async function runAssignmentCycle(siteId: string, options: RunOptions = {}) {
-  const workerId = options.workerId ?? "v2-assignment-worker";
+  const workerId = options.workerId ?? "assignment-worker";
   const selector = options.selector ?? pythonAssignmentSelector;
   const sleeper = options.sleep ?? delay;
   const requestId = options.requestId ?? randomUUID();
@@ -749,7 +749,7 @@ export const resolveVerifiedWork = (input: { siteId: string; runId: string; work
 export const requestRework = (input: { siteId: string; runId: string; workOrderId: string; workerId: string; requestId: string }) => applyReviewTool({ ...input, outcome: "failed" });
 
 export async function runReviewCycle(siteId: string, workOrderId: string, options: RunOptions = {}) {
-  const workerId = options.workerId ?? "v2-review-worker";
+  const workerId = options.workerId ?? "review-worker";
   const { runId } = await createReviewRun(siteId, workOrderId, workerId, options.triggerType, options.sourceEventId);
   try {
     const context = await getReviewContext(siteId, runId, workOrderId, workerId);

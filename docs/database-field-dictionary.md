@@ -112,8 +112,8 @@ to update everywhere after a site, camera, or Cleaner is renamed.
 | `evidenceMediaId` | A `mediaAssets` document used as evidence; not the file bytes themselves. |
 | `idempotencyKey` | Caller-supplied action identity. Replaying the same action should not duplicate writes. Scope depends on the service. |
 | `requestFingerprint` / `fingerprint` | Hash of relevant action contents, used to reject the same action key with different input. It is not a password or authentication signature. |
-| `workflowVersion` | Identifies the record/workflow semantics, for example `grouped-temporal-v2`. |
-| `policyVersion` | Identifies the business rule set, for example `cleanliness-v2`. It does not mean a full policy object is stored in that document. |
+| `workflowVersion` | Identifies the record/workflow semantics, for example `grouped-temporal`. |
+| `policyVersion` | Identifies the business rule set, for example `grouped-temporal`. It does not mean a full policy object is stored in that document. |
 
 ## 2. Firebase Authentication records, outside Firestore
 

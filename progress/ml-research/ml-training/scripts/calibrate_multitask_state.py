@@ -12,7 +12,7 @@ from train_multitask_bin_state import MultiTaskMobileNet, TaskDataset, binary_me
 
 
 def main() -> None:
-    checkpoint_path = ROOT / "runs/state_classifier/multitask_gco_gbs_v2/best.pt"
+    checkpoint_path = ROOT / "runs/state_classifier/multitask_bin_state/best.pt"
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = MultiTaskMobileNet(); model.load_state_dict(checkpoint["model"]); model.to(device)

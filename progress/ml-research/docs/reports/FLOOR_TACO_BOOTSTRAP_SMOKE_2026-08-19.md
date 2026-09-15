@@ -9,7 +9,7 @@ Date: 2026-08-19
 - Model: YOLO11n-Seg, 2,842,998 parameters, 640px, batch 2, RTX 4050
 - Training: 5 epochs, AMP enabled, smoke configuration
 - Checkpoint: `ml-training/floor_rubbish/runs/theme_park_hazards/yolo11n_seg_floor_taco_smoke_v2/weights/best.pt`
-- Dataset preparation report: `dataset/floor_rubbish/prepared_specialist_dataset_v2/preparation-report.json`
+- Dataset preparation report: `dataset/floor_rubbish/prepared_specialist_dataset/preparation-report.json`
 
 ## Validation result
 
