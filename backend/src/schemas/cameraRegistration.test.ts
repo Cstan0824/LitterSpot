@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraRegistrationDraftSchema, cameraRegistrationPreviewSourceSchema, cameraRegistrationPreviewTemporalStateSchema } from "./cameraRegistration.js";
+import { cameraRegistrationDraftSchema } from "./cameraRegistration.js";
 
 const floor = [
   { x: 0, y: 0 },
@@ -20,25 +20,6 @@ function draft(bins: unknown[]) {
 }
 
 describe("camera registration bin geometry", () => {
-  it("accepts only explicit image or video preview sources", () => {
-    expect(cameraRegistrationPreviewSourceSchema.parse("image")).toBe("image");
-    expect(cameraRegistrationPreviewSourceSchema.parse("video")).toBe("video");
-    expect(cameraRegistrationPreviewSourceSchema.safeParse("stream").success).toBe(false);
-  });
-
-  it("accepts bounded video state history and rejects malformed client state", () => {
-    const valid = {
-      version: "video-bin-tracking-v1",
-      nextId: 1,
-      tracks: {},
-      stateHistories: {
-        "bin-1": { registrationRevision: 2, samples: [{ state: "overflow", capturedAtMs: 1_000 }] },
-      },
-    };
-    expect(cameraRegistrationPreviewTemporalStateSchema.parse(valid).stateHistories?.["bin-1"].samples).toHaveLength(1);
-    expect(cameraRegistrationPreviewTemporalStateSchema.safeParse({ ...valid, stateHistories: { "bin-1": { registrationRevision: 2, samples: [{ state: "invalid", capturedAtMs: 1_000 }] } } }).success).toBe(false);
-  });
-
   it("preserves the original video source needed to restore video behavior", () => {
     const result = cameraRegistrationDraftSchema.parse({
       ...draft([]),

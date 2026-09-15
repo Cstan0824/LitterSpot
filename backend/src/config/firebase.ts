@@ -1,7 +1,6 @@
 import { applicationDefault, getApps, initializeApp, type AppOptions } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
 import { env } from "./env.js";
 import { assertSafeFirebaseTarget, credentialProjectId } from "./firebaseTargetSafety.js";
 
@@ -23,7 +22,6 @@ const firebaseOptions: AppOptions = {
 const firebaseApp = getApps()[0] ?? initializeApp(firebaseOptions);
 
 export const firebaseAuth = getAuth(firebaseApp);
-export const firebaseMessaging = getMessaging(firebaseApp);
 export const firestore = env.firebaseDatabaseId === "(default)"
   ? getFirestore(firebaseApp)
   : getFirestore(firebaseApp, env.firebaseDatabaseId);

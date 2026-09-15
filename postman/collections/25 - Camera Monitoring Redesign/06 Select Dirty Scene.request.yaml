@@ -1,9 +1,0 @@
-$kind: http-request
-name: Select Dirty Scene
-url: "{{baseUrl}}/api/development/cameras/{{v2CameraId}}/scenes/dirty/select"
-method: POST
-headers:
-  Authorization: "Bearer {{v2RootToken}}"
-auth:
-  type: noauth
-order: 6000

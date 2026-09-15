@@ -58,7 +58,13 @@ run("V2 Work Order and Verification", () => {
     cleanerToken = await signIn(cleanerEmail, password);
   });
 
-  afterAll(async () => { await firebaseAuth.deleteUser(rootUid).catch(() => undefined); await firebaseAuth.deleteUser(cleanerUid).catch(() => undefined); await firebaseAuth.deleteUser(secondCleanerUid).catch(() => undefined); });
+  afterAll(async () => {
+    const alerts = await firestore.collection("alerts").where("siteId", "==", siteId).get();
+    await Promise.all(alerts.docs.map((document) => firestore.recursiveDelete(document.ref)));
+    await firebaseAuth.deleteUser(rootUid).catch(() => undefined);
+    await firebaseAuth.deleteUser(cleanerUid).catch(() => undefined);
+    await firebaseAuth.deleteUser(secondCleanerUid).catch(() => undefined);
+  });
 
   it("assigns atomically, applies failed and passed Verification, and releases the Cleaner", async () => {
     const assignment = await request(app).post(`/api/alerts/${alertId}/manual-assignment`).set("Authorization", `Bearer ${rootToken}`).send({ assignedCleanerId: cleanerId, idempotencyKey: `assign-${suffix}` });
@@ -68,7 +74,9 @@ run("V2 Work Order and Verification", () => {
     expect((await firestore.collection("cleaners").doc(cleanerId).get()).data()?.activeWorkOrderId).toBe(workOrderId);
     expect((await firestore.collection("alerts").doc(alertId).get()).data()?.status).toBe("assigned");
 
-    expect((await request(app).post(`/api/cleaner/work-orders/${workOrderId}/accept`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `accept-${suffix}` })).status).toBe(404);
+    const retiredAccept = await request(app).post(`/api/cleaner/work-orders/${workOrderId}/accept`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `accept-${suffix}` });
+    expect(retiredAccept.status).toBe(403);
+    expect(retiredAccept.body.error).toBe("Supervisor access is required.");
     expect((await request(app).post(`/api/cleaner/work-orders/${workOrderId}/start`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `start-${suffix}` })).status).toBe(200);
     expect((await request(app).post(`/api/cleaner/work-orders/${workOrderId}/ready-for-review`).set("Authorization", `Bearer ${cleanerToken}`).send({ idempotencyKey: `submit-${suffix}` })).status).toBe(200);
 

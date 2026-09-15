@@ -5,8 +5,6 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./field-station.css";
 import { OperationsConsole } from "./features/operations/OperationsConsole";
-import { DetectionTestPage } from "./pages/DetectionTestPage";
-import { PipelinePage } from "./pages/PipelinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { FieldStationShell } from "./components/FieldStationShell";
@@ -49,8 +47,6 @@ function App() {
   const supervisor = session.supervisor;
   const capabilities = deriveSupervisorCapabilities(supervisor.authority);
   const content = () => {
-  if (route === "playground") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><DetectionTestPage /></FieldStationShell>;
-  if (route === "pipeline") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><PipelinePage /></FieldStationShell>;
   if (route === "camera-registration") return <FieldStationShell route={route} supervisor={supervisor} onLogout={() => { void sessionState.signOut(); }}><CameraRegistrationPage canCreateCamera={capabilities.manageCameraPlacement} canRegisterCamera={capabilities.registerCameras} /></FieldStationShell>;
   return <OperationsConsole supervisor={supervisor} capabilities={capabilities} page={route as OperationsPage} onNavigate={(page, params) => { const path = page === "dashboard" ? "/" : `/${page}`; location.hash = `${path}${params ? `?${new URLSearchParams(params)}` : ""}`; }} onLogout={() => { void sessionState.signOut(); }} />;
   };

@@ -1,0 +1,2 @@
+source,output,person_count,ignore_object_count,kept_floor_litter,kept_floor_spill,removed_floor_litter,removed_floor_spill,removed_outside_floor_roi
+/Users/jeremychin/Downloads/potrait.jpg,/Users/jeremychin/CodingProjects/LitterSpot/runs/floor_rubbish_person_filter/potrait.jpg,1,5,4,0,1,0,0

@@ -57,10 +57,10 @@ validates, not database-enforced foreign keys.
   produces that status. Such distinctions are noted below.
 
 Use this alongside the [API reference](./api-reference.md),
-[architecture](./architecture.md), and broader
-[data-model plan](./firestore-data-model.md). Where older planning prose
-disagrees with this dictionary, check the linked runtime writer before making
-a change. This document records implementation, not a new schema proposal.
+[architecture](./architecture.md), and
+[Firestore data-model package](./data-model-v2/README.md). Where planning prose
+disagrees with this dictionary, check the linked runtime writer before making a
+change. This document records implementation, not a new schema proposal.
 
 ### 1.1 Collection index
 
@@ -137,8 +137,7 @@ See [Firebase configuration](../backend/src/config/firebase.ts) and
 ## 3. `userAccounts/{uid}`
 
 Purpose: map a verified Firebase identity to an application role and profile.
-Node reads this before granting Supervisor or Cleaner access. Existing
-Supervisor records can be migrated lazily or by the migration command.
+Node reads this before granting Supervisor or Cleaner access.
 
 Shared fields: `createdAt`, `updatedAt`, optional `updatedByUid`.
 
@@ -152,8 +151,8 @@ Shared fields: `createdAt`, `updatedAt`, optional `updatedByUid`.
 | `migrationSource` | string, optional | Indicates creation from a legacy Supervisor profile or a migration script. Audit provenance, not a permission. |
 
 Writers/readers: [authentication](../backend/src/middleware/authenticateUser.ts),
-[Cleaner account service](../backend/src/services/cleanerAccountService.ts),
-[migration](../backend/src/scripts/migrateCleanerAccounts.ts).
+[Cleaner management](../backend/src/services/v2CleanerService.ts),
+[identity operations](../backend/src/services/v2IdentityService.ts).
 
 ## 4. `supervisors/{uid}`
 
@@ -211,8 +210,8 @@ Account workflow: personnel creation -> provisioning -> invited -> first
 authenticated request -> active. Disablement blocks personnel access and then
 disables Auth. These statuses do not encode whether the Cleaner is on shift.
 
-Sources: [Cleaner CRUD](../backend/src/services/cleanerService.ts),
-[account lifecycle](../backend/src/services/cleanerAccountService.ts).
+Sources: [Cleaner management](../backend/src/services/v2CleanerService.ts) and
+[identity operations](../backend/src/services/v2IdentityService.ts).
 
 ### 5.1 `cleanerStaffCodes/{normalizedCode}`
 
@@ -358,11 +357,14 @@ Shared fields: `createdAt`, `createdByUid`.
 | `retentionCutoffAt` | Timestamp, optional | Age cutoff used by that retention execution. |
 | `storageProvider` | string, compatibility input | Retention accepts missing/null/local values and rejects cloud providers. Current media writers do not set this field. |
 
-Sources: [image media](../backend/src/services/mediaService.ts),
-[video upload](../backend/src/services/videoMediaService.ts),
+Sources: [media delivery](../backend/src/services/mediaService.ts),
+[Camera source and reference uploads](../backend/src/services/v2CameraDraftService.ts),
 [retention](../backend/src/services/mediaRetentionService.ts).
 
 ## 8. `processingJobs/{jobId}`
+
+This section records the retired standalone image/video processing-job format.
+The current Camera monitoring workflow does not create these records.
 
 Purpose: track one upload's processing, retries, and result summary. ID is
 deterministic from requesting Supervisor UID and `clientRequestId`.
@@ -453,9 +455,8 @@ Purpose: deduplicate a recoverable frame failure. Shared field: `createdAt`.
 | `error.code` | string | Frame-processing failure category. |
 | `error.message` | string | Failure description stored for diagnosis. |
 
-Sources: [image processor](../backend/src/services/jobProcessingService.ts),
-[video processor](../backend/src/services/videoJobProcessingService.ts),
-[tracker](../backend/src/services/videoBinTracking.ts).
+The retired image/video writers and tracker have been removed. Existing records
+remain documented for retention and migration work.
 
 ## 9. `analysisRuns/{analysisRunId}`
 
@@ -543,9 +544,8 @@ video run IDs are deterministic for the job/sample. Shared field: `createdAt`.
 | Normalized point `y` | number, 0–1 | Vertical image fraction. |
 | Pixel box `x1`, `y1`, `x2`, `y2` | numbers, pixels | Same edges before normalization; used in transient inference and persisted tracker checkpoints. |
 
-Sources: [image processing](../backend/src/services/jobProcessingService.ts),
-[video processing](../backend/src/services/videoJobProcessingService.ts),
-[normalization](../backend/src/services/analysisNormalization.ts).
+The retired image/video writers and normalization layer have been removed.
+Existing records remain documented for retention and migration work.
 
 ## 10. `detections/{detectionId}`
 
@@ -595,8 +595,11 @@ Raw detection records remain after rejection. `analyticsEligible: true` with
 
 ## 11. Grouped issue observations and flags
 
-Sources: [alert workflow](../backend/src/services/alertWorkflowService.ts) and
-[policy calculations](../backend/src/services/alertPolicy.ts).
+This section documents the retired V1 grouped-observation and Flag format. Its
+evaluator and policy implementation have been removed. Existing records remain
+available for migration or historical inspection. Current Alerts are owned by
+[the Alert service](../backend/src/services/v2AlertService.ts) and
+[current policy](../backend/src/services/v2AlertPolicy.ts).
 
 ### 11.1 `issueObservations/{observationId}`
 
@@ -864,7 +867,9 @@ records describe operator/system actions rather than new visual evidence.
 
 ## 13. Cleaner presence and location
 
-Source: [presence service](../backend/src/services/cleanerPresenceService.ts).
+This section records the retired V1 GPS/presence format. Current Cleaner
+availability uses [schedules and Station Points](../backend/src/services/v2CleanerAvailability.ts).
+The location-history retention tool remains available for historical data.
 
 ### 13.1 `cleanerPresence/{cleanerId}`
 
@@ -911,7 +916,8 @@ Cleaner ID and heartbeat ID.
 
 ## 14. Work orders and assignment records
 
-Source: [work-order service](../backend/src/services/workOrderService.ts).
+The fields below document the retired V1 Work format. Current Work is owned by
+[the operational Work service](../backend/src/services/v2WorkOrderService.ts).
 
 ### 14.1 `workOrders/{workOrderId}`
 
@@ -1007,7 +1013,8 @@ field: `createdAt`.
 
 ## 15. Review records
 
-Source: [review service](../backend/src/services/reviewService.ts).
+This section records retired V1 review structures. Current Work verification
+is owned by [the operational Work service](../backend/src/services/v2WorkOrderService.ts).
 These structures accept and store verification requests/decisions. They do not
 by themselves capture a camera frame or invoke an LLM/VLM.
 
@@ -1063,15 +1070,17 @@ Evidence ID lists are references, not files. Their presence or a non-empty
 `visionResults` object must not be mistaken for a fully implemented automated
 verification pipeline.
 
-## 16. Notifications and push devices
+## 16. Notifications and retired push devices
 
-Source: [notification service](../backend/src/services/notificationService.ts).
+Current durable in-app notifications are owned by
+[the notification service](../backend/src/services/v2NotificationService.ts).
+The push-device fields below describe the retired V1 FCM implementation.
 
 ### 16.1 `notifications/{notificationId}`
 
-Purpose: durable Cleaner inbox entry, created with the work mutation before
-attempting FCM. ID hashes recipient, type, work order, and action key. Shared
-field: `createdAt`.
+Purpose: durable inbox entry. Current records use `schemaVersion: 2`, Site and
+recipient scope, and a deterministic recipient-event identity. The detailed
+delivery fields below belong to the retired V1 push implementation.
 
 | Field | Type | Meaning and workflow use |
 | --- | --- | --- |
@@ -1108,9 +1117,10 @@ fields: `createdAt`, `updatedAt`; registration can refresh the creation value.
 
 ## 17. Orchestrator records
 
-Source: [orchestrator service](../backend/src/services/orchestratorService.ts).
-The Node records/routes below are built. The separate assignment prototype
-does not yet use them automatically.
+The fields below document the retired V1 Orchestrator format. Current Runs and
+outbox processing are owned by
+[the Orchestrator service](../backend/src/services/v2OrchestratorService.ts)
+and [worker](../backend/src/services/v2OrchestratorWorker.ts).
 
 ### 17.1 `orchestratorRuns/{runId}`
 
@@ -1186,6 +1196,11 @@ but that is not the same as an established typed model-metadata contract.
 
 ## 18. `dashboardSummaries/{siteId}`
 
+The fields below describe the retired V1 summary format. The current dashboard
+uses `calculationVersion: "dashboard-v3"`, `counts`, `generatedAt`, and
+`staleAfter`, written by the active Phase 11 service. These historical fields
+must not be treated as the current dashboard contract.
+
 Purpose: rebuildable snapshot of site counts. Manual reconciliation writes it;
 it can become stale after later mutations. The live dashboard response is a
 separate calculated DTO. Shared field: `updatedAt`.
@@ -1211,13 +1226,15 @@ separate calculated DTO. Shared field: `updatedAt`.
 | `reconciledAt` | Timestamp | When the snapshot was rebuilt. |
 | `reconciledByUid` | string | Supervisor that requested the rebuild. |
 
-Source: [dashboard summary](../backend/src/services/dashboardSummary.ts).
+Current writer: [Phase 11 dashboard service](../backend/src/services/phase11Service.ts).
 
 ## 19. Analytics storage
 
-Sources: [analytics service](../backend/src/services/analyticsService.ts),
-[contribution calculation](../backend/src/services/analyticsAggregation.ts),
-[priority scoring](../backend/src/services/priorityZoneAnalytics.ts).
+This section documents the retired V1 analytics collections. Their writers,
+report generator, and scoring policy have been removed. Existing records remain
+available for migration or manual historical inspection. Current dashboard,
+daily analytics, and bin placement are owned by
+[the Phase 11 service](../backend/src/services/phase11Service.ts).
 
 An analytics generation is a rebuild version of the aggregated dataset. It is
 not a model version and not an alert confirmation reset counter.
@@ -1619,11 +1636,9 @@ are not Auth tokens and should be passed unchanged only with the same filters.
 
 | Structure | Where it lives and how it is used |
 | --- | --- |
-| Alert policy | `backend/src/services/alertPolicy.ts`; source-code rules with versions/measurements copied into records. No active general-purpose cloud `systemSettings` policy editor. |
-| Default priority policy | `backend/src/services/priorityZoneAnalytics.ts`; each generated report stores its own policy snapshot. |
+| Alert policy | `backend/src/services/v2AlertPolicy.ts`; source-code rules for current Alert qualification, priority, and status progression. |
 | Model weights/version configuration | FastAPI configuration and local model files. Firestore stores version labels and results, not model binaries. |
 | FastAPI inference DTO | Transient response with image, people, bins, hazards, model versions, timing. Node normalizes/persists selected fields. No Python application database write. |
-| Video queue and rate-limit counters | Node process memory. Jobs/claims are durable, but the queue/counter map itself is not a collection. |
 | Local media files | Filesystem under `MEDIA_STORAGE_ROOT`, linked by generated storage keys. Not automatically synchronized between team laptops. |
 | Index/rule definitions | `firestore.indexes.json` and `firestore.rules`. Indexes are query infrastructure, not collections. |
 
@@ -1646,9 +1661,10 @@ with `metadata`, `zones`, `zoneDistances`, `cleaners`, `alerts`, and `tasks`.
 Its uppercase states, schedules, availability/workload calculations, and
 registered-zone fields are not the main Firestore contract.
 
-## 23. End-to-end lookup example
+## 23. Historical V1 lookup example
 
-Suppose a video from the Food Court eventually results in cleaning and review.
+The following relationship describes persisted V1 processing history. The
+current monitoring workflow does not create these processing-job records.
 
 1. Find the camera in `cameras`. Its `zoneId` identifies Food Court and `siteId`
    identifies the attraction.
@@ -1703,24 +1719,17 @@ This dictionary was checked against the production writers/readers in:
 - [Firebase setup](../backend/src/config/firebase.ts)
 - [Auth dispatch](../backend/src/middleware/authenticateUser.ts)
 - [Supervisor bootstrap](../backend/src/scripts/bootstrapSupervisor.ts)
-- [Cleaner migration](../backend/src/scripts/migrateCleanerAccounts.ts)
-- [Cleaner accounts](../backend/src/services/cleanerAccountService.ts)
-- [Cleaner personnel](../backend/src/services/cleanerService.ts)
+- [Cleaner management](../backend/src/services/v2CleanerService.ts)
+- [Identity operations](../backend/src/services/v2IdentityService.ts)
 - [Location hierarchy](../backend/src/services/locationService.ts)
-- [Media uploads](../backend/src/services/mediaService.ts)
-- [Video uploads](../backend/src/services/videoMediaService.ts)
-- [Image jobs](../backend/src/services/jobProcessingService.ts)
-- [Video jobs](../backend/src/services/videoJobProcessingService.ts)
-- [Normalization](../backend/src/services/analysisNormalization.ts)
-- [Alert workflow](../backend/src/services/alertWorkflowService.ts)
-- [Cleaner presence](../backend/src/services/cleanerPresenceService.ts)
-- [Work orders](../backend/src/services/workOrderService.ts)
-- [Reviews](../backend/src/services/reviewService.ts)
-- [Notifications](../backend/src/services/notificationService.ts)
-- [Orchestrator](../backend/src/services/orchestratorService.ts)
-- [Dashboard summary](../backend/src/services/dashboardSummary.ts)
-- [Analytics](../backend/src/services/analyticsService.ts)
-- [Priority scoring](../backend/src/services/priorityZoneAnalytics.ts)
+- [Media delivery](../backend/src/services/mediaService.ts)
+- [Camera source and reference uploads](../backend/src/services/v2CameraDraftService.ts)
+- [Alert workflow](../backend/src/services/v2AlertService.ts)
+- [Cleaner availability](../backend/src/services/v2CleanerAvailability.ts)
+- [Work orders](../backend/src/services/v2WorkOrderService.ts)
+- [Operational verification](../backend/src/services/v2WorkOrderService.ts)
+- [Notifications](../backend/src/services/v2NotificationService.ts)
+- [Orchestrator](../backend/src/services/v2OrchestratorService.ts)
+- [Current dashboard](../backend/src/services/phase11Service.ts)
 - [System events](../backend/src/services/systemEventService.ts)
 - [Media retention](../backend/src/services/mediaRetentionService.ts)
-- [Location retention](../backend/src/services/locationRetentionService.ts)

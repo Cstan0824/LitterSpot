@@ -2,7 +2,6 @@ import "dotenv/config";
 import { fileURLToPath } from "node:url";
 
 const defaultMediaStorageRoot = fileURLToPath(new URL("../../../data/media-store/", import.meta.url));
-const defaultVideoUploadTempRoot = fileURLToPath(new URL("../../../data/media-store/.incoming/", import.meta.url));
 const defaultOrchestratorDebugRoot = fileURLToPath(new URL("../../../data/orchestrator-debug/", import.meta.url));
 const defaultOrchestratorPythonPath = fileURLToPath(new URL(
   process.platform === "win32" ? "../../../.venv/Scripts/python.exe" : "../../../.venv/bin/python",
@@ -45,13 +44,8 @@ export const env = {
   firebaseDatabaseId: process.env.FIREBASE_DATABASE_ID ?? "litterspot",
   expectedFirebaseProjectId: process.env.EXPECTED_FIREBASE_PROJECT_ID ?? "",
   mediaStorageRoot: process.env.MEDIA_STORAGE_ROOT ?? defaultMediaStorageRoot,
-  videoUploadTempRoot: process.env.VIDEO_UPLOAD_TEMP_ROOT ?? defaultVideoUploadTempRoot,
   videoMaxBytes: numberSetting("VIDEO_MAX_BYTES", 250 * 1024 * 1024, { integer: true, minimum: 1, maximum: 2 * 1024 * 1024 * 1024 }),
   videoMaxDurationSeconds: numberSetting("VIDEO_MAX_DURATION_SECONDS", 600, { minimum: 1, maximum: 86_400 }),
-  videoDefaultFrameIntervalSeconds: numberSetting("VIDEO_FRAME_INTERVAL_SECONDS", 1, { minimum: 0.1, maximum: 3_600 }),
-  videoMaxFrames: numberSetting("VIDEO_MAX_FRAMES", 300, { integer: true, minimum: 1, maximum: 10_000 }),
-  videoLeaseSeconds: numberSetting("VIDEO_LEASE_SECONDS", 300, { integer: true, minimum: 30, maximum: 86_400 }),
-  ffmpegPath: process.env.FFMPEG_PATH ?? "ffmpeg",
   ffprobePath: process.env.FFPROBE_PATH ?? "ffprobe",
   corsOrigins: (process.env.CORS_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174")
     .split(",").map((value) => value.trim()).filter(Boolean),

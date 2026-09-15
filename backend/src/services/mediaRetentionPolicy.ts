@@ -1,7 +1,15 @@
 import type { DocumentData } from "firebase-admin/firestore";
-import { ALERT_WORKFLOW_VERSION } from "../shared/workflowVersions.js";
 
-export const ACTIVE_ALERT_STATUSES = new Set(["new", "acknowledged", "in_progress", "awaiting_verification"]);
+export const ACTIVE_ALERT_STATUSES = new Set([
+  "waiting_for_cleaner",
+  "assigned",
+  "in_progress",
+  "awaiting_review",
+  "new",
+  "acknowledged",
+  "awaiting_verification",
+]);
+export const TERMINAL_ALERT_STATUSES = new Set(["resolved", "dismissed"]);
 export const IN_FLIGHT_JOB_STATUSES = new Set(["uploading", "queued", "processing"]);
 export const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
 export const RETAINABLE_MEDIA_KINDS = new Set(["original_upload", "extracted_frame"]);
@@ -69,13 +77,6 @@ export function decideMediaRetentionCandidate(input: {
   const storageKey = ownedMediaStorageKey(input.mediaId, data.storageKey);
   if (!storageKey) return { eligible: false, reason: "invalid_storage_key" };
   return { eligible: true, storageKey, createdAtMillis };
-}
-
-export function activeCurrentWorkflowAlert(data: DocumentData) {
-  if (data.workflowVersion !== ALERT_WORKFLOW_VERSION) return "inactive" as const;
-  if (ACTIVE_ALERT_STATUSES.has(data.status)) return "active" as const;
-  if (data.status === "resolved") return "inactive" as const;
-  return "uncertain" as const;
 }
 
 export function classifyJobForRetentionSafety(data: DocumentData) {

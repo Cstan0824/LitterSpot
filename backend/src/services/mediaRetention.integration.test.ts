@@ -40,7 +40,8 @@ emulatorDescribe("media retention execution", () => {
     batch.set(firestore.collection("mediaAssets").doc(ids.recent), mediaDocument(ids.recent, paths.recent, recent));
     batch.set(firestore.collection("mediaAssets").doc(ids.recoverable), { ...mediaDocument(ids.recoverable, paths.recoverable, recent), storageStatus: "missing", mimeType: "image/jpeg" });
     batch.set(firestore.collection("alerts").doc(`${prefix}-alert`), {
-      status: "new",
+      schemaVersion: 2,
+      status: "waiting_for_cleaner",
       latestEvidenceMediaId: ids.alertProtected,
     });
     batch.set(firestore.collection("processingJobs").doc(`${prefix}-job`), {

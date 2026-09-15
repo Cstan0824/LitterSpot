@@ -70,7 +70,7 @@ let shuttingDown = false;
 process.once("SIGINT", async () => { shuttingDown = true; await cleanup(); process.exit(0); });
 process.once("SIGTERM", async () => { shuttingDown = true; await cleanup(); process.exit(0); });
 
-const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2", ENABLE_LEGACY_DETECTOR: "false", DEVICE: "0", INTERNAL_API_TOKEN: token });
+const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], { STATE_CLASSIFIER_PATH: classifier, STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2", DEVICE: "0", INTERNAL_API_TOKEN: token });
 const backend = start(npm, ["--workspace=backend", "run", "dev"], { PORT: String(backendPort), AI_SERVICE_URL: "http://127.0.0.1:8000", AI_SERVICE_TOKEN: token });
 const frontend = start(npm, ["--workspace=frontend", "run", "dev", "--", "--host", "127.0.0.1"], { VITE_BACKEND_PROXY_TARGET: `http://127.0.0.1:${backendPort}` });
 writeFileSync(pidFile, JSON.stringify({ fastapi: fastapi.pid, node: backend.pid, react: frontend.pid }, null, 2));

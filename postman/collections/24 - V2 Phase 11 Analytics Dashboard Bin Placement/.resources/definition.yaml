@@ -1,4 +1,0 @@
-$kind: collection
-order: 25000
-name: 24 - V2 Phase 11 Analytics Dashboard Bin Placement
-description: Login using V2 Phase 9 Root Login first. Read/refresh APIs can report insufficient_data until two completed observed local days exist. Request 07 requires an eligible Zone and the snapshot timestamp saved by 05 or 06. Cleanup deletes only expired minutes after preserving daily totals. Do not run the folder blindly as one collection run.

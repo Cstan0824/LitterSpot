@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { open, stat } from "node:fs/promises";
 import { promisify } from "node:util";
 import { env } from "../config/env.js";
 import { HttpError } from "../shared/httpError.js";
@@ -75,13 +74,6 @@ export function parseVideoProbe(value: unknown, detected: SupportedVideo): Video
   };
 }
 
-export function plannedVideoFrames(durationSeconds: number, intervalSeconds: number, maximumFrames = env.videoMaxFrames) {
-  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error("Video duration must be positive and finite.");
-  if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) throw new Error("Frame interval must be positive and finite.");
-  if (!Number.isInteger(maximumFrames) || maximumFrames < 1) throw new Error("Maximum video frames must be a positive integer.");
-  return Math.max(1, Math.min(maximumFrames, Math.ceil(durationSeconds / intervalSeconds)));
-}
-
 export async function probeVideoFile(filePath: string, detected: SupportedVideo) {
   try {
     const { stdout } = await runFile(env.ffprobePath, [
@@ -96,40 +88,4 @@ export async function probeVideoFile(filePath: string, detected: SupportedVideo)
     if (error instanceof HttpError) throw error;
     throw new HttpError(503, "ffprobe could not inspect the uploaded video.");
   }
-}
-
-export type VideoUploadValidationOptions = {
-  maxBytes?: number;
-  maxDurationSeconds?: number;
-  probe?: (filePath: string, detected: SupportedVideo) => Promise<VideoProbe>;
-};
-
-export async function validateVideoUploadFile(
-  file: Pick<Express.Multer.File, "path" | "mimetype" | "size">,
-  options: VideoUploadValidationOptions = {},
-) {
-  const maxBytes = options.maxBytes ?? env.videoMaxBytes;
-  const maxDurationSeconds = options.maxDurationSeconds ?? env.videoMaxDurationSeconds;
-  if (!Number.isFinite(maxBytes) || maxBytes <= 0 || !Number.isFinite(maxDurationSeconds) || maxDurationSeconds <= 0) {
-    throw new Error("Video upload limits must be positive and finite.");
-  }
-  const details = await stat(file.path).catch(() => null);
-  if (!details) throw new HttpError(400, "The uploaded video is unavailable.");
-  if (!details.isFile()) throw new HttpError(400, "The uploaded video is unavailable.");
-  if (details.size <= 0 || details.size !== file.size) throw new HttpError(400, "The uploaded video size is invalid.");
-  if (details.size > maxBytes) throw new HttpError(413, "The uploaded video exceeds the configured size limit.");
-  const handle = await open(file.path, "r");
-  const header = Buffer.alloc(16);
-  try {
-    await handle.read(header, 0, header.length, 0);
-  } finally {
-    await handle.close();
-  }
-  const detected = detectSupportedVideo(header);
-  validateDeclaredVideoType(file.mimetype, detected);
-  const probe = await (options.probe ?? probeVideoFile)(file.path, detected);
-  if (probe.durationSeconds > maxDurationSeconds) {
-    throw new HttpError(413, `The uploaded video exceeds ${maxDurationSeconds} seconds.`);
-  }
-  return probe;
 }

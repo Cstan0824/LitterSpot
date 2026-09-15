@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { opaqueCursorSchema } from "./pagination.js";
 
 const safeIdentifierSchema = z.string()
   .trim()
@@ -84,54 +83,6 @@ export const systemEventRecoveryInputSchema = z.object({
   safeDetails: systemEventSafeDetailsSchema.default({}),
 }).strict();
 
-export const systemEventListQuerySchema = z.object({
-  status: z.enum(["open", "resolved", "all"]).default("open"),
-  dependency: systemEventDependencySchema.optional(),
-  severity: systemEventSeveritySchema.optional(),
-  scopeType: z.enum(["global", "site", "job"]).optional(),
-  scopeId: safeIdentifierSchema.optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  cursor: opaqueCursorSchema.optional(),
-}).strict().superRefine((query, context) => {
-  if (query.scopeType === "global" && query.scopeId) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["scopeId"],
-      message: "A global scope cannot have scopeId.",
-    });
-  }
-  if (query.scopeId && !query.scopeType) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["scopeType"],
-      message: "scopeType is required when scopeId is provided.",
-    });
-  }
-  if (query.scopeType && query.scopeType !== "global" && !query.scopeId) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["scopeId"],
-      message: "scopeId is required for a non-global scope.",
-    });
-  }
-  const optionalFilterCount = Number(Boolean(query.dependency))
-    + Number(Boolean(query.severity))
-    + Number(Boolean(query.scopeType));
-  if (optionalFilterCount > 1) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Use at most one of dependency, severity, or scope filters per request.",
-    });
-  }
-  if (query.status === "all" && optionalFilterCount > 0) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["status"],
-      message: "status=all cannot be combined with another system-event filter.",
-    });
-  }
-});
-
 export type SystemEventDependency = z.infer<typeof systemEventDependencySchema>;
 export type SystemEventSeverity = z.infer<typeof systemEventSeveritySchema>;
 export type SystemEventStatus = z.infer<typeof systemEventStatusSchema>;
@@ -139,4 +90,3 @@ export type SystemEventIdentity = z.infer<typeof systemEventIdentitySchema>;
 export type SystemEventSafeDetails = z.infer<typeof systemEventSafeDetailsSchema>;
 export type SystemEventOccurrenceInput = z.infer<typeof systemEventOccurrenceInputSchema>;
 export type SystemEventRecoveryInput = z.infer<typeof systemEventRecoveryInputSchema>;
-export type SystemEventListQuery = z.infer<typeof systemEventListQuerySchema>;

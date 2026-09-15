@@ -70,7 +70,6 @@ process.once("SIGTERM", async () => { shuttingDown = true; await cleanup(); proc
 const fastapi = start(python, ["-m", "uvicorn", "app.main:app", "--app-dir", "ai-service", "--host", "127.0.0.1", "--port", "8000"], {
   STATE_CLASSIFIER_PATH: classifier,
   STATE_CLASSIFIER_VERSION: "multitask-mobilenet-gco-gbs-v2",
-  ENABLE_LEGACY_DETECTOR: "false",
   DEVICE: "0",
   INTERNAL_API_TOKEN: token,
 });

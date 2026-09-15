@@ -2,11 +2,12 @@
 
 ## Status and authority
 
-This directory defines the target application database for the clarified LitterSpot product. It is a design contract, not an implemented schema.
+This directory records the application database design for the clarified
+LitterSpot product.
 
-Use these documents for the backend rebuild and later frontend API integration. The older [`firestore-data-model.md`](../firestore-data-model.md) and [`database-field-dictionary.md`](../database-field-dictionary.md) describe the currently implemented V1 database. They remain useful when deciding what code to retain, but they do not override this V2 plan.
-
-No Firebase data was changed while preparing this plan.
+Use these documents with the
+[`database-field-dictionary.md`](../database-field-dictionary.md), which records
+the concrete fields used by the implementation.
 
 ## Design decisions
 
@@ -33,7 +34,6 @@ No Firebase data was changed while preparing this plan.
 | [`03-automation-and-audit.md`](03-automation-and-audit.md) | Orchestrator, notifications, administrative audit and system health |
 | [`04-analytics-and-media.md`](04-analytics-and-media.md) | Media, minute/daily analytics, Dashboard cache, bin-placement snapshots and interventions |
 | [`05-integrity-security-and-indexes.md`](05-integrity-security-and-indexes.md) | Enums, invariants, transactions, indexes, rules and retention |
-| [`06-migration-plan.md`](06-migration-plan.md) | Full V1-to-V2 backend and database migration sequence |
 
 ## Relationship overview
 

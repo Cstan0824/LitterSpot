@@ -132,8 +132,7 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
       const profile = await profileReference.get();
       const data = profile.data();
       const v2Profile = data?.schemaVersion === 2;
-      if (!profile.exists || data?.status !== "active" || data.authUid !== decoded.uid
-        || !v2Profile && !["invited", "active"].includes(String(data.accountStatus))) {
+      if (!profile.exists || !v2Profile || data?.status !== "active" || data.authUid !== decoded.uid) {
         return res.status(403).json({ error: "Cleaner access is inactive.", requestId: req.requestId });
       }
       const email = decoded.email ?? String(data.email ?? "");
@@ -155,13 +154,6 @@ export async function authenticateUser(req: Request, res: Response, next: NextFu
         permittedZoneIds: Array.isArray(data.permittedZoneIds) ? data.permittedZoneIds.map(String) : [String(data.assignedZoneId)],
         capabilities: Array.isArray(data.capabilities) ? data.capabilities.map(String) : ["general_cleaning"],
       };
-      if (!v2Profile && data.accountStatus === "invited") {
-        await profileReference.update({
-          accountStatus: "active",
-          authLinkedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      }
       return next();
     }
 

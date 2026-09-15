@@ -1,11 +1,11 @@
 import type { ApplicationSession } from "./session";
 
-export type SupervisorRoute = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "pipeline" | "playground" | "status" | "camera-registration";
+export type SupervisorRoute = "dashboard" | "alerts" | "history" | "placement" | "cameras" | "admin" | "site" | "status" | "camera-registration";
 export type SuperadminSiteViewPage = "dashboard" | "cameras" | "alerts" | "work" | "team" | "insights" | "system" | "site";
 export type SuperadminRoute = { kind: "sites" } | { kind: "audit" } | { kind: "site"; siteId: string } | { kind: "site-view"; siteId: string; page: SuperadminSiteViewPage };
 export type RoleDestination = "supervisor" | "cleaner-integration-pending" | "superadmin";
 
-const supervisorRoutes = new Set<SupervisorRoute>(["alerts", "history", "placement", "cameras", "admin", "site", "pipeline", "playground", "status", "camera-registration"]);
+const supervisorRoutes = new Set<SupervisorRoute>(["alerts", "history", "placement", "cameras", "admin", "site", "status", "camera-registration"]);
 const superadminSiteViewPages = new Set<SuperadminSiteViewPage>(["dashboard", "cameras", "alerts", "work", "team", "insights", "system", "site"]);
 
 export function supervisorRouteFromHash(hash: string): SupervisorRoute {

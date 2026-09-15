@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  systemEventListQuerySchema,
   systemEventOccurrenceInputSchema,
   systemEventRecoveryInputSchema,
   systemEventSafeDetailsSchema,
@@ -87,24 +86,4 @@ describe("system-event schemas", () => {
     }).success).toBe(false);
   });
 
-  it("bounds list queries and requires a complete scope filter", () => {
-    expect(systemEventListQuerySchema.parse({})).toMatchObject({ status: "open", limit: 25 });
-    expect(systemEventListQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
-    expect(systemEventListQuerySchema.safeParse({ scopeId: "site-1" }).success).toBe(false);
-    expect(systemEventListQuerySchema.safeParse({ scopeType: "job" }).success).toBe(false);
-    expect(systemEventListQuerySchema.safeParse({ scopeType: "global", scopeId: "site-1" }).success).toBe(false);
-    expect(systemEventListQuerySchema.safeParse({
-      status: "open",
-      scopeType: "site",
-      scopeId: "site-1",
-      limit: "50",
-      cursor: "YWJjZA",
-    }).success).toBe(true);
-    expect(systemEventListQuerySchema.safeParse({
-      status: "open", dependency: "analytics_rebuild", severity: "critical",
-    }).success).toBe(false);
-    expect(systemEventListQuerySchema.safeParse({
-      status: "all", dependency: "analytics_rebuild",
-    }).success).toBe(false);
-  });
 });

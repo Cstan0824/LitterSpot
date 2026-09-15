@@ -1,4 +1,0 @@
-$kind: collection
-order: 24000
-name: 23 - V2 Phase 10 Operations
-description: Sign in with the existing V2 Root, Cleaner, or Superadmin login requests first. Requests 01-04 are read-only. Requests 10-13 are an optional destructive development-Site lifecycle test; read phase-10-completed-brief.md first.

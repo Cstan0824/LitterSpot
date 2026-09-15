@@ -33,16 +33,6 @@ class BinLocalizer:
         except Exception as error:
             self.model, self.load_error = None, str(error)
 
-    def locate(self, image: Image.Image) -> tuple[BoundingBox | None, str | None, float]:
-        if self.model is None:
-            return None, "localizer_unavailable", 0.0
-        detections, elapsed_ms = self.locate_all(image, max_detections=2)
-        if not detections:
-            return None, "bin_not_localized", elapsed_ms
-        if len(detections) != 1:
-            return None, "multiple_bins_detected", elapsed_ms
-        return detections[0].bbox, None, elapsed_ms
-
     def locate_all(
         self,
         image: Image.Image,

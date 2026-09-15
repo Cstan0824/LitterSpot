@@ -1,7 +1,5 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
-import { recoverVideoJobs, waitForVideoJobsToFinish } from "./services/videoJobProcessingService.js";
-import { recoverOrchestratorRuns } from "./services/orchestratorService.js";
 import { recoverV2OrchestratorRuns } from "./services/v2OrchestratorService.js";
 import { startV2OrchestratorWorker, stopV2OrchestratorWorker } from "./services/v2OrchestratorWorker.js";
 import { recoverV2SiteOperations } from "./services/v2SiteOperationService.js";
@@ -45,8 +43,6 @@ async function startupRecovery(label: string, operation: () => Promise<number>) 
 const server = app.listen(env.port, async () => {
   console.log(`LitterSpot backend listening on port ${env.port}`);
   if (env.analyticsWorkerEnabled) startPhase11Worker();
-  await startupRecovery("video_job_recovery", recoverVideoJobs);
-  await startupRecovery("legacy_orchestrator_recovery", recoverOrchestratorRuns);
   await startupRecovery("orchestrator_recovery", recoverV2OrchestratorRuns);
   await startupRecovery("camera_verification_recovery", recoverV2CameraVerificationCollectors);
   if (env.orchestratorWorkerEnabled) startV2OrchestratorWorker();
@@ -66,7 +62,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM") {
     const timer = setTimeout(() => resolve("timeout"), 20_000);
     timer.unref();
   });
-  const outcome = await Promise.race([Promise.all([waitForVideoJobsToFinish(), stopPhase11Worker()]).then(() => "idle" as const), timeout]);
+  const outcome = await Promise.race([stopPhase11Worker().then(() => "idle" as const), timeout]);
   if (outcome === "timeout") {
     console.error(JSON.stringify({ timestamp: new Date().toISOString(), level: "warn", event: "shutdown_queue_timeout" }));
   }

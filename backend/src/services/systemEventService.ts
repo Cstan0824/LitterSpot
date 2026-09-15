@@ -3,18 +3,15 @@ import {
   Timestamp,
   type DocumentData,
   type DocumentSnapshot,
-  type Query,
 } from "firebase-admin/firestore";
 import { firestore } from "../config/firebase.js";
 import {
   systemEventIdentitySchema,
   systemEventKeySchema,
-  systemEventListQuerySchema,
   systemEventOccurrenceInputSchema,
   systemEventRecoveryInputSchema,
   systemEventSeveritySchema,
   systemEventStatusSchema,
-  type SystemEventListQuery,
 } from "../schemas/systemEvent.js";
 import { HttpError } from "../shared/httpError.js";
 import {
@@ -28,7 +25,6 @@ import {
   type SystemEventOccurrenceAction,
   type SystemEventRecoveryAction,
 } from "./systemEventState.js";
-import { queryCursorPage } from "./firestoreCursorPagination.js";
 
 const COLLECTION = "systemEvents";
 
@@ -255,39 +251,5 @@ export async function recoverSystemEvent(rawEventKey: unknown, rawInput: unknown
   return {
     ...outcome,
     event: await getSystemEvent(eventKey),
-  };
-}
-
-export async function listSystemEvents(rawQuery: unknown = {}) {
-  const input: SystemEventListQuery = systemEventListQuerySchema.parse(rawQuery);
-  let query: Query<DocumentData> = firestore.collection(COLLECTION);
-  if (input.status !== "all") query = query.where("status", "==", input.status);
-  if (input.dependency) query = query.where("dependency", "==", input.dependency);
-  if (input.severity) query = query.where("maximumSeverity", "==", input.severity);
-  if (input.scopeType) query = query.where("scopeType", "==", input.scopeType);
-  if (input.scopeId) query = query.where("scopeId", "==", input.scopeId);
-
-  const page = await queryCursorPage({
-    query,
-    resource: "system-events",
-    orderField: "lastSeenAt",
-    filters: {
-      status: input.status,
-      dependency: input.dependency,
-      severity: input.severity,
-      scopeType: input.scopeType,
-      scopeId: input.scopeId,
-    },
-    limit: input.limit,
-    cursor: input.cursor,
-    present: presentSnapshot,
-  });
-  return {
-    events: page.items,
-    page: {
-      limit: input.limit,
-      hasMore: page.nextCursor !== null,
-      nextCursor: page.nextCursor,
-    },
   };
 }

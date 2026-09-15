@@ -229,11 +229,6 @@ class AnalysisPipeline:
         classification = self.state_classifier.classify(
             image,
             candidate.bbox,
-            None,
-            bin_id,
-            1,
-            bool(bin_id),
-            not bool(bin_id),
         )
         evidence = RegisteredSceneEvidenceModule.gate_bin_state(
             image,

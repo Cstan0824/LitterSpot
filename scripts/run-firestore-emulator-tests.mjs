@@ -9,12 +9,11 @@ const emulatorCache = join(root, ".local", "firebase-emulators");
 const firebaseConfig = join(root, ".local", "firebase-config");
 const sentinel = join(root, ".local", "firebase-emulator-smokes.passed");
 const mediaRoot = join(root, ".local", "firebase-emulator-media");
-const videoTempRoot = join(mediaRoot, ".incoming");
 const testConfig = join(root, ".local", "firebase-emulator-test.json");
 mkdirSync(emulatorCache, { recursive: true });
 mkdirSync(firebaseConfig, { recursive: true });
 rmSync(mediaRoot, { recursive: true, force: true });
-mkdirSync(videoTempRoot, { recursive: true });
+mkdirSync(mediaRoot, { recursive: true });
 try { unlinkSync(sentinel); } catch {}
 writeFileSync(testConfig, JSON.stringify({
   firestore: { database: "(default)", rules: join(root, "firestore.rules"), indexes: join(root, "firestore.indexes.json") },
@@ -37,7 +36,6 @@ const environment = {
   FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9299",
   LITTERSPOT_EMULATOR_SENTINEL: sentinel,
   MEDIA_STORAGE_ROOT: mediaRoot,
-  VIDEO_UPLOAD_TEMP_ROOT: videoTempRoot,
   ORCHESTRATOR_INTERNAL_TOKEN: "emulator-orchestrator-token",
 };
 delete environment.GOOGLE_APPLICATION_CREDENTIALS;

@@ -19,15 +19,6 @@ verification reports. The archive directory is private and sensitive. Emulator
 Auth exports contain emulator-only password representations that must never
 be published or committed.
 
-`npm run migrate:firebase -- capture|inspect|backup|apply|verify` is a dedicated
-cutover tool. It requires an explicit run directory. Cloud modes are locked to
-the selected `litterspot` project and a matching external Admin credential.
-Apply requires `--confirm=litterspot/litterspot-to-default`, verified backups,
-and a matching destination fingerprint. Database administration may use the
-already-authorized Firebase CLI account with `--database-admin=cli`; no IAM
-roles are changed by the tool. Historical development reset scripts continue
-to reject `production-cloud`.
-
 Restore a failed cutover using the preserved destination document archive and
 Auth records with the backed-up original scrypt configuration. Do not import
 emulator fake password hashes directly into cloud Auth. Reverting only
@@ -79,10 +70,9 @@ authenticated Supervisor UID. Unexpected errors return a generic response and
 do not expose a stack or raw upstream payload.
 
 Dependency failures are deduplicated in `systemEvents` by dependency, event
-code, and scope. The public API provides read-only authenticated visibility:
+code, and scope. The current product provides authenticated Site visibility:
 
-- `GET /api/system-events?status=open&limit=25`
-- `GET /api/system-events/{eventKey}`
+- `GET /api/operations/v2/system`
 
 Only allowlisted safe details are persisted. There is intentionally no public
 endpoint for creating, resolving, or deleting system events.
@@ -102,20 +92,16 @@ The Emulator Suite does not prove production index availability. In cloud
 smoke tests, dashboard and analytics responses should report `indexed`, not a
 bounded fallback mode.
 
-## 5. Phase 9 verification
+## 5. Repository verification
 
-Run the full in-repository gate from the repository root:
+The current CI workflow runs backend tests, both production builds, the
+Firebase emulator integration suite, and the Python inference tests directly.
+Its authoritative command list is in `.github/workflows/ci.yml`; no
+phase-specific verification wrapper remains.
 
-```bash
-npm run verify:phase9
-```
-
-It runs backend unit/contract tests, backend and frontend builds, all remaining
-FastAPI inference-only tests, Firebase Auth HTTP tests, Firestore cursor and
-retention integration tests, and the alert/dashboard/analytics/system-event
-emulator smoke workflows. It uses the demo project `demo-litterspot` and a
-temporary `.local/firebase-emulator-media` directory; it must not contact the
-cloud project.
+Emulator tests use the demo project `demo-litterspot` and a temporary
+`.local/firebase-emulator-media` directory. They must not contact the cloud
+project.
 
 ## 6. Coordinated backup policy
 
@@ -138,8 +124,8 @@ Until the team enables billing and chooses a Cloud Storage backup destination:
 ### 6.2 Coordinated backup after billing is approved
 
 1. Announce a maintenance window and stop frontend/API write traffic.
-2. Wait for all processing jobs to become terminal (`completed`, `failed`, or
-   `cancelled`) and ensure no analytics rebuild is running.
+2. Stop Camera monitoring sessions and ensure no analytics rebuild or Site
+   cleanup operation is running.
 3. Stop Node cleanly.
 4. Export the named Firestore database to a versioned Cloud Storage prefix:
 
@@ -202,8 +188,8 @@ stopped, set `MEDIA_STORAGE_ROOT` to that restored directory, then verify:
 2. site/zone/camera reads;
 3. a sample media content URL and SHA-256;
 4. job, analysis, detection, alert, and history references;
-5. dashboard and analytics report reads;
-6. a new test upload and processing job.
+5. dashboard, daily analytics, and bin-placement reads;
+6. a Camera monitoring sample and its retained evidence.
 
 Import the matching Auth export only into the separate restore project. Use the
 Firebase project's sensitive SCRYPT hash parameters exactly as documented by
@@ -242,7 +228,7 @@ idempotent so an interrupted metadata update can be retried.
 1. Capture the `X-Request-ID`, UTC timestamp, route, job/media ID, and visible
    HTTP status. Do not capture tokens or passwords.
 2. Check `/api/health/live`, then `/api/health/ready`.
-3. Inspect `GET /api/system-events?status=open` and the matching structured
+3. Inspect `GET /api/operations/v2/system` and the matching structured
    logs.
 4. For failed jobs, inspect the persisted stable error code and retry only via
    the documented retry endpoint. Reusing the upload idempotency key with a
@@ -250,20 +236,6 @@ idempotent so an interrupted metadata update can be retried.
 5. If Firestore and local media diverge, stop writes. Do not manually delete
    documents or files. Restore the coordinated pair or use a purpose-built,
    dry-run-capable reconciliation procedure.
-
-### Cleaner location privacy retention
-
-Detailed Cleaner measurements expire after seven days. The command is dry-run
-by default and does not affect the current presence read model:
-
-```bash
-npm --workspace=backend run location:retention -- --dry-run
-npm --workspace=backend run location:retention -- --execute
-```
-
-Use execution under the site's approved privacy procedure. Do not retain
-exports of location history longer than the policy without an explicit legal
-and project decision.
 
 ## 9. Known deployment boundary
 

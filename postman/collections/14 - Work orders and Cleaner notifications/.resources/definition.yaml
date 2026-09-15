@@ -1,3 +1,0 @@
-$kind: collection
-description: Phase 11 manual workflow used before the autonomous orchestrator is connected. Supervisor creates or reassigns one-primary-Cleaner work, while the Cleaner sees only their queue, accepts or rejects, starts work, submits it for review, and reads a durable notification inbox. Supervisor completion/rework/cancellation are explicit override paths.
-order: 8975

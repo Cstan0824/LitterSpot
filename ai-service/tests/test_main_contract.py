@@ -22,7 +22,7 @@ class InferenceOnlyApiContractTests(unittest.TestCase):
         }
         self.assertEqual(
             routes,
-            {"/health", "/model/info", "/classify/bin", "/classify/image-bins", "/analyze/frame"},
+            {"/health", "/analyze/frame"},
         )
 
     def test_frame_request_and_response_exclude_business_state(self):

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ALERT_WORKFLOW_VERSION } from "../shared/workflowVersions.js";
 import {
-  activeCurrentWorkflowAlert,
+  ACTIVE_ALERT_STATUSES,
+  TERMINAL_ALERT_STATUSES,
   classifyJobForRetentionSafety,
   collectMediaReferenceIds,
   decideMediaRetentionCandidate,
@@ -53,11 +53,14 @@ describe("media retention policy", () => {
     ]) expect(ownedMediaStorageKey("media-1", key)).toBeNull();
   });
 
-  it("treats malformed current-workflow alerts and unknown job states as uncertain", () => {
-    expect(activeCurrentWorkflowAlert({ workflowVersion: ALERT_WORKFLOW_VERSION, status: "new" })).toBe("active");
-    expect(activeCurrentWorkflowAlert({ workflowVersion: ALERT_WORKFLOW_VERSION, status: "resolved" })).toBe("inactive");
-    expect(activeCurrentWorkflowAlert({ workflowVersion: ALERT_WORKFLOW_VERSION, status: "mystery" })).toBe("uncertain");
-    expect(activeCurrentWorkflowAlert({ workflowVersion: "legacy", status: "new" })).toBe("inactive");
+  it("recognizes current and historical Alert safety states and rejects unknown job states", () => {
+    for (const status of ["waiting_for_cleaner", "assigned", "in_progress", "awaiting_review", "new", "acknowledged", "awaiting_verification"]) {
+      expect(ACTIVE_ALERT_STATUSES.has(status)).toBe(true);
+    }
+    expect(TERMINAL_ALERT_STATUSES.has("resolved")).toBe(true);
+    expect(TERMINAL_ALERT_STATUSES.has("dismissed")).toBe(true);
+    expect(ACTIVE_ALERT_STATUSES.has("mystery")).toBe(false);
+    expect(TERMINAL_ALERT_STATUSES.has("mystery")).toBe(false);
     expect(classifyJobForRetentionSafety({ status: "processing" })).toBe("in_flight");
     expect(classifyJobForRetentionSafety({ status: "completed" })).toBe("terminal");
     expect(classifyJobForRetentionSafety({ status: "mystery" })).toBe("uncertain");
