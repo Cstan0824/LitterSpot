@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { recommendedSiteMapGridInterval, siteMapGridSummary } from "../operations/siteMapGrid";
-import { V2ApiError } from "../../services/v2/errors";
-import { superadminRouteFromHash, superadminRouteHash, type SuperadminRoute } from "../../services/v2/routing";
+import { ApiError } from "../../services/api/errors";
+import { superadminRouteFromHash, superadminRouteHash, type SuperadminRoute } from "../../services/api/routing";
 import {
-  createV2SuperadminSite,
-  getV2SuperadminAuditPage,
-  getV2SuperadminSite,
-  getV2SuperadminSiteAuditPage,
-  getV2SuperadminSitesPage,
-  reconcileV2SuperadminSiteOperation,
-  recoverV2SuperadminRoot,
-  updateV2SuperadminSiteStatus,
-  type V2SiteOperation,
-  type V2SuperadminAuditEvent,
-  type V2SuperadminSite,
-  type V2SuperadminSiteDetail,
-} from "../../services/v2/superadmin";
+  createSuperadminSite,
+  getSuperadminAuditPage,
+  getSuperadminSite,
+  getSuperadminSiteAuditPage,
+  getSuperadminSitesPage,
+  reconcileSuperadminSiteOperation,
+  recoverSuperadminRoot,
+  updateSuperadminSiteStatus,
+  type SiteOperation,
+  type SuperadminAuditEvent,
+  type SuperadminSite,
+  type SuperadminSiteDetail,
+} from "../../services/api/superadmin";
 import "./superadmin.css";
 import { SuperadminSiteView } from "./SuperadminSiteView";
 
@@ -27,7 +27,7 @@ const date = new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short"
 const readable = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const when = (value?: string | null) => value && !Number.isNaN(new Date(value).getTime()) ? date.format(new Date(value)) : "Not recorded";
 const initials = (value: string) => value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-const errorCopy = (reason: unknown) => reason instanceof V2ApiError || reason instanceof Error ? reason.message : "The request could not be completed.";
+const errorCopy = (reason: unknown) => reason instanceof ApiError || reason instanceof Error ? reason.message : "The request could not be completed.";
 
 function Icon({ name }: { name: "sites" | "audit" | "plus" | "search" | "arrow" | "close" | "view" | "shield" | "refresh" }) {
   if (name === "sites") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 20V7l7-4 7 4v13M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2" /></svg>;
@@ -96,7 +96,7 @@ function CreateSiteDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     if (!grid) { setError("Enter positive map dimensions and a Grid interval."); return; }
     setBusy(true); setError("");
     try {
-      const result = await createV2SuperadminSite({ name: name.trim(), description: description.trim() || null, timeZone: timeZone.trim(), widthMeters: width, heightMeters: height, gridSizeMeters: interval, rootDisplayName: rootName.trim(), rootEmail: rootEmail.trim(), rootPassword: password, idempotencyKey });
+      const result = await createSuperadminSite({ name: name.trim(), description: description.trim() || null, timeZone: timeZone.trim(), widthMeters: width, heightMeters: height, gridSizeMeters: interval, rootDisplayName: rootName.trim(), rootEmail: rootEmail.trim(), rootPassword: password, idempotencyKey });
       onCreated(result.siteId);
     } catch (reason) { setError(errorCopy(reason)); setBusy(false); }
   };
@@ -111,7 +111,7 @@ function CreateSiteDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   </form></Modal>;
 }
 
-function SitesPage({ sites, total, hasMore, loading, error, onRetry, onLoadMore, onOpen, onCreate }: { sites: V2SuperadminSite[]; total: number; hasMore: boolean; loading: boolean; error: string; onRetry: () => void; onLoadMore: () => void; onOpen: (siteId: string) => void; onCreate: () => void }) {
+function SitesPage({ sites, total, hasMore, loading, error, onRetry, onLoadMore, onOpen, onCreate }: { sites: SuperadminSite[]; total: number; hasMore: boolean; loading: boolean; error: string; onRetry: () => void; onLoadMore: () => void; onOpen: (siteId: string) => void; onCreate: () => void }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const shown = sites.filter((site) => status === "all" || site.status === status).filter((site) => `${site.name} ${site.rootSupervisor?.fullName ?? ""} ${site.rootSupervisor?.email ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()));
@@ -124,16 +124,16 @@ function SitesPage({ sites, total, hasMore, loading, error, onRetry, onLoadMore,
   </main>;
 }
 
-function ConfirmStatusDialog({ site, onClose, onDone }: { site: V2SuperadminSite; onClose: () => void; onDone: () => void }) {
+function ConfirmStatusDialog({ site, onClose, onDone }: { site: SuperadminSite; onClose: () => void; onDone: () => void }) {
   const next = site.status === "active" ? "inactive" : "active";
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { await updateV2SuperadminSiteStatus(site.id, next, reason.trim()); onDone(); } catch (cause) { setError(errorCopy(cause)); setBusy(false); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { await updateSuperadminSiteStatus(site.id, next, reason.trim()); onDone(); } catch (cause) { setError(errorCopy(cause)); setBusy(false); } };
   return <Modal title={`${next === "inactive" ? "Deactivate" : "Reactivate"} ${site.name}?`} description={next === "inactive" ? "Site users lose access and active operations are closed by the recovery operation." : "Site users can sign in again. Closed operations do not reopen."} onClose={() => { if (!busy) onClose(); }}><form onSubmit={submit}><div className="sa-dialog-body"><label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={500} placeholder="Record why this Site status is changing" required /></label>{error && <p className="sa-form-error" role="alert">{error}</p>}</div><footer className="sa-dialog-actions"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button className={next === "inactive" ? "danger" : "primary"} type="submit" disabled={busy || reason.trim().length < 3}>{busy ? "Updating…" : next === "inactive" ? "Deactivate Site" : "Reactivate Site"}</button></footer></form></Modal>;
 }
 
-function RootRecoveryDialog({ site, onClose, onDone }: { site: V2SuperadminSite; onClose: () => void; onDone: () => void }) {
+function RootRecoveryDialog({ site, onClose, onDone }: { site: SuperadminSite; onClose: () => void; onDone: () => void }) {
   const [mode, setMode] = useState<"reset_existing" | "replace">(site.rootSupervisor ? "reset_existing" : "replace");
   const [name, setName] = useState(site.rootSupervisor?.fullName ?? "");
   const [email, setEmail] = useState("");
@@ -142,18 +142,18 @@ function RootRecoveryDialog({ site, onClose, onDone }: { site: V2SuperadminSite;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { await recoverV2SuperadminRoot(site.id, { mode, email: mode === "replace" ? email.trim() : undefined, password, displayName: name.trim(), reason: reason.trim(), idempotencyKey }); onDone(); } catch (cause) { setError(errorCopy(cause)); setBusy(false); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); setBusy(true); setError(""); try { await recoverSuperadminRoot(site.id, { mode, email: mode === "replace" ? email.trim() : undefined, password, displayName: name.trim(), reason: reason.trim(), idempotencyKey }); onDone(); } catch (cause) { setError(errorCopy(cause)); setBusy(false); } };
   return <Modal className="sa-recovery-dialog" title="Recover Root access" description={`Restore Site authority for ${site.name}.`} onClose={() => { if (!busy) onClose(); }}><form onSubmit={submit}><div className="sa-dialog-body"><div className="sa-choice" role="group" aria-label="Root recovery mode"><button type="button" className={mode === "reset_existing" ? "active" : ""} onClick={() => setMode("reset_existing")}><b>Reset existing Root</b><span>Keep the same account and assign a new password.</span></button><button type="button" className={mode === "replace" ? "active" : ""} onClick={() => setMode("replace")}><b>Replace Root account</b><span>Disable the current identity and create another.</span></button></div><div className="sa-form-stack">{mode === "replace" && <label>New Root email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="new-root@example.com" required /></label>}<label>Root Supervisor name<input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={80} required /></label><label>New temporary password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} placeholder="At least 8 characters" required /></label><label>Recovery reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} maxLength={500} placeholder="Record the verified recovery request" required /></label></div>{error && <p className="sa-form-error" role="alert">{error}</p>}</div><footer className="sa-dialog-actions"><button type="button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary" type="submit" disabled={busy || reason.trim().length < 3}>{busy ? "Recovering…" : mode === "replace" ? "Replace Root account" : "Reset Root account"}</button></footer></form></Modal>;
 }
 
-function AuditLedger({ events, empty = "No Superadmin activity has been recorded." }: { events: V2SuperadminAuditEvent[]; empty?: string }) {
+function AuditLedger({ events, empty = "No Superadmin activity has been recorded." }: { events: SuperadminAuditEvent[]; empty?: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return <div className="sa-audit-ledger">{events.map((event) => <article key={event.id}><button type="button" aria-expanded={expanded === event.id} onClick={() => setExpanded(expanded === event.id ? null : event.id)}><time>{when(event.occurredAt)}</time><i className={event.outcome}><Icon name={event.outcome === "succeeded" ? "shield" : "close"} /></i><span><b>{readable(event.action)}</b><small>{event.reason || event.errorCode || `${readable(event.resourceType)} updated`}</small></span><span><b>{event.siteNameSnapshot || "Platform"}</b><small>{event.actorNameSnapshot}</small></span><em className={event.outcome}>{event.outcome}</em></button>{expanded === event.id && <div className="sa-audit-detail"><dl><div><dt>Resource</dt><dd>{readable(event.resourceType)}{event.resourceId ? ` · ${event.resourceId}` : ""}</dd></div><div><dt>Actor UID</dt><dd>{event.actorUid}</dd></div><div><dt>Site ID</dt><dd>{event.siteId || "Platform"}</dd></div></dl><section><div><span>Before</span><pre>{event.before ? JSON.stringify(event.before, null, 2) : "No recorded values."}</pre></div><div><span>After</span><pre>{event.after ? JSON.stringify(event.after, null, 2) : "No recorded values."}</pre></div></section></div>}</article>)}{!events.length && <div className="sa-empty">{empty}</div>}</div>;
 }
 
 function SiteDetailPage({ siteId, onBack, onOpenView }: { siteId: string; onBack: () => void; onOpenView: () => void }) {
-  const [detail, setDetail] = useState<V2SuperadminSiteDetail | null>(null);
-  const [events, setEvents] = useState<V2SuperadminAuditEvent[]>([]);
+  const [detail, setDetail] = useState<SuperadminSiteDetail | null>(null);
+  const [events, setEvents] = useState<SuperadminAuditEvent[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [statusDialog, setStatusDialog] = useState(false);
@@ -161,15 +161,15 @@ function SiteDetailPage({ siteId, onBack, onOpenView }: { siteId: string; onBack
   const [recoveringOperation, setRecoveringOperation] = useState(false);
   const [auditCursor, setAuditCursor] = useState<string | null>(null);
   const [auditTotal, setAuditTotal] = useState(0);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const [site, audit] = await Promise.all([getV2SuperadminSite(siteId), getV2SuperadminSiteAuditPage(siteId)]); setDetail(site); setEvents(audit.items); setAuditCursor(audit.nextCursor); setAuditTotal(audit.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [siteId]);
-  const loadMoreAudit = async () => { if (!auditCursor) return; setLoading(true); try { const page = await getV2SuperadminSiteAuditPage(siteId, auditCursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setAuditCursor(page.nextCursor); setAuditTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const [site, audit] = await Promise.all([getSuperadminSite(siteId), getSuperadminSiteAuditPage(siteId)]); setDetail(site); setEvents(audit.items); setAuditCursor(audit.nextCursor); setAuditTotal(audit.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [siteId]);
+  const loadMoreAudit = async () => { if (!auditCursor) return; setLoading(true); try { const page = await getSuperadminSiteAuditPage(siteId, auditCursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setAuditCursor(page.nextCursor); setAuditTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [load]);
   if (loading) return <main className="sa-page"><div className="sa-page-loading">Loading Site register…</div></main>;
   if (error || !detail) return <main className="sa-page"><button className="sa-back" type="button" onClick={onBack}>← Back to Sites</button><div className="sa-page-error"><p>{error || "Site not found."}</p><button onClick={() => void load()}>Try again</button></div></main>;
   const site = detail.site;
-  const operation = detail.latestOperation as V2SiteOperation | null;
+  const operation = detail.latestOperation as SiteOperation | null;
   const operationOpen = operation && operation.status !== "completed";
-  const recoverOperation = async () => { if (!operation) return; setRecoveringOperation(true); try { await reconcileV2SuperadminSiteOperation(site.id, operation.id); await load(); } catch (reason) { setError(errorCopy(reason)); } finally { setRecoveringOperation(false); } };
+  const recoverOperation = async () => { if (!operation) return; setRecoveringOperation(true); try { await reconcileSuperadminSiteOperation(site.id, operation.id); await load(); } catch (reason) { setError(errorCopy(reason)); } finally { setRecoveringOperation(false); } };
   const rootNeedsAttention = !site.rootSupervisor || site.rootSupervisor.status !== "active";
   return <main className="sa-page"><button className="sa-back" type="button" onClick={onBack}>← Back to Sites</button><header className="sa-site-detail-head"><div><span className={`sa-state ${site.status}`}>{site.status}</span><h1>{site.name}</h1><p>{site.description || `${site.timeZone} · Site ${site.id}`}</p></div><div><button type="button" onClick={onOpenView}><Icon name="view" />Open Site</button><button className={rootNeedsAttention ? "sa-primary" : ""} type="button" onClick={() => setRecoveryDialog(true)}>Recover Root access</button></div></header>
     {operationOpen && <section className="sa-operation-banner"><Icon name="refresh" /><div><strong>Site operation needs attention</strong><span>{readable(operation.type)} is {operation.status}. Completed work: {Object.values(operation.counts ?? {}).reduce((sum, value) => sum + value, 0)} records.</span></div><button type="button" disabled={recoveringOperation} onClick={() => void recoverOperation()}>{recoveringOperation ? "Recovering…" : "Continue recovery"}</button></section>}
@@ -184,15 +184,15 @@ function SiteDetailPage({ siteId, onBack, onOpenView }: { siteId: string; onBack
 }
 
 function AuditPage() {
-  const [events, setEvents] = useState<V2SuperadminAuditEvent[]>([]);
+  const [events, setEvents] = useState<SuperadminAuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [outcome, setOutcome] = useState<"all" | "succeeded" | "failed">("all");
   const [cursor, setCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const page = await getV2SuperadminAuditPage(); setEvents(page.items); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
-  const loadMore = async () => { if (!cursor) return; setLoading(true); try { const page = await getV2SuperadminAuditPage(undefined, cursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const page = await getSuperadminAuditPage(); setEvents(page.items); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const loadMore = async () => { if (!cursor) return; setLoading(true); try { const page = await getSuperadminAuditPage(undefined, cursor); setEvents((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setCursor(page.nextCursor); setTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } };
   useEffect(() => { void load(); }, [load]);
   const normalized = query.trim().toLowerCase();
   const shown = events.filter((event) => outcome === "all" || event.outcome === outcome).filter((event) => !normalized || `${event.action} ${event.siteNameSnapshot ?? ""} ${event.actorNameSnapshot} ${event.resourceType}`.toLowerCase().includes(normalized));
@@ -203,7 +203,7 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
   const [route, setRoute] = useState<SuperadminRoute>(() => superadminRouteFromHash(location.hash));
   const siteViewSiteId = useRef<string | null>(route.kind === "site-view" ? route.siteId : null);
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [sites, setSites] = useState<V2SuperadminSite[]>([]);
+  const [sites, setSites] = useState<SuperadminSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -213,7 +213,7 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
     const sync = () => {
       if (!location.hash.startsWith("#/superadmin") && siteViewSiteId.current) {
         const [path, query] = location.hash.replace(/^#\/?/, "").split("?");
-        const page = ({ "": "dashboard", dashboard: "dashboard", cameras: "cameras", alerts: "alerts", history: "work", work: "work", admin: "team", team: "team", placement: "insights", insights: "insights", status: "system", system: "system", site: "site" } as Record<string, import("../../services/v2/routing").SuperadminSiteViewPage>)[path] ?? "dashboard";
+        const page = ({ "": "dashboard", dashboard: "dashboard", cameras: "cameras", alerts: "alerts", history: "work", work: "work", admin: "team", team: "team", placement: "insights", insights: "insights", status: "system", system: "system", site: "site" } as Record<string, import("../../services/api/routing").SuperadminSiteViewPage>)[path] ?? "dashboard";
         location.hash = `${superadminRouteHash({ kind: "site-view", siteId: siteViewSiteId.current, page })}${query ? `?${query}` : ""}`;
         return;
       }
@@ -224,11 +224,11 @@ export function SuperadminApp({ profile, onLogout }: { profile: Profile; onLogou
   }, []);
   useEffect(() => { siteViewSiteId.current = route.kind === "site-view" ? route.siteId : null; }, [route]);
   useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [route]);
-  const loadSites = useCallback(async () => { setLoading(true); setError(""); try { const page = await getV2SuperadminSitesPage(); setSites(page.items); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
-  const loadMoreSites = useCallback(async () => { if (!nextCursor) return; setLoading(true); try { const page = await getV2SuperadminSitesPage("all", nextCursor); setSites((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [nextCursor]);
+  const loadSites = useCallback(async () => { setLoading(true); setError(""); try { const page = await getSuperadminSitesPage(); setSites(page.items); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, []);
+  const loadMoreSites = useCallback(async () => { if (!nextCursor) return; setLoading(true); try { const page = await getSuperadminSitesPage("all", nextCursor); setSites((current) => [...current, ...page.items.filter((item) => !current.some((loaded) => loaded.id === item.id))]); setNextCursor(page.nextCursor); setSiteTotal(page.totalCount); } catch (reason) { setError(errorCopy(reason)); } finally { setLoading(false); } }, [nextCursor]);
   useEffect(() => { void loadSites(); }, [loadSites]);
   const navigate = useCallback((next: SuperadminRoute) => { location.hash = superadminRouteHash(next); setRoute(next); }, []);
-  const navigateSiteView = useCallback((siteId: string, page: import("../../services/v2/routing").SuperadminSiteViewPage, params?: Record<string, string>) => { const query = params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""; location.hash = `${superadminRouteHash({ kind: "site-view", siteId, page })}${query}`; setRoute({ kind: "site-view", siteId, page }); }, []);
+  const navigateSiteView = useCallback((siteId: string, page: import("../../services/api/routing").SuperadminSiteViewPage, params?: Record<string, string>) => { const query = params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : ""; location.hash = `${superadminRouteHash({ kind: "site-view", siteId, page })}${query}`; setRoute({ kind: "site-view", siteId, page }); }, []);
   const currentSection = route.kind === "audit" ? "audit" : "sites";
   const content = useMemo(() => {
     if (route.kind === "audit") return <AuditPage />;

@@ -1186,8 +1186,8 @@ textarea:focus-visible {
 }
 
 /* Keep the camera calibration instrument dark, while matching the new tokens. */
-.registration-workspace-v2,
-.registration-modal-v2 {
+.registration-workspace-current,
+.registration-modal-current {
   --registration-jade: #35b7a1;
   border-radius: 2px;
   border-color: #2d6b5f;
@@ -1195,10 +1195,10 @@ textarea:focus-visible {
   font-family: "Field Text", sans-serif;
 }
 
-.registration-workspace-v2 .step,
-.registration-workspace-v2 .registration-status-chip-v2,
-.registration-workspace-v2 small,
-.registration-modal-v2 small {
+.registration-workspace-current .step,
+.registration-workspace-current .registration-status-chip-current,
+.registration-workspace-current small,
+.registration-modal-current small {
   font-family: "Field Mono", monospace;
 }
 
@@ -5973,7 +5973,7 @@ body {
 @media (max-width: 900px) { .work-metric-grid { grid-template-columns: repeat(3, 1fr); }.work-metric-grid article:nth-child(3) { border-right: 0; }.work-metric-grid article:nth-child(-n+3) { border-bottom: 1px solid #c8d1da; }.work-list-controls { align-items: stretch; flex-direction: column; }.work-select-filters { justify-content: flex-start; }.work-create-body { grid-template-columns: 1fr; }.work-create-cleaner > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .work-list-page { padding: 20px 14px 42px; }.work-list-heading { align-items: flex-start; flex-direction: column; }.work-list-heading h1 { font-size: 50px; }.work-list-heading > button { width: 100%; justify-content: center; }.work-metric-grid { grid-template-columns: repeat(2, 1fr); }.work-metric-grid article { border-bottom: 1px solid #c8d1da; }.work-metric-grid article:nth-child(2n) { border-right: 0; }.work-metric-grid article:last-child { grid-column: 1 / -1; }.work-select-filters label,.work-select-filters select { flex: 1; min-width: 0; }.work-records > header { align-items: flex-start; flex-direction: column; }.work-modal-scrim { align-items: start; padding: 0; }.work-create-modal { max-height: 100vh; min-height: 100vh; border: 0; }.work-create-fields { grid-template-columns: 1fr; }.work-create-fields label.wide { grid-column: auto; }.work-create-cleaner header,.work-create-modal footer { align-items: stretch; flex-direction: column; }.work-create-cleaner > div { grid-template-columns: 1fr; }.work-create-modal footer div { display: grid; grid-template-columns: 1fr 1fr; }.work-site-map { min-height: 260px; }.work-site-zone i { display: none; }.work-detail-drawer { width: 100%; }.work-detail-drawer > header h2 { font-size: 34px; } }
 
-/* V2 Supervisor actions: extend the current evidence-case and Work-drawer systems. */
+/* Supervisor actions: extend the current evidence-case and Work-drawer systems. */
 .alert-case-sidebar .alert-action-console,
 .work-detail-drawer .work-action-console {
   margin: 0;
@@ -6171,7 +6171,7 @@ body {
 @media (max-width: 1120px) { .bin-analysis-heading { grid-template-columns: 1fr; }.bin-analysis-filters { max-width: 780px; }.bin-factor-grid { grid-template-columns: repeat(3, 1fr); }.bin-factor-grid article:nth-child(3) { border-right: 0; }.bin-factor-grid article:nth-child(-n+3) { border-bottom: 1px solid #cbd6dc; }.bin-trend-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .bin-analysis-page { padding: 20px 14px 42px; }.bin-analysis-heading h1 { font-size: 49px; }.bin-analysis-filters { grid-template-columns: 1fr 1fr; }.bin-ranking > header { align-items: flex-start; flex-direction: column; }.bin-factor-grid { grid-template-columns: 1fr 1fr; }.bin-factor-grid article { border-bottom: 1px solid #cbd6dc; }.bin-factor-grid article:nth-child(2n) { border-right: 0; }.bin-factor-grid article:nth-child(3) { border-right: 1px solid #cbd6dc; }.bin-factor-grid article:last-child { grid-column: 1 / -1; border-bottom: 0; }.bin-trend-chart { padding: 14px; }.bin-trend-chart header { align-items: flex-start; flex-direction: column; }.bin-trend-chart h2 { font-size: 22px; }.bin-chart-days span { font-size: 7px; } }
 
-/* V2 Bin Placement wiring preserves Melissa's report layout and replaces the mock controls and figures. */
+/* Bin Placement wiring preserves Melissa's report layout and replaces the mock controls and figures. */
 .bin-analysis-filters { grid-template-columns: minmax(180px, 1fr) minmax(130px, .58fr) minmax(240px, 1.25fr); }
 .bin-analysis-filters input { width: 100%; min-height: 43px; padding: 0 11px; border: 1px solid #acbbc6; border-radius: 0; background: #fff; color: #1e3b52; font: 600 13px "Field Text", sans-serif; }
 .bin-analysis-filters input[readonly] { background: #f4f7f8; }
@@ -6190,7 +6190,7 @@ body {
 .bin-table-empty { display: grid; gap: 5px; padding: 24px 18px; color: #607586; text-align: center; }
 .bin-table-empty strong { color: #173650; font: 700 19px "Field Display", sans-serif; }
 .bin-table-empty span { font-size: 11px; }
-.bin-factor-grid.v2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.bin-factor-grid.detailed { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .bin-factor-grid .cleaning > strong { color: #dc4b42; }
 .bin-comparison-control { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(480px, 1.2fr); gap: 18px; margin-top: 18px; padding: 17px; border: 1px solid #aebdc8; background: #fff; }
 .bin-comparison-control > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
@@ -6223,8 +6223,8 @@ body {
 .bin-comparison-empty { display: grid; gap: 6px; margin-top: 18px; padding: 38px 20px; border: 1px solid #aebdc8; background: #fff; color: #607586; text-align: center; }
 .bin-comparison-empty strong { color: #173650; font: 700 24px "Field Display", sans-serif; }
 .bin-comparison-empty p { max-width: 620px; margin: 0 auto; font-size: 12px; line-height: 1.45; }
-@media (max-width: 1120px) { .bin-analysis-filters { max-width: 780px; }.bin-factor-grid.v2 { grid-template-columns: repeat(2, 1fr); }.bin-factor-grid.v2 article:nth-child(2n) { border-right: 0; }.bin-factor-grid.v2 article:nth-child(-n+2) { border-bottom: 1px solid #cbd6dc; }.bin-comparison-control { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .bin-analysis-filters { grid-template-columns: 1fr; }.bin-factor-grid.v2 { grid-template-columns: 1fr; }.bin-factor-grid.v2 article { border-right: 0; border-bottom: 1px solid #cbd6dc; }.bin-factor-grid.v2 article:last-child { border-bottom: 0; }.bin-comparison-control > header { display: grid; }.bin-comparison-control > header p { text-align: left; }.bin-comparison-control > div { grid-template-columns: 1fr 1fr; }.bin-comparison-control > div > button { grid-column: 1 / -1; } }
+@media (max-width: 1120px) { .bin-analysis-filters { max-width: 780px; }.bin-factor-grid.detailed { grid-template-columns: repeat(2, 1fr); }.bin-factor-grid.detailed article:nth-child(2n) { border-right: 0; }.bin-factor-grid.detailed article:nth-child(-n+2) { border-bottom: 1px solid #cbd6dc; }.bin-comparison-control { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .bin-analysis-filters { grid-template-columns: 1fr; }.bin-factor-grid.detailed { grid-template-columns: 1fr; }.bin-factor-grid.detailed article { border-right: 0; border-bottom: 1px solid #cbd6dc; }.bin-factor-grid.detailed article:last-child { border-bottom: 0; }.bin-comparison-control > header { display: grid; }.bin-comparison-control > header p { text-align: left; }.bin-comparison-control > div { grid-template-columns: 1fr 1fr; }.bin-comparison-control > div > button { grid-column: 1 / -1; } }
 
 /* Manual-work cancellation keeps the Field Station type hierarchy intact. */
 .work-proof-sidebar .work-cancellation { gap: 12px; padding: 15px; border: 1px solid #e7aaa3; background: #fff8f7; }

@@ -1,4 +1,4 @@
-import type { V2WorkOrder } from "../../services/v2/operations";
+import type { OperationsWorkOrder } from "../../services/api/operations";
 import type { Alert } from "./types";
 
 export type AlertJourneyStage = {
@@ -8,7 +8,7 @@ export type AlertJourneyStage = {
   state: "done" | "current" | "pending" | "terminal";
 };
 
-export function alertResponseJourney(alert: Pick<Alert, "status" | "evidenceAvailable">, work?: Pick<V2WorkOrder, "status" | "cleanerNameSnapshot" | "reworkCount" | "latestVerificationOutcome">): AlertJourneyStage[] {
+export function alertResponseJourney(alert: Pick<Alert, "status" | "evidenceAvailable">, work?: Pick<OperationsWorkOrder, "status" | "cleanerNameSnapshot" | "reworkCount" | "latestVerificationOutcome">): AlertJourneyStage[] {
   const cleaner = work?.cleanerNameSnapshot || "Cleaner assigned";
   const base: AlertJourneyStage[] = [
     { id: "evidence", label: alert.evidenceAvailable ? "Evidence retained" : "Evidence unavailable", detail: alert.evidenceAvailable ? "Camera frame stored" : "No retained frame", state: alert.evidenceAvailable ? "done" : "pending" },

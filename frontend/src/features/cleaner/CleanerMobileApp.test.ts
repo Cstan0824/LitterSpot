@@ -2,9 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../services/v2/cleaner", () => ({
-  getV2CleanerMap: vi.fn(), getV2CleanerNotifications: vi.fn(), getV2CleanerSelf: vi.fn(), getV2CleanerWorkOrder: vi.fn(), getV2CleanerWorkOrders: vi.fn(),
-  startV2CleanerWork: vi.fn(), submitV2CleanerForReview: vi.fn(), subscribeV2CleanerNotifications: vi.fn(), uploadV2CleanerCompletionEvidence: vi.fn(),
+vi.mock("../../services/api/cleaner", () => ({
+  getCleanerMap: vi.fn(), getCleanerNotifications: vi.fn(), getCleanerSelf: vi.fn(), getCleanerWorkOrder: vi.fn(), getCleanerWorkOrders: vi.fn(),
+  startCleanerWork: vi.fn(), submitCleanerForReview: vi.fn(), subscribeCleanerNotifications: vi.fn(), uploadCleanerCompletionEvidence: vi.fn(),
 }));
 
 import { CleanerMobileApp } from "./CleanerMobileApp";

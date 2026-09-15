@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord } from "../../services/locationAPI";
 import type { Alert } from "./types";
-import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
-import type { V2WorkOrder } from "../../services/v2/operations";
+import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/api/media";
+import type { OperationsWorkOrder } from "../../services/api/operations";
 import { ObservationOverlay } from "./CameraLiveView";
 import { alertResponseJourney } from "./alertJourney";
-import { getV2AlertDetail, getV2AlertsPage, type V2Alert, type V2AlertDetail } from "../../services/v2/operations";
-import type { V2ListPage } from "../../services/v2/pagination";
+import { fetchAlertDetail, getAlertsPage, type OperationsAlert, type OperationsAlertDetail } from "../../services/api/operations";
+import type { ListPage } from "../../services/api/pagination";
 
 type Props = {
   readOnly?: boolean;
@@ -17,13 +17,13 @@ type Props = {
   availableCleaners?: Cleaner[];
   onAssign?: (alert: Alert, cleanerId: string) => Promise<void>;
   onDismiss?: (alert: Alert, reason: string) => Promise<void>;
-  workOrders?: V2WorkOrder[];
+  workOrders?: OperationsWorkOrder[];
   alerts: Alert[];
   cameras: CameraRecord[];
   cleaners: Cleaner[];
   onStatus: (alert: Alert, status: Alert["status"]) => void;
-  loadPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; severity?: string }, signal?: AbortSignal) => Promise<V2ListPage<V2Alert>>;
-  loadDetail?: (alertId: string, signal?: AbortSignal) => Promise<V2AlertDetail>;
+  loadPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; severity?: string }, signal?: AbortSignal) => Promise<ListPage<OperationsAlert>>;
+  loadDetail?: (alertId: string, signal?: AbortSignal) => Promise<OperationsAlertDetail>;
 };
 
 const evidenceUrl = (_analysisId: number) => "/mock/spill.jpg";
@@ -44,7 +44,7 @@ function ProtectedEvidence({ alert, alt, overlay = true, mediaContentUrl = (medi
   return url ? <div className="camera-retained-frame"><img src={url} alt={alt} />{overlay && alert.evidenceObservation?.image && <ObservationOverlay observation={alert.evidenceObservation} />}</div> : <span>No retained evidence</span>;
 }
 
-export function AlertManagementPage({ readOnly = false, showPermissionNotice = true, onNavigate, mediaContentUrl, availableCleaners = [], onAssign, onDismiss, workOrders = [], alerts, cameras, cleaners, onStatus, loadPage = getV2AlertsPage, loadDetail = getV2AlertDetail }: Props) {
+export function AlertManagementPage({ readOnly = false, showPermissionNotice = true, onNavigate, mediaContentUrl, availableCleaners = [], onAssign, onDismiss, workOrders = [], alerts, cameras, cleaners, onStatus, loadPage = getAlertsPage, loadDetail = fetchAlertDetail }: Props) {
   const go = (path: string, params?: Record<string, string>) => onNavigate ? onNavigate(path, params) : location.hash = `${path}${params ? `?${new URLSearchParams(params)}` : ""}`;
   const initialQuery = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const [selectedId, setSelectedId] = useState<string | undefined>(() => initialQuery.get("alert") ?? undefined);
@@ -62,7 +62,7 @@ export function AlertManagementPage({ readOnly = false, showPermissionNotice = t
   const [pageLoading, setPageLoading] = useState(false);
   const [deepLinkedAlert, setDeepLinkedAlert] = useState<Alert>();
 
-  const adaptAlert = (alert: V2Alert): Alert => ({ id: alert.id, analysisId: 0, cameraId: alert.cameraId ?? "", cameraName: alert.cameraNameSnapshot, zoneId: alert.zoneId, zone: alert.zoneNameSnapshot || alerts.find((item) => item.zoneId === alert.zoneId)?.zone || "Unzoned", kind: alert.issueType, severity: alert.severity, confidence: alert.evidence?.confidence ?? null, status: alert.status, createdAt: alert.createdAt ?? "", updatedAt: alert.updatedAt ?? "", resolvedAt: alert.status === "resolved" ? alert.updatedAt : null, imageName: "", peopleCount: 0, evidenceAvailable: Boolean(alert.evidence?.mediaId), evidenceMediaId: alert.evidence?.mediaId ?? null, evidenceObservation: alert.evidence?.observation, activeWorkOrderId: alert.activeWorkOrderId });
+  const adaptAlert = (alert: OperationsAlert): Alert => ({ id: alert.id, analysisId: 0, cameraId: alert.cameraId ?? "", cameraName: alert.cameraNameSnapshot, zoneId: alert.zoneId, zone: alert.zoneNameSnapshot || alerts.find((item) => item.zoneId === alert.zoneId)?.zone || "Unzoned", kind: alert.issueType, severity: alert.severity, confidence: alert.evidence?.confidence ?? null, status: alert.status, createdAt: alert.createdAt ?? "", updatedAt: alert.updatedAt ?? "", resolvedAt: alert.status === "resolved" ? alert.updatedAt : null, imageName: "", peopleCount: 0, evidenceAvailable: Boolean(alert.evidence?.mediaId), evidenceMediaId: alert.evidence?.mediaId ?? null, evidenceObservation: alert.evidence?.observation, activeWorkOrderId: alert.activeWorkOrderId });
 
   useEffect(() => {
     const syncQuery = () => {

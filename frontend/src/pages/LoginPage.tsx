@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { loginErrorMessage } from "../services/v2/errors";
+import { loginErrorMessage } from "../services/api/errors";
 import loginSiteMap from "../assets/login-site-map.png";
 
 export function LoginPage({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }) {

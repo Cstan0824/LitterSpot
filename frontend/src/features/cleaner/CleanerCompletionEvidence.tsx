@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
+import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/api/media";
 
 export function CleanerCompletionEvidence({ workOrderId }: { workOrderId: string }) {
   const [url, setUrl] = useState<string>();

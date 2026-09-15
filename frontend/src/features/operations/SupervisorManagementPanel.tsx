@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import type { CreateV2RegularSupervisorInput, V2SupervisorListItem, V2SupervisorManagementItem } from "../../services/v2/supervisors";
-import { isV2SupervisorManagementItem } from "../../services/v2/supervisors";
+import type { CreateRegularSupervisorInput, SupervisorListItem, SupervisorManagementItem } from "../../services/api/supervisors";
+import { isSupervisorManagementItem } from "../../services/api/supervisors";
 import { activeSupervisorDirectory, canManageSupervisor, filterManagedSupervisors, supervisorAuthorityLabel, supervisorStatusLabel } from "./supervisorPresentation";
 import "./team-supervisors.css";
 
@@ -9,7 +9,7 @@ type UpdateInput = { fullName?: string; phone?: string | null; status?: "active"
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
-function CreateSupervisorModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: CreateV2RegularSupervisorInput) => Promise<void> }) {
+function CreateSupervisorModal({ onClose, onCreate }: { onClose: () => void; onCreate: (input: CreateRegularSupervisorInput) => Promise<void> }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -35,7 +35,7 @@ function CreateSupervisorModal({ onClose, onCreate }: { onClose: () => void; onC
   </form></div>;
 }
 
-function SupervisorDetailModal({ supervisor, onClose, onUpdate }: { supervisor: V2SupervisorManagementItem; onClose: () => void; onUpdate: (supervisor: V2SupervisorManagementItem, input: UpdateInput) => Promise<void> }) {
+function SupervisorDetailModal({ supervisor, onClose, onUpdate }: { supervisor: SupervisorManagementItem; onClose: () => void; onUpdate: (supervisor: SupervisorManagementItem, input: UpdateInput) => Promise<void> }) {
   const [fullName, setFullName] = useState(supervisor.fullName);
   const [phone, setPhone] = useState(supervisor.phone ?? "");
   const [confirmation, setConfirmation] = useState<"disable" | "reactivate" | null>(null);
@@ -53,9 +53,9 @@ function SupervisorDetailModal({ supervisor, onClose, onUpdate }: { supervisor: 
   </form></div>;
 }
 
-export function SupervisorManagementPanel({ viewer, supervisors, loading, error, createRequest, onRetry, onCreate, onUpdate, readOnly = false }: { viewer: Viewer; supervisors: V2SupervisorListItem[]; loading: boolean; error?: string; createRequest: number; onRetry: () => void; onCreate: (input: CreateV2RegularSupervisorInput) => Promise<void>; onUpdate: (supervisor: V2SupervisorManagementItem, input: UpdateInput) => Promise<void>; readOnly?: boolean }) {
+export function SupervisorManagementPanel({ viewer, supervisors, loading, error, createRequest, onRetry, onCreate, onUpdate, readOnly = false }: { viewer: Viewer; supervisors: SupervisorListItem[]; loading: boolean; error?: string; createRequest: number; onRetry: () => void; onCreate: (input: CreateRegularSupervisorInput) => Promise<void>; onUpdate: (supervisor: SupervisorManagementItem, input: UpdateInput) => Promise<void>; readOnly?: boolean }) {
   const root = viewer.authority === "root";
-  const managed = useMemo(() => supervisors.filter(isV2SupervisorManagementItem), [supervisors]);
+  const managed = useMemo(() => supervisors.filter(isSupervisorManagementItem), [supervisors]);
   const directory = useMemo(() => activeSupervisorDirectory(supervisors), [supervisors]);
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
   const [query, setQuery] = useState("");
@@ -68,9 +68,9 @@ export function SupervisorManagementPanel({ viewer, supervisors, loading, error,
   const regularAccounts = useMemo(() => shown.filter((supervisor) => supervisor.authority === "regular"), [shown]);
   const selected = managed.find((supervisor) => supervisor.uid === selectedUid && supervisor.authority === "regular");
   const active = managed.filter((supervisor) => supervisor.status === "active").length;
-  const create = async (input: CreateV2RegularSupervisorInput) => { await onCreate(input); setMessage(`${input.fullName} can now sign in as a Regular Supervisor.`); };
-  const update = async (supervisor: V2SupervisorManagementItem, input: UpdateInput) => { await onUpdate(supervisor, input); setMessage(input.status === "inactive" ? `${supervisor.fullName}'s access is disabled.` : input.status === "active" ? `${supervisor.fullName}'s access is active again.` : `${input.fullName ?? supervisor.fullName}'s profile was updated.`); };
-  const supervisorRow = (supervisor: V2SupervisorListItem) => { const own = supervisor.uid === viewer.uid; const manageable = !readOnly && canManageSupervisor(viewer.authority, supervisor); const content = <><span className="team-person"><i>{initials(supervisor.fullName)}</i><b>{supervisor.fullName}<small>{own ? "You" : supervisor.authority === "root" ? "Site Root account" : "Site operations"}</small></b></span>{root && <span className="team-supervisor-email">{isV2SupervisorManagementItem(supervisor) ? supervisor.email || "Email unavailable" : "Hidden"}</span>}<span className={`team-authority ${supervisor.authority}`}>{supervisorAuthorityLabel(supervisor.authority)}</span>{root && <span><b className={`team-status ${isV2SupervisorManagementItem(supervisor) && supervisor.status === "active" ? "active" : "inactive"}`}>{isV2SupervisorManagementItem(supervisor) ? supervisorStatusLabel(supervisor.status) : "Unknown"}</b></span>}</>; return manageable ? <button className="team-supervisor-row root-view" type="button" key={supervisor.uid} onClick={() => setSelectedUid(supervisor.uid)}>{content}</button> : <div className={`team-supervisor-row ${root ? "root-view" : "regular-view"}`} key={supervisor.uid}>{content}</div>; };
+  const create = async (input: CreateRegularSupervisorInput) => { await onCreate(input); setMessage(`${input.fullName} can now sign in as a Regular Supervisor.`); };
+  const update = async (supervisor: SupervisorManagementItem, input: UpdateInput) => { await onUpdate(supervisor, input); setMessage(input.status === "inactive" ? `${supervisor.fullName}'s access is disabled.` : input.status === "active" ? `${supervisor.fullName}'s access is active again.` : `${input.fullName ?? supervisor.fullName}'s profile was updated.`); };
+  const supervisorRow = (supervisor: SupervisorListItem) => { const own = supervisor.uid === viewer.uid; const manageable = !readOnly && canManageSupervisor(viewer.authority, supervisor); const content = <><span className="team-person"><i>{initials(supervisor.fullName)}</i><b>{supervisor.fullName}<small>{own ? "You" : supervisor.authority === "root" ? "Site Root account" : "Site operations"}</small></b></span>{root && <span className="team-supervisor-email">{isSupervisorManagementItem(supervisor) ? supervisor.email || "Email unavailable" : "Hidden"}</span>}<span className={`team-authority ${supervisor.authority}`}>{supervisorAuthorityLabel(supervisor.authority)}</span>{root && <span><b className={`team-status ${isSupervisorManagementItem(supervisor) && supervisor.status === "active" ? "active" : "inactive"}`}>{isSupervisorManagementItem(supervisor) ? supervisorStatusLabel(supervisor.status) : "Unknown"}</b></span>}</>; return manageable ? <button className="team-supervisor-row root-view" type="button" key={supervisor.uid} onClick={() => setSelectedUid(supervisor.uid)}>{content}</button> : <div className={`team-supervisor-row ${root ? "root-view" : "regular-view"}`} key={supervisor.uid}>{content}</div>; };
 
   if (loading) return <section className="team-supervisor-state" aria-live="polite"><strong>Loading Supervisors…</strong><p>Reading the active Site's account directory.</p></section>;
   if (error) return <section className="team-supervisor-state error" role="alert"><strong>Supervisor accounts could not be loaded.</strong><p>{error}</p><button type="button" onClick={onRetry}>Try again</button></section>;

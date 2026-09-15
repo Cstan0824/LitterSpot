@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { siteMapBackgroundCacheKey, type SiteBackgroundTransform, type SiteMapBackground, type SiteMapCameraPlacement, type SiteMapCleanerStation } from "../services/v2/siteMap";
-import type { SiteMapPoint, SiteMapPolygon } from "../services/v2/mapGeometry";
-import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../services/v2/media";
+import { siteMapBackgroundCacheKey, type SiteBackgroundTransform, type SiteMapBackground, type SiteMapCameraPlacement, type SiteMapCleanerStation } from "../services/api/siteMap";
+import type { SiteMapPoint, SiteMapPolygon } from "../services/api/mapGeometry";
+import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../services/api/media";
 import { completedSiteMapGesture, SITE_MAP_WHEEL_LISTENER_OPTIONS, siteMapButtonZoomFactor, siteMapCameraMarkerScale, siteMapDrawingPoints, siteMapGestureShouldPan, siteMapWheelZoomFactor } from "./siteMapInteraction";
 import { siteMapZoneColour } from "./siteMapZonePalette";
 import "./site-map-viewer.css";

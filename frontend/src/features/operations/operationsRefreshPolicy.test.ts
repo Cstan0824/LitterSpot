@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
-import { TimedResourceCache } from "../../services/v2/resourceCache";
+import { TimedResourceCache } from "../../services/api/resourceCache";
 import { resourcesAfterMutation, resourcesForPage } from "./operationsRefreshPolicy";
 
 describe("Supervisor operations refresh policy", () => {

@@ -3,27 +3,27 @@ import { SiteMapViewer } from "../../components/SiteMapViewer";
 import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Zone } from "../../services/locationAPI";
 import type { Alert } from "./types";
-import { getV2WorkDetail, getV2WorkOrdersPage, type V2OperationsReadModel, type V2Point, type V2WorkOrder, type V2WorkOrderPage, type V2WorkStatusCounts } from "../../services/v2/operations";
-import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/v2/media";
+import { fetchWorkDetail, getWorkOrdersPage, type OperationsReadModel, type OperationsPoint, type OperationsWorkOrder, type OperationsWorkOrderPage, type OperationsWorkStatusCounts } from "../../services/api/operations";
+import { loadAuthenticatedMedia, releaseAuthenticatedMedia } from "../../services/api/media";
 import { workZoneAtPoint, workZoneCentroid } from "./workTargetMap";
-import "./work-create-map-v2.css";
+import "./work-create-map.css";
 import "./work-detail-modal.css";
 
 type Point = { x: number; y: number };
 type WorkStatus = "Assigned" | "In Progress" | "Awaiting Review" | "Resolved" | "Dismissed";
 type WorkOrigin = "ai" | "manual";
 export type WorkAction = "reassign" | "takeover" | "dismiss" | "verify" | "override";
-type ManualWorkTarget = { type: "camera"; cameraId: string } | { type: "coordinate"; point: V2Point };
+type ManualWorkTarget = { type: "camera"; cameraId: string } | { type: "coordinate"; point: OperationsPoint };
 type ManualWorkInput = { title: string; instructions: string; severity: "warning" | "critical"; assignedCleanerId: string; target: ManualWorkTarget };
-type WorkSiteMap = V2OperationsReadModel["siteMap"];
-type WorkCameraOption = { id: string; name: string; point: V2Point; zoneId: string; zoneName: string };
+type WorkSiteMap = OperationsReadModel["siteMap"];
+type WorkCameraOption = { id: string; name: string; point: OperationsPoint; zoneId: string; zoneName: string };
 export type WorkItem = {
   id: string; origin: WorkOrigin; issue: string; description: string; zoneId?: string; zoneName: string;
   cleanerId?: string; status: WorkStatus; priority: "Low" | "Medium" | "High"; createdAt: string; updatedAt: string;
   point?: Point; cameraId?: string; cameraName?: string; alertId?: string; managementMode?: string; verificationOutcome?: string | null; evidenceAvailable?: boolean; evidenceMediaId?: string; detectionTime?: string;
 };
 
-export function workItemFromV2(work: V2WorkOrder, alerts: Array<Alert | import("../../services/v2/operations").V2Alert> = []): WorkItem {
+export function workItemFromOperations(work: OperationsWorkOrder, alerts: Array<Alert | import("../../services/api/operations").OperationsAlert> = []): WorkItem {
   const alert = work.alertId ? alerts.find((item) => item.id === work.alertId) : undefined;
   const alertCameraName = alert ? "cameraName" in alert ? alert.cameraName : alert.cameraNameSnapshot : undefined;
   const alertMediaId = alert ? "cameraNameSnapshot" in alert ? alert.evidence?.mediaId : alert.evidenceMediaId : undefined;
@@ -63,11 +63,11 @@ function relativeActivity(value: string) {
   if (elapsed < 86_400_000) return `Updated ${Math.floor(elapsed / 3_600_000)} hr ago`;
   return `Updated ${clock(value)}`;
 }
-function WorkTargetMap({ siteMap, point, cameras, selectedCameraId, mode, onPoint, onCamera, readOnly = false }: { siteMap: WorkSiteMap; point: V2Point | null; cameras: WorkCameraOption[]; selectedCameraId: string; mode: "coordinate" | "camera"; onPoint: (point: V2Point) => void; onCamera: (cameraId: string) => void; readOnly?: boolean }) {
+function WorkTargetMap({ siteMap, point, cameras, selectedCameraId, mode, onPoint, onCamera, readOnly = false }: { siteMap: WorkSiteMap; point: OperationsPoint | null; cameras: WorkCameraOption[]; selectedCameraId: string; mode: "coordinate" | "camera"; onPoint: (point: OperationsPoint) => void; onCamera: (cameraId: string) => void; readOnly?: boolean }) {
   const zones = siteMap.zones.map((zone) => ({ id: zone.zoneId, name: zone.zoneNameSnapshot, polygon: zone.polygon }));
   const cameraMarkers = cameras.map((camera) => ({ id: camera.id, cameraId: camera.id, cameraNameSnapshot: camera.name, point: camera.point, zoneId: camera.zoneId }));
   const backgroundContentUrl = siteMap.background?.contentUrl ?? (siteMap.revision.backgroundMediaId ? `/api/media/${encodeURIComponent(siteMap.revision.backgroundMediaId)}/content` : null);
-  return <div className={`work-target-map-v2 shared ${mode} ${readOnly ? "read-only" : ""}`}>
+  return <div className={`work-target-map-current shared ${mode} ${readOnly ? "read-only" : ""}`}>
     <SiteMapViewer compact boundary={siteMap.revision} gridSizeMeters={siteMap.revision.gridSizeMeters} background={siteMap.background ?? null} backgroundContentUrl={backgroundContentUrl} backgroundTransform={siteMap.revision.backgroundTransform ?? null} zones={zones} cameras={cameraMarkers} selectedZoneId={point ? workZoneAtPoint(point, siteMap.zones)?.id : null} onSelectCamera={mode === "camera" && !readOnly ? onCamera : undefined} pointMarker={point ? { point, label: mode === "camera" ? cameras.find((camera) => camera.id === selectedCameraId)?.name ?? "Camera" : "Work point", tone: mode === "camera" ? "camera" : "work" } : null} onPlacePoint={mode === "coordinate" && !readOnly ? onPoint : undefined} />
     <p className="work-target-map-shared-hint">{readOnly ? "Saved Work location" : mode === "coordinate" ? "Place mode is active. Zoom or pan with the controls, then click the map to set the Work point." : "Pan or zoom freely, then select a registered Camera marker."}</p>
   </div>;
@@ -93,7 +93,7 @@ function WorkCreateModal({ siteMap, cleaners, cameras, availableCleanerIds, onCl
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<"warning" | "critical">("warning");
   const [targetMode, setTargetMode] = useState<"coordinate" | "camera">("coordinate");
-  const [coordinatePoint, setCoordinatePoint] = useState<V2Point | null>(null);
+  const [coordinatePoint, setCoordinatePoint] = useState<OperationsPoint | null>(null);
   const [cleanerId, setCleanerId] = useState("");
   const [cameraId, setCameraId] = useState("");
   const [cleanerQuery, setCleanerQuery] = useState("");
@@ -205,7 +205,7 @@ export function WorkDetailModal({ work, siteMap, cleaners, availableCleanerIds, 
   </aside></div>;
 }
 
-export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, workOrders, loadPage = getV2WorkOrdersPage, availableCleanerIds = [], onCreateV2Work, onV2Action, readOnly = false, showPermissionNotice = true, mediaContentUrl, onNavigate }: { siteMap: WorkSiteMap; cleaners: Cleaner[]; zones: Zone[]; cameras: CameraRecord[]; alerts: Alert[]; workOrders?: V2WorkOrder[]; loadPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; cleanerId?: string; origin?: string }, signal?: AbortSignal) => Promise<V2WorkOrderPage>; availableCleanerIds?: string[]; onCreateV2Work?: (input: ManualWorkInput) => Promise<void>; onV2Action?: (workId: string, action: WorkAction, options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) => Promise<void>; readOnly?: boolean; showPermissionNotice?: boolean; mediaContentUrl?: (mediaId: string) => string; onNavigate?: (path: string, params?: Record<string, string>) => void }) {
+export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, workOrders, loadPage = getWorkOrdersPage, availableCleanerIds = [], onCreateWork, onWorkAction, readOnly = false, showPermissionNotice = true, mediaContentUrl, onNavigate }: { siteMap: WorkSiteMap; cleaners: Cleaner[]; zones: Zone[]; cameras: CameraRecord[]; alerts: Alert[]; workOrders?: OperationsWorkOrder[]; loadPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; cameraId?: string; cleanerId?: string; origin?: string }, signal?: AbortSignal) => Promise<OperationsWorkOrderPage>; availableCleanerIds?: string[]; onCreateWork?: (input: ManualWorkInput) => Promise<void>; onWorkAction?: (workId: string, action: WorkAction, options: { cleanerId?: string; reason: string; outcome?: "passed" | "failed" | "inconclusive" }) => Promise<void>; readOnly?: boolean; showPermissionNotice?: boolean; mediaContentUrl?: (mediaId: string) => string; onNavigate?: (path: string, params?: Record<string, string>) => void }) {
   const activeZones = useMemo(() => zones.filter((zone) => zone.status === "active"), [zones]);
   const [manualWork, setManualWork] = useState<WorkItem[]>([]);
   const [changes, setChanges] = useState<Record<string, Partial<WorkItem>>>({});
@@ -214,10 +214,10 @@ export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, 
   const [cameraFilter, setCameraFilter] = useState(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("camera") ?? "all");
   const [originFilter, setOriginFilter] = useState<"all" | WorkOrigin>("all");
   const [showCreate, setShowCreate] = useState(false);
-  const [pagedWorkOrders, setPagedWorkOrders] = useState<V2WorkOrder[]>(workOrders ?? []);
+  const [pagedWorkOrders, setPagedWorkOrders] = useState<OperationsWorkOrder[]>(workOrders ?? []);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState((workOrders ?? []).length);
-  const [statusCounts, setStatusCounts] = useState<V2WorkStatusCounts>(() => ({ assigned: 0, in_progress: 0, awaiting_review: 0, resolved: 0, dismissed: 0 }));
+  const [statusCounts, setStatusCounts] = useState<OperationsWorkStatusCounts>(() => ({ assigned: 0, in_progress: 0, awaiting_review: 0, resolved: 0, dismissed: 0 }));
   const [pageLoading, setPageLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | undefined>(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("workId") ?? undefined);
   const [deepLinkedWork, setDeepLinkedWork] = useState<WorkItem>();
@@ -227,7 +227,7 @@ export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, 
   const nextManual = useRef(1);
   const availableCleanerSet = useMemo(() => new Set(availableCleanerIds), [availableCleanerIds]);
 
-  const backendWork = useMemo<WorkItem[]>(() => pagedWorkOrders.map((work) => workItemFromV2(work, alerts)), [alerts, pagedWorkOrders]);
+  const backendWork = useMemo<WorkItem[]>(() => pagedWorkOrders.map((work) => workItemFromOperations(work, alerts)), [alerts, pagedWorkOrders]);
 
   const aiWork = useMemo<WorkItem[]>(() => alerts.filter((alert) => Boolean(alert.cameraId)).slice(0, 1).map((alert, index) => {
     const linkedCamera = cameras.find((camera) => camera.status === "active" && (camera.id === alert.cameraId || camera.code === alert.cameraId || camera.name === alert.cameraName || camera.zoneName === alert.zone));
@@ -261,7 +261,7 @@ export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, 
   useEffect(() => {
     if (!selectedId || selectedInList) { setDeepLinkedWork(undefined); setDetailError(""); return; }
     const controller = new AbortController(); setDetailError("");
-    void getV2WorkDetail(selectedId, controller.signal).then((detail) => setDeepLinkedWork(workItemFromV2(detail.workOrder, detail.alert ? [detail.alert] : alerts))).catch((error) => { if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) setDetailError(error instanceof Error ? error.message : "Work detail could not be loaded."); });
+    void fetchWorkDetail(selectedId, controller.signal).then((detail) => setDeepLinkedWork(workItemFromOperations(detail.workOrder, detail.alert ? [detail.alert] : alerts))).catch((error) => { if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) setDetailError(error instanceof Error ? error.message : "Work detail could not be loaded."); });
     return () => controller.abort();
   }, [alerts, selectedId, selectedInList]);
 
@@ -288,9 +288,9 @@ export function WorkManagementPage({ siteMap, cleaners, zones, cameras, alerts, 
     <section className="work-list-controls"><div className="work-status-filter" role="group" aria-label="Filter work by status"><button className={statusFilter === "All" ? "active" : ""} onClick={() => setStatusFilter("All")}>All</button>{statusOptions.slice(0, 4).map((status) => <button className={statusFilter === status ? "active" : ""} key={status} onClick={() => setStatusFilter(status)}>{status}</button>)}</div><div className="work-select-filters"><label>Camera<select value={cameraFilter} onChange={(event) => setCameraFilter(event.target.value)}><option value="all">All cameras</option>{cameras.map((camera) => <option value={camera.id} key={camera.id}>{camera.name} · {camera.code}</option>)}</select></label><label>Zone<select value={zoneFilter} onChange={(event) => setZoneFilter(event.target.value)}><option value="all">All zones</option>{activeZones.map((zone) => <option value={zone.id} key={zone.id}>{zone.name}</option>)}<option value="unzoned">Unzoned area</option></select></label><label>Origin<select value={originFilter} onChange={(event) => setOriginFilter(event.target.value as "all" | WorkOrigin)}><option value="all">Automated + Manual</option><option value="ai">Automated</option><option value="manual">Manual</option></select></label></div></section>
     {listError && <div className="work-list-error" role="alert"><span><strong>Work queue could not refresh.</strong>{listError}</span><button type="button" onClick={() => setReloadGeneration((generation) => generation + 1)}>Try again</button></div>}
     <section className="work-records"><header><div><span>WORK ORDER QUEUE</span><h2>{totalCount} Work Orders</h2></div><small>Open a row to inspect Work without leaving this queue.</small></header><div className="work-records-scroll"><table><thead><tr><th>Work</th><th>Scenario</th><th>Zone / location</th><th>Cleaner</th><th>Status</th><th>Next action</th><th>Priority</th><th>Created</th></tr></thead><tbody>{filtered.map((work) => { const cleaner = cleaners.find((item) => item.id === work.cleanerId); return <tr key={work.id} tabIndex={0} onClick={() => openWork(work)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openWork(work); }}><td><strong>{work.issue}</strong><small>{work.description}</small></td><td><span className={`work-origin ${work.origin}`}>{scenarioLabel(work)}</span></td><td><strong>{work.zoneName}</strong><small>{work.cameraId ? work.cameraName ?? "Camera linked" : work.point ? "Map point" : "Location not set"}</small></td><td>{cleaner ? <span className="work-cleaner-cell"><i>{initials(cleaner.fullName)}</i><b>{cleaner.fullName}</b></span> : <span className="work-unassigned">No Cleaner available</span>}</td><td><span className={`work-record-status ${statusClass(work.status)}`}>{work.status}</span></td><td><span className={`work-next-action ${statusClass(work.status)}`}><b>{nextAction(work)}</b><small>{relativeActivity(work.updatedAt)}</small></span></td><td><span className={`work-priority ${work.priority.toLowerCase()}`}>{work.priority}</span></td><td>{clock(work.createdAt)}</td></tr>; })}</tbody></table>{!filtered.length && !pageLoading && <div className="work-empty-state"><b>No Work Orders found.</b><span>{readOnly ? "No Work Orders are stored for this Site and filter." : "Try changing the filters or create a Manual Work Order."}</span></div>}{nextCursor && <button className="operations-load-more" type="button" disabled={pageLoading} onClick={() => void loadMore()}>{pageLoading ? "Loading…" : `Load more · ${filtered.length} of ${totalCount}`}</button>}</div></section>
-    {!readOnly && showCreate && <WorkCreateModal siteMap={siteMap} cleaners={cleaners} cameras={cameraOptions} availableCleanerIds={availableCleanerSet} onClose={() => setShowCreate(false)} onCreate={async (input) => { if (onCreateV2Work) await onCreateV2Work(input); else { const cameraId = input.target.type === "camera" ? input.target.cameraId : undefined; const camera = cameraId ? cameraOptions.find((item) => item.id === cameraId) : undefined; const zone = input.target.type === "coordinate" ? workZoneAtPoint(input.target.point, siteMap.zones) : undefined; createWork({ issue: input.title, description: input.instructions, priority: input.severity === "critical" ? "High" : "Medium", zoneId: camera?.zoneId ?? zone?.id, zoneName: camera?.zoneName ?? zone?.zoneNameSnapshot ?? "Unzoned area", point: input.target.type === "coordinate" ? { x: input.target.point.xMeters, y: input.target.point.yMeters } : camera ? { x: camera.point.xMeters, y: camera.point.yMeters } : undefined, cleanerId: input.assignedCleanerId, status: "Assigned", cameraId: camera?.id, cameraName: camera?.name }); } setShowCreate(false); }} />}
+    {!readOnly && showCreate && <WorkCreateModal siteMap={siteMap} cleaners={cleaners} cameras={cameraOptions} availableCleanerIds={availableCleanerSet} onClose={() => setShowCreate(false)} onCreate={async (input) => { if (onCreateWork) await onCreateWork(input); else { const cameraId = input.target.type === "camera" ? input.target.cameraId : undefined; const camera = cameraId ? cameraOptions.find((item) => item.id === cameraId) : undefined; const zone = input.target.type === "coordinate" ? workZoneAtPoint(input.target.point, siteMap.zones) : undefined; createWork({ issue: input.title, description: input.instructions, priority: input.severity === "critical" ? "High" : "Medium", zoneId: camera?.zoneId ?? zone?.id, zoneName: camera?.zoneName ?? zone?.zoneNameSnapshot ?? "Unzoned area", point: input.target.type === "coordinate" ? { x: input.target.point.xMeters, y: input.target.point.yMeters } : camera ? { x: camera.point.xMeters, y: camera.point.yMeters } : undefined, cleanerId: input.assignedCleanerId, status: "Assigned", cameraId: camera?.id, cameraName: camera?.name }); } setShowCreate(false); }} />}
     {selectedId && !selected && !detailError && <div className="work-detail-scrim"><div className="work-detail-loading" role="status">Loading Work detail…</div></div>}
     {selectedId && detailError && <div className="work-detail-error" role="alert"><span><strong>Work detail unavailable.</strong>{detailError}</span><button type="button" onClick={closeWork}>Close</button></div>}
-    {selected && <WorkDetailModal readOnly={readOnly} work={selected} siteMap={siteMap} cleaners={cleaners} availableCleanerIds={availableCleanerSet} onClose={closeWork} onAction={onV2Action ? (action, options) => onV2Action(selected.id, action, options) : undefined} mediaContentUrl={mediaContentUrl} onNavigate={onNavigate} />}
+    {selected && <WorkDetailModal readOnly={readOnly} work={selected} siteMap={siteMap} cleaners={cleaners} availableCleanerIds={availableCleanerSet} onClose={closeWork} onAction={onWorkAction ? (action, options) => onWorkAction(selected.id, action, options) : undefined} mediaContentUrl={mediaContentUrl} onNavigate={onNavigate} />}
   </section>;
 }

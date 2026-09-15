@@ -3,9 +3,9 @@ import { SiteMapViewer } from "../../components/SiteMapViewer";
 import type { BinReplacementRecommendation } from "../../services/binReplacementAPI";
 import type { Cleaner } from "../../services/cleanerAPI";
 import type { CameraRecord, Zone } from "../../services/locationAPI";
-import { getV2AlertsPage, getV2WorkOrdersPage, type V2Alert, type V2OperationsReadModel, type V2WorkOrder } from "../../services/v2/operations";
+import { getAlertsPage, getWorkOrdersPage, type OperationsAlert, type OperationsReadModel, type OperationsWorkOrder } from "../../services/api/operations";
 import type { Alert } from "./types";
-import type { V2ListPage } from "../../services/v2/pagination";
+import type { ListPage } from "../../services/api/pagination";
 
 type Tone = "action" | "review" | "watch" | "steady" | "stale";
 type ZoneView = Zone & { tone: Tone; score: number };
@@ -50,18 +50,18 @@ function relativeTime(value: string) {
   return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} hr`;
 }
 
-export function GeographicOperationsDashboard({ zones, cameras, alerts, workOrders = [], loadAlertPage = getV2AlertsPage, loadWorkPage = getV2WorkOrdersPage, cleaners, recommendations, availabilityById = {}, busyZones, siteMap, siteName = "Active site", onNavigate = defaultNavigate, statusLabel = "Live monitoring", statusDetail = "Updated from V2" }: {
+export function GeographicOperationsDashboard({ zones, cameras, alerts, workOrders = [], loadAlertPage = getAlertsPage, loadWorkPage = getWorkOrdersPage, cleaners, recommendations, availabilityById = {}, busyZones, siteMap, siteName = "Active site", onNavigate = defaultNavigate, statusLabel = "Live monitoring", statusDetail = "Current operations" }: {
   zones: Zone[];
   cameras: CameraRecord[];
   alerts: Alert[];
-  workOrders?: V2WorkOrder[];
-  loadAlertPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; severity?: string }, signal?: AbortSignal) => Promise<V2ListPage<V2Alert>>;
-  loadWorkPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; origin?: string }, signal?: AbortSignal) => Promise<V2ListPage<V2WorkOrder>>;
+  workOrders?: OperationsWorkOrder[];
+  loadAlertPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; severity?: string }, signal?: AbortSignal) => Promise<ListPage<OperationsAlert>>;
+  loadWorkPage?: (input: { limit?: number; cursor?: string; status?: string; zoneId?: string; origin?: string }, signal?: AbortSignal) => Promise<ListPage<OperationsWorkOrder>>;
   cleaners: Cleaner[];
   recommendations: BinReplacementRecommendation[];
   availabilityById?: Record<string, { available: boolean; reasons: string[] }>;
   busyZones?: Array<{ zoneId: string; score: number; rank: number }>;
-  siteMap: V2OperationsReadModel["siteMap"];
+  siteMap: OperationsReadModel["siteMap"];
   siteName?: string;
   onNavigate?: (path: string, params?: Record<string, string>) => void;
   statusLabel?: string;
@@ -78,8 +78,8 @@ export function GeographicOperationsDashboard({ zones, cameras, alerts, workOrde
   const selectedCameras = cameras.filter((camera) => camera.zoneId === selected?.id && camera.status === "active");
   const fallbackAlerts = selected ? zoneAlerts(selected, alerts) : [];
   const fallbackWork = workOrders.filter((work) => work.zoneId === selected?.id && ["assigned", "in_progress", "awaiting_review"].includes(work.status)).sort((left, right) => String(right.updatedAt ?? "").localeCompare(String(left.updatedAt ?? "")));
-  const [selectedAlerts, setSelectedAlerts] = useState<Array<Alert | V2Alert>>(fallbackAlerts);
-  const [selectedWork, setSelectedWork] = useState<V2WorkOrder[]>(fallbackWork);
+  const [selectedAlerts, setSelectedAlerts] = useState<Array<Alert | OperationsAlert>>(fallbackAlerts);
+  const [selectedWork, setSelectedWork] = useState<OperationsWorkOrder[]>(fallbackWork);
   const [selectedAlertCount, setSelectedAlertCount] = useState(fallbackAlerts.length);
   const [selectedWorkCount, setSelectedWorkCount] = useState(fallbackWork.length);
   useEffect(() => { if (!selected?.id) return; const controller = new AbortController(); void Promise.all([loadAlertPage({ zoneId: selected.id, status: "unresolved", limit: 3 }, controller.signal), loadWorkPage({ zoneId: selected.id, status: "active", limit: 3 }, controller.signal)]).then(([alertPage, workPage]) => { setSelectedAlerts(alertPage.items); setSelectedWork(workPage.items); setSelectedAlertCount(alertPage.totalCount); setSelectedWorkCount(workPage.totalCount); }).catch(() => { if (!controller.signal.aborted) { setSelectedAlerts(fallbackAlerts); setSelectedWork(fallbackWork); setSelectedAlertCount(fallbackAlerts.length); setSelectedWorkCount(fallbackWork.length); } }); return () => controller.abort(); }, [selected?.id, alerts, workOrders, loadAlertPage, loadWorkPage]);

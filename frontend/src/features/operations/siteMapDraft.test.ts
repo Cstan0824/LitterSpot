@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { siteMapDraftIssues, siteMapDraftSaveInput } from "./siteMapDraft";
-import type { SiteMapDraft } from "../../services/v2/siteMap";
+import type { SiteMapDraft } from "../../services/api/siteMap";
 
 const draft: SiteMapDraft = { id: "site", siteId: "site", baseRevisionId: "map-1", widthMeters: 100, heightMeters: 80, gridSizeMeters: 5, backgroundMediaId: null, backgroundTransform: null, coordinateOrigin: "top_left", xAxisDirection: "right", yAxisDirection: "down", validationStatus: "not_validated", validationErrors: [], revision: 3, zones: [{ id: "zone-a", zoneId: "zone-a", zoneNameSnapshot: "Zone A", polygon: [{ xMeters: 0, yMeters: 0 }, { xMeters: 40, yMeters: 0 }, { xMeters: 40, yMeters: 40 }, { xMeters: 0, yMeters: 40 }] }], cameraPlacements: [{ id: "camera-a", cameraId: "camera-a", cameraNameSnapshot: "Camera A", point: { xMeters: 10, yMeters: 10 }, zoneId: "zone-a" }], cleanerStations: [{ id: "cleaner-a", cleanerId: "cleaner-a", cleanerNameSnapshot: "Gan", point: { xMeters: 80, yMeters: 70 }, zoneId: null }] };
 

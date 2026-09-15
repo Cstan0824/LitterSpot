@@ -10,9 +10,9 @@ import { CameraRegistrationPage } from "./pages/CameraRegistrationPage";
 import { FieldStationShell } from "./components/FieldStationShell";
 import { CleanerMobileApp } from "./features/cleaner/CleanerMobileApp";
 import { SessionProvider, useSession } from "./session/SessionProvider";
-import { supervisorRouteFromHash, type SupervisorRoute } from "./services/v2/routing";
-import { deriveSupervisorCapabilities } from "./services/v2/session";
-import { sessionErrorCopy } from "./services/v2/errors";
+import { supervisorRouteFromHash, type SupervisorRoute } from "./services/api/routing";
+import { deriveSupervisorCapabilities } from "./services/api/session";
+import { sessionErrorCopy } from "./services/api/errors";
 import { SiteMonitoringProvider } from "./features/operations/SiteMonitoringProvider";
 import { SuperadminApp } from "./features/superadmin/SuperadminApp";
 

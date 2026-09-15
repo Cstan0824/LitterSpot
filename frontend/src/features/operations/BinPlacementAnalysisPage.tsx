@@ -13,7 +13,7 @@ import {
   type BinPlacementIntervention,
   type BinPlacementSnapshot,
   type BinPlacementZoneRanking,
-} from "../../services/v2/binPlacement";
+} from "../../services/api/binPlacement";
 import { initialBinPlacementLookback, lookbackFromSnapshot } from "./binPlacementLookback";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend, annotationPlugin);
@@ -169,10 +169,10 @@ export function BinPlacementAnalysisPage({ siteName }: { siteName: string }) {
       <div className="bin-ranking-scroll"><table><thead><tr><th>Rank</th><th>Zone</th><th>Priority score</th><th>Why this score</th><th>Data coverage</th><th>Action</th></tr></thead><tbody>
         {snapshot?.zoneRankings.map((ranking) => <tr key={ranking.zoneId} className={selected?.zoneId === ranking.zoneId ? "selected" : ""} onClick={() => setSelectedZoneId(ranking.zoneId)}><td><b>{ranking.rank ?? "—"}</b></td><td><strong>{ranking.zoneNameSnapshot}</strong><small>{statusLabel(ranking.status)}</small></td><td><strong className={`bin-score ${ranking.totalScore == null ? "score-unavailable" : "score-implement"}`}>{ranking.totalScore == null ? "—" : number(ranking.totalScore, 1)}</strong></td><td>{number(ranking.peopleActivity.raw, 1)} people activity · {number(ranking.cleaningFrequency.raw, 0)} resolved Work · {number(ranking.binServiceFrequency.raw, 0)} bin-service Alerts</td><td><span className={ranking.coverage.partial ? "bin-coverage" : "bin-coverage ready"}>{number(ranking.coverage.availableDays, 0)}/{ranking.coverage.requestedDays} days</span><small>{ranking.reasonSummary}</small></td><td>{ranking.totalScore == null ? <span className="bin-recommendation unavailable">More data needed</span> : <button className="bin-recommendation implement" type="button" disabled={Boolean(implementingZoneId)} onClick={(event) => { event.stopPropagation(); setSelectedZoneId(ranking.zoneId); void implement(ranking); }}>{implementingZoneId === ranking.zoneId ? "Recording…" : "Implement"}</button>}</td></tr>)}
         {!loading && !snapshot?.zoneRankings.length && <tr><td colSpan={6}><div className="bin-table-empty"><strong>No eligible Zones are currently ranked.</strong><span>Recently implemented Zones remain excluded for two complete Site-local days.</span></div></td></tr>}
-      </tbody></table>{loading && <div className="bin-table-empty"><strong>Loading Zone recommendations…</strong><span>Using the current V2 analytics snapshot.</span></div>}</div>
+      </tbody></table>{loading && <div className="bin-table-empty"><strong>Loading Zone recommendations…</strong><span>Using the current analytics snapshot.</span></div>}</div>
     </section>
 
-    {selected && people && cleaning && binService && <section className="bin-selected-evidence"><header><span>SELECTED ZONE EVIDENCE</span><h2>{selected.zoneNameSnapshot}</h2></header><div className="bin-factor-grid v2">
+    {selected && people && cleaning && binService && <section className="bin-selected-evidence"><header><span>SELECTED ZONE EVIDENCE</span><h2>{selected.zoneNameSnapshot}</h2></header><div className="bin-factor-grid detailed">
       <article className="visitors"><span>People activity</span><strong>{people.raw} <small>average</small></strong><p>{people.normalized}% normalized · {people.contribution} points · 33.33% weight</p></article>
       <article className="cleaning"><span>Cleaning frequency</span><strong>{cleaning.raw} <small>resolved Work</small></strong><p>{cleaning.normalized}% normalized · {cleaning.contribution} points · 33.33% weight</p></article>
       <article className="overflow"><span>Bin-service frequency</span><strong>{binService.raw} <small>Alerts</small></strong><p>{binService.normalized}% normalized · {binService.contribution} points · 33.33% weight</p></article>
